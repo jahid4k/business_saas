@@ -1,0 +1,69 @@
+# ============================================================
+# BusinessSAAS Backend — Air Live Reload Config
+# https://github.com/air-verse/air
+# ============================================================
+# Air watches .go files and automatically recompiles + restarts
+# the server on every save during development.
+# ============================================================
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Command to build the binary
+  cmd = "go build -o ./tmp/main ./cmd/server"
+
+  # Binary to run after build
+  bin = "./tmp/main"
+
+  # Arguments to pass to the binary
+  args_bin = []
+
+  # Files/directories to watch for changes
+  include_ext = ["go", "tpl", "tmpl", "html"]
+
+  # Files/directories to exclude from watching
+  exclude_dir = [
+    "tmp",
+    "vendor",
+    "tests",
+    "migrations",
+    ".git",
+    "node_modules",
+  ]
+  exclude_file = []
+  exclude_regex = ["_test\\.go"]
+
+  # Exclude unchanged files
+  exclude_unchanged = true
+
+  # Follow symlinks
+  follow_symlink = false
+
+  # Kill the running process before rebuilding
+  send_interrupt = true
+  kill_delay = 200
+
+  # Rerun on error (won't restart if build fails)
+  rerun = false
+  rerun_delay = 500
+
+  # Log build output
+  log = "build-errors.log"
+
+  # Delay before triggering rebuild (ms) — avoids thrashing on save
+  delay = 1000
+
+[log]
+  time = true
+  main_only = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  # Delete tmp directory on exit
+  clean_on_exit = true

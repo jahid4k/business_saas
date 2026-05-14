@@ -1,0 +1,169 @@
+# ============================================================
+# BusinessSAAS — Deploy Workflow
+# ============================================================
+# STATUS: PLACEHOLDER — not yet connected to a real VPS.
+#
+# Phase 1: Manual trigger only (workflow_dispatch).
+#          No real deployment happens yet.
+#          Structure is defined and ready.
+#
+# Phase 2: Connect real VPS secrets and enable SSH deploy.
+#
+# Phase 3: Auto-deploy on push to main after CI passes.
+#
+# Required GitHub Secrets (set in repo Settings → Secrets):
+#   VPS_HOST          — VPS IP address or hostname
+#   VPS_USER          — SSH username (e.g. ubuntu, deploy)
+#   VPS_SSH_KEY       — Private SSH key (PEM format)
+#   VPS_PORT          — SSH port (usually 22)
+#   VPS_DEPLOY_PATH   — Path on VPS (e.g. /opt/businesssaas)
+#   POSTGRES_PASSWORD — Production DB password
+#   REDIS_PASSWORD    — Production Redis password
+#   JWT_SECRET        — Production JWT secret (min 64 chars)
+#   FRONTEND_URL      — Production frontend URL
+#   NEXT_PUBLIC_API_URL — Production backend URL (browser-facing)
+# ============================================================
+
+name: Deploy
+
+on:
+  # Manual trigger only — until VPS is configured
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
+      confirm:
+        description: "Type DEPLOY to confirm"
+        required: true
+        type: string
+
+  # Future: auto-deploy on push to main after CI passes
+  # Uncomment when VPS is ready:
+  # push:
+  #   branches:
+  #     - main
+
+# Only allow one deployment at a time
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  # ----------------------------------------------------------
+  # Guard — validate manual confirmation
+  # ----------------------------------------------------------
+  guard:
+    name: Deployment Guard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Validate confirmation input
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "❌ Deployment not confirmed. Type DEPLOY to proceed."
+            exit 1
+          fi
+          echo "✅ Deployment confirmed for: ${{ github.event.inputs.environment }}"
+
+  # ----------------------------------------------------------
+  # Deploy — SSH into VPS and deploy via Docker Compose
+  # PLACEHOLDER: steps are defined but commented out.
+  # Uncomment and configure when VPS is ready.
+  # ----------------------------------------------------------
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: guard
+    environment: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ---- PHASE 2: Uncomment when VPS is configured ----
+
+      # - name: Set up SSH
+      #   uses: webfactory/ssh-agent@v0.9.0
+      #   with:
+      #     ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      # - name: Add VPS to known hosts
+      #   run: |
+      #     ssh-keyscan -H -p ${{ secrets.VPS_PORT || 22 }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      # - name: Copy docker-compose.yml to VPS
+      #   run: |
+      #     scp -P ${{ secrets.VPS_PORT || 22 }} \
+      #       docker-compose.yml \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_DEPLOY_PATH }}/
+
+      # - name: Write .env on VPS
+      #   run: |
+      #     ssh -p ${{ secrets.VPS_PORT || 22 }} \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+      #       "cat > ${{ secrets.VPS_DEPLOY_PATH }}/.env << 'EOF'
+      #     APP_ENV=production
+      #     POSTGRES_USER=saas_user
+      #     POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+      #     POSTGRES_DB=businesssaas
+      #     REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+      #     JWT_SECRET=${{ secrets.JWT_SECRET }}
+      #     FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+      #     NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+      #     CORS_ALLOWED_ORIGINS=${{ secrets.FRONTEND_URL }}
+      #     EOF"
+
+      # - name: Pull latest code on VPS
+      #   run: |
+      #     ssh -p ${{ secrets.VPS_PORT || 22 }} \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+      #       "cd ${{ secrets.VPS_DEPLOY_PATH }} && git pull origin main"
+
+      # - name: Run database migrations
+      #   run: |
+      #     ssh -p ${{ secrets.VPS_PORT || 22 }} \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+      #       "cd ${{ secrets.VPS_DEPLOY_PATH }} && \
+      #        docker compose run --rm backend goose -dir ./migrations postgres \"\$DATABASE_URL\" up"
+
+      # - name: Rebuild and restart services
+      #   run: |
+      #     ssh -p ${{ secrets.VPS_PORT || 22 }} \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+      #       "cd ${{ secrets.VPS_DEPLOY_PATH }} && \
+      #        docker compose pull && \
+      #        docker compose up -d --build --remove-orphans"
+
+      # - name: Wait for services to start
+      #   run: sleep 20
+
+      # - name: Health check
+      #   run: |
+      #     ssh -p ${{ secrets.VPS_PORT || 22 }} \
+      #       ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+      #       "curl -f http://localhost:8080/api/v1/health || \
+      #        (docker compose -f ${{ secrets.VPS_DEPLOY_PATH }}/docker-compose.yml logs --tail=50 && exit 1)"
+
+      # - name: Notify success
+      #   run: echo "✅ Deployment to ${{ github.event.inputs.environment }} succeeded."
+
+      # ---- PLACEHOLDER OUTPUT (remove when real steps are uncommented) ----
+      - name: Placeholder — VPS not yet configured
+        run: |
+          echo "================================================"
+          echo " BusinessSAAS Deploy Workflow"
+          echo " Environment : ${{ github.event.inputs.environment }}"
+          echo " Branch      : ${{ github.ref_name }}"
+          echo " Commit      : ${{ github.sha }}"
+          echo "------------------------------------------------"
+          echo " STATUS: VPS not yet configured."
+          echo " This workflow is a placeholder."
+          echo " Uncomment the SSH deploy steps when ready."
+          echo "================================================"
