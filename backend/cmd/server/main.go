@@ -156,7 +156,13 @@ func main() {
 	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
 	user.RegisterRoutes(api, userHandler, requireAuth)
 	business.RegisterRoutes(api, businessHandler, requireAuth)
-	authz.RegisterRoutes(api, authzHandler, requireAuth, authzSvc)
+	requireBusiness := middleware.RequireBusiness()
+	requireMembersManage := middleware.RequirePermission(authzSvc, "members.manage")
+	authz.RegisterRoutes(api,
+		authzHandler,
+		requireAuth,
+		requireBusiness,
+		requireMembersManage)
 	task.RegisterRoutes(api, taskHandler, requireAuth, authzSvc)
 
 	// 404 fallback — must be last
