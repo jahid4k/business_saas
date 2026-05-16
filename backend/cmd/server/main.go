@@ -137,8 +137,8 @@ func main() {
 	app.Use(middleware.Logger())
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.CORS.AllowedOrigins[0], "*"},
-		AllowMethods:     []string{"GET,POST,PATCH,DELETE,OPTIONS"},
+		AllowOrigins:     cfg.CORS.AllowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           86400,

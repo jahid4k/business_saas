@@ -120,7 +120,7 @@ services:
       # Mount source for live reload in development (Air)
       - ./backend:/app
       # Prevent host node_modules / vendor from shadowing container
-      - /app/vendor
+      # - /app/vendor
     networks:
       - saas_net
     depends_on:

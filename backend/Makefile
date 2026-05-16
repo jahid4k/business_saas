@@ -87,9 +87,9 @@ tidy: ## Tidy go modules
 ## -------------------------------------------------------
 
 GOOSE=goose
-MIGRATIONS_DIR=./migrations
+MIGRATIONS_DIR=./internal/migrations
 GOOSE_DRIVER=postgres
-GOOSE_DSN=postgres://$(DATABASE_USER):$(DATABASE_PASSWORD)@$(DATABASE_HOST):$(DATABASE_PORT)/$(DATABASE_NAME)?sslmode=$(DATABASE_SSLMODE)
+GOOSE_DSN=postgres://saas_user:saas_password@localhost:5432/businesssaas?sslmode=disable
 
 migrate-up: ## Run all pending migrations
 	$(GOOSE) -dir $(MIGRATIONS_DIR) $(GOOSE_DRIVER) "$(GOOSE_DSN)" up
