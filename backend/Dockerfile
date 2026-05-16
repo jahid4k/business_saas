@@ -17,7 +17,7 @@
 # ----------------------------------------------------------
 # Stage 1: base — Go toolchain + module cache
 # ----------------------------------------------------------
-FROM golang:1.23-alpine AS base
+FROM golang:1.25-alpine AS base
 
 # Install system dependencies
 # - git: needed by some Go tools
