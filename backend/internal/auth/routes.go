@@ -1,37 +1,43 @@
+// backend/internal/auth/routes.go
 package auth
 
-import (
-	"github.com/gofiber/fiber/v3"
+import "github.com/gofiber/fiber/v3"
 
-	"github.com/mridha/businesssaas/internal/middleware"
-)
-
-// RegisterRoutes mounts all auth routes onto the given Fiber router group.
-//
-// Route tree:
-//
-//	POST /api/v1/auth/signup
-//	POST /api/v1/auth/login
-//	POST /api/v1/auth/refresh
-//	POST /api/v1/auth/logout          ← requires valid JWT
-//	POST /api/v1/auth/logout-all      ← requires valid JWT
-//	POST /api/v1/auth/password-reset/request
-//	POST /api/v1/auth/password-reset/confirm
-//
-// Rate limiting is applied to all auth routes.
-// Additional rate limiting is applied to login and password reset (Phase 1-B).
-func RegisterRoutes(router fiber.Router, handler *Handler) {
+// RegisterRoutes mounts auth routes without rate limiting.
+// Used in tests or when rate limiting is handled at the infrastructure level.
+func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Handler) {
 	auth := router.Group("/auth")
 
-	// Public auth routes — no JWT required
-	// Rate limit middleware is a stub until Phase 1-B
-	auth.Post("/signup", middleware.AuthRateLimit(), handler.Signup)
-	auth.Post("/login", middleware.AuthRateLimit(), handler.Login)
-	auth.Post("/refresh", middleware.AuthRateLimit(), handler.Refresh)
-	auth.Post("/password-reset/request", middleware.AuthRateLimit(), handler.PasswordResetRequest)
-	auth.Post("/password-reset/confirm", middleware.AuthRateLimit(), handler.PasswordResetConfirm)
+	auth.Post("/signup", handler.Signup)
+	auth.Post("/login", handler.Login)
+	auth.Post("/refresh", handler.Refresh)
+	auth.Post("/password-reset/request", handler.PasswordResetRequest)
+	auth.Post("/password-reset/confirm", handler.PasswordResetConfirm)
 
-	// Authenticated auth routes — JWT required
-	auth.Post("/logout", middleware.RequireAuth(), handler.Logout)
-	auth.Post("/logout-all", middleware.RequireAuth(), handler.LogoutAll)
+	auth.Get("/me", requireAuth, handler.Me)
+	auth.Post("/logout", requireAuth, handler.Logout)
+	auth.Post("/logout-all", requireAuth, handler.LogoutAll)
+}
+
+// RegisterRoutesWithRateLimit mounts auth routes with Redis-backed rate limiting
+// on all public endpoints.
+func RegisterRoutesWithRateLimit(
+	router fiber.Router,
+	handler *Handler,
+	requireAuth fiber.Handler,
+	rateLimit fiber.Handler,
+) {
+	auth := router.Group("/auth")
+
+	// Public — rate limited
+	auth.Post("/signup", rateLimit, handler.Signup)
+	auth.Post("/login", rateLimit, handler.Login)
+	auth.Post("/refresh", rateLimit, handler.Refresh)
+	auth.Post("/password-reset/request", rateLimit, handler.PasswordResetRequest)
+	auth.Post("/password-reset/confirm", rateLimit, handler.PasswordResetConfirm)
+
+	// Protected — JWT required
+	auth.Get("/me", requireAuth, handler.Me)
+	auth.Post("/logout", requireAuth, handler.Logout)
+	auth.Post("/logout-all", requireAuth, handler.LogoutAll)
 }

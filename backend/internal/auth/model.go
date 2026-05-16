@@ -1,70 +1,58 @@
-// Package auth handles all authentication logic for BusinessSAAS:
-// signup, login, token refresh, logout, and password reset.
+// backend/internal/auth/model.go
 package auth
 
 import "time"
 
 // Session represents a persisted refresh token session in PostgreSQL.
-// The raw token is NEVER stored — only its bcrypt hash.
+// The raw token is NEVER stored — only its SHA-256 hash.
 type Session struct {
 	ID        string     `db:"id"`
 	UserID    string     `db:"user_id"`
-	TokenHash string     `db:"token_hash"` // bcrypt hash of the opaque refresh token
+	TokenHash string     `db:"token_hash"`
 	UserAgent string     `db:"user_agent"`
 	IPAddress string     `db:"ip_address"`
 	ExpiresAt time.Time  `db:"expires_at"`
-	RevokedAt *time.Time `db:"revoked_at"` // nil = active session
+	RevokedAt *time.Time `db:"revoked_at"`
 	CreatedAt time.Time  `db:"created_at"`
 }
 
-// IsRevoked returns true if the session has been explicitly revoked.
-func (s *Session) IsRevoked() bool {
-	return s.RevokedAt != nil
-}
+func (s *Session) IsRevoked() bool { return s.RevokedAt != nil }
+func (s *Session) IsExpired() bool { return time.Now().After(s.ExpiresAt) }
+func (s *Session) IsValid() bool   { return !s.IsRevoked() && !s.IsExpired() }
 
-// IsExpired returns true if the session has passed its expiry time.
-func (s *Session) IsExpired() bool {
-	return time.Now().After(s.ExpiresAt)
-}
-
-// IsValid returns true if the session is neither revoked nor expired.
-func (s *Session) IsValid() bool {
-	return !s.IsRevoked() && !s.IsExpired()
-}
-
-// SignupRequest is the request body for POST /api/v1/auth/signup.
+// SignupRequest is the body for POST /api/v1/auth/signup.
 type SignupRequest struct {
-	Email     string `json:"email"     validate:"required,email,max=255"`
-	Password  string `json:"password"  validate:"required,min=8,max=72"`
-	FirstName string `json:"first_name" validate:"required,min=1,max=100"`
-	LastName  string `json:"last_name"  validate:"required,min=1,max=100"`
+	Email     string `json:"email"`
+	Password  string `json:"password"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 }
 
-// LoginRequest is the request body for POST /api/v1/auth/login.
+// LoginRequest is the body for POST /api/v1/auth/login.
 type LoginRequest struct {
-	Email    string `json:"email"    validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// RefreshRequest is the request body for POST /api/v1/auth/refresh.
+// RefreshRequest is the body for POST /api/v1/auth/refresh.
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token"`
 }
 
-// TokenPair is returned on successful login or token refresh.
+// TokenPair is returned on login or token refresh.
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"` // access token TTL in seconds
+	ExpiresIn    int64  `json:"expires_in"` // seconds
 }
 
-// PasswordResetRequestBody is the request body for POST /api/v1/auth/password-reset/request.
+// PasswordResetRequestBody is the body for POST /api/v1/auth/password-reset/request.
 type PasswordResetRequestBody struct {
-	Email string `json:"email" validate:"required,email"`
+	Email string `json:"email"`
 }
 
-// PasswordResetConfirmBody is the request body for POST /api/v1/auth/password-reset/confirm.
+// PasswordResetConfirmBody is the body for POST /api/v1/auth/password-reset/confirm.
 type PasswordResetConfirmBody struct {
-	Token       string `json:"token"        validate:"required"`
-	NewPassword string `json:"new_password" validate:"required,min=8,max=72"`
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
 }

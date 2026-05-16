@@ -1,19 +1,12 @@
+// backend/internal/user/routes.go
 package user
 
-import (
-	"github.com/gofiber/fiber/v3"
+import "github.com/gofiber/fiber/v3"
 
-	"github.com/mridha/businesssaas/internal/middleware"
-)
-
-// RegisterRoutes mounts all user routes onto the given Fiber router group.
-//
-// Route tree:
-//
-//	GET   /api/v1/users/me   ← requires JWT
-//	PATCH /api/v1/users/me   ← requires JWT
-func RegisterRoutes(router fiber.Router, handler *Handler) {
-	users := router.Group("/users", middleware.RequireAuth())
+// RegisterRoutes mounts user routes.
+// requireAuth is injected from main.go.
+func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Handler) {
+	users := router.Group("/users", requireAuth)
 	users.Get("/me", handler.Me)
 	users.Patch("/me", handler.UpdateMe)
 }

@@ -1,11 +1,4 @@
-// Package authz implements role-based access control (RBAC) for BusinessSAAS.
-//
-// Data model:
-//
-//	User ──── Membership ────▶ Role ──── RolePermission ────▶ Permission
-//	            (per business)
-//
-// The central check is: can(userID, businessID, resource, action) → bool
+// backend/internal/authz/model.go
 package authz
 
 import "time"
@@ -20,17 +13,16 @@ type Role struct {
 	CreatedAt   time.Time `db:"created_at"  json:"created_at"`
 }
 
-// Permission represents a granular capability.
-// Format: "<resource>.<action>" e.g. "tasks.delete"
+// Permission represents a granular capability in the format resource.action.
 type Permission struct {
 	ID          string    `db:"id"          json:"id"`
-	Resource    string    `db:"resource"    json:"resource"` // "tasks", "members", "billing"
-	Action      string    `db:"action"      json:"action"`   // "read", "create", "update", "delete"
+	Resource    string    `db:"resource"    json:"resource"`
+	Action      string    `db:"action"      json:"action"`
 	Description string    `db:"description" json:"description"`
 	CreatedAt   time.Time `db:"created_at"  json:"created_at"`
 }
 
-// Key returns the canonical string form of the permission.
+// Key returns the canonical dot-separated permission string e.g. "tasks.delete".
 func (p *Permission) Key() string {
 	return p.Resource + "." + p.Action
 }
@@ -46,17 +38,43 @@ type Membership struct {
 	UpdatedAt  time.Time `db:"updated_at"  json:"updated_at"`
 }
 
+// MemberWithUser is the enriched membership returned by GET /api/v1/members.
+// Joins: memberships + users + roles in one query.
+type MemberWithUser struct {
+	MembershipID string    `json:"membership_id"`
+	UserID       string    `json:"user_id"`
+	Email        string    `json:"email"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	Role         string    `json:"role"`
+	JoinedAt     time.Time `json:"joined_at"`
+}
+
+// RoleWithPermissions enriches a Role with its full permission list.
+// Returned by GET /api/v1/roles.
+type RoleWithPermissions struct {
+	Role        *Role         `json:"role"`
+	Permissions []*Permission `json:"permissions"`
+}
+
+// MyMembershipResponse is returned by GET /api/v1/members/me.
+type MyMembershipResponse struct {
+	MembershipID string    `json:"membership_id"`
+	BusinessID   string    `json:"business_id"`
+	Role         string    `json:"role"`
+	Permissions  []string  `json:"permissions"` // list of "resource.action" strings
+	JoinedAt     time.Time `json:"joined_at"`
+}
+
+// AssignRoleRequest is the body for POST /api/v1/members/:userId/role.
+type AssignRoleRequest struct {
+	Role string `json:"role"` // one of: admin, member, viewer (not owner)
+}
+
 // SystemRoles defines the names of seeded system roles.
-// These names are stable — migrations seed them, code references them.
 const (
 	RoleOwner  = "owner"
 	RoleAdmin  = "admin"
 	RoleMember = "member"
 	RoleViewer = "viewer"
 )
-
-// AssignRoleRequest is the request body for POST /api/v1/members/:userId/role.
-type AssignRoleRequest struct {
-	RoleName string `json:"role" validate:"required,oneof=admin member viewer"`
-	// Note: owner role cannot be assigned via API — it is set during business creation.
-}

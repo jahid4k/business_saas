@@ -1,41 +1,76 @@
+// backend/internal/middleware/auth.go
 package middleware
 
-import "github.com/gofiber/fiber/v3"
+import (
+	"errors"
+	"log/slog"
+	"strings"
 
-// RequireAuth validates the JWT access token in the Authorization: Bearer header.
+	"github.com/gofiber/fiber/v3"
+
+	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
+	"github.com/mridha/businesssaas/pkg/response"
+)
+
+// RequireAuth returns a middleware that validates the JWT access token.
 //
-// On success it sets in c.Locals:
-//   - "user_id"      string — authenticated user's UUID
-//   - "business_id"  string — active business UUID (if embedded in token)
+// Expects: Authorization: Bearer <access_token>
 //
-// On failure it returns 401 Unauthorized.
+// On success, sets in c.Locals:
+//   - "user_id"     string
+//   - "email"       string
+//   - "business_id" string (may be empty before workspace selection)
+//   - "role"        string (may be empty before workspace selection)
 //
-// STATUS: Phase 1-B stub — calls c.Next() so routes compile and respond.
-// Real JWT validation wired in Phase 1-B.
-func RequireAuth() fiber.Handler {
+// On failure, returns 401. Token details are NEVER exposed to the client.
+func RequireAuth(jwtManager *jwtpkg.Manager) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// TODO (Phase 1-B): implement JWT extraction and validation
-		// 1. Extract "Authorization: Bearer <token>" header
-		// 2. Call jwtPkg.Parse(token, secret)
-		// 3. Validate claims (expiry, issuer)
-		// 4. Set c.Locals("user_id", claims.UserID)
-		// 5. Set c.Locals("business_id", claims.BusinessID)
-		// 6. Return response.Unauthorized(...) on any failure
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
+			return response.Unauthorized(c, "MISSING_TOKEN", "Authentication required")
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+			return response.Unauthorized(c, "INVALID_TOKEN_FORMAT", "Authentication required")
+		}
+
+		tokenString := strings.TrimSpace(parts[1])
+		if tokenString == "" {
+			return response.Unauthorized(c, "MISSING_TOKEN", "Authentication required")
+		}
+
+		claims, err := jwtManager.Parse(tokenString)
+		if err != nil {
+			switch {
+			case errors.Is(err, jwtpkg.ErrTokenExpired):
+				return response.Unauthorized(c, "TOKEN_EXPIRED", "Access token has expired")
+			default:
+				slog.Debug("auth middleware: invalid token", slog.Any("error", err))
+				return response.Unauthorized(c, "INVALID_TOKEN", "Authentication required")
+			}
+		}
+
+		c.Locals("user_id", claims.UserID)
+		c.Locals("email", claims.Email)
+		c.Locals("business_id", claims.BusinessID)
+		c.Locals("role", claims.Role)
+
 		return c.Next()
 	}
 }
 
-// RequireBusiness validates that the user is an active member of the
-// business embedded in their JWT. Must run after RequireAuth.
-//
-// STATUS: Phase 1-C stub — calls c.Next() so routes compile and respond.
+// RequireBusiness validates that the JWT contains a non-empty business_id.
+// Must run after RequireAuth.
 func RequireBusiness() fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// TODO (Phase 1-C): validate membership
-		// 1. Extract business_id from c.Locals("business_id")
-		// 2. Return 400 if missing (no business selected)
-		// 3. Call authzRepo.GetMembership(ctx, userID, businessID)
-		// 4. Return 403 if not a member or membership is inactive
+		businessID, _ := c.Locals("business_id").(string)
+		if businessID == "" {
+			return response.BadRequest(c,
+				"NO_BUSINESS_CONTEXT",
+				"A business context is required. Select a workspace first.",
+			)
+		}
 		return c.Next()
 	}
 }

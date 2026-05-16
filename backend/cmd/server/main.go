@@ -1,5 +1,4 @@
-// BusinessSAAS Backend — Entry Point
-// cmd/server/main.go
+// backend/cmd/server/main.go
 package main
 
 import (
@@ -15,35 +14,36 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lmittmann/tint"
+
 	"github.com/redis/go-redis/v9"
 
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/business"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
+	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
 func main() {
 	// ----------------------------------------------------------
-	// 1. Configuration (must come first — logger depends on env)
+	// 1. Config
 	// ----------------------------------------------------------
 	cfg, err := config.Load()
 	if err != nil {
-		// Pre-config fallback: plain slog before tint is ready
 		slog.Error("failed to load configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
 
 	// ----------------------------------------------------------
-	// 2. Logger (set up immediately after config)
+	// 2. Logger
 	// ----------------------------------------------------------
 	setupLogger(cfg.App.IsDevelopment())
-
 	slog.Info("starting BusinessSAAS backend",
 		slog.String("env", cfg.App.Env),
 		slog.String("port", cfg.App.Port),
@@ -61,8 +61,6 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	slog.Info("PostgreSQL connected")
-
 	// ----------------------------------------------------------
 	// 4. Redis
 	// ----------------------------------------------------------
@@ -77,44 +75,50 @@ func main() {
 		}
 	}()
 
-	slog.Info("Redis connected")
+	// ----------------------------------------------------------
+	// 5. JWT + middleware — built once, injected everywhere
+	// ----------------------------------------------------------
+	jwtManager := jwtpkg.NewManager(cfg.JWT.Secret, cfg.JWT.AccessTokenTTL)
+	requireAuth := middleware.RequireAuth(jwtManager)
+	authRateLimit := middleware.NewAuthRateLimit(redisClient)
 
 	// ----------------------------------------------------------
-	// 5. Repositories
+	// 6. Repositories — all receive pgPool
 	// ----------------------------------------------------------
-	authRepo := auth.NewRepository()
-	userRepo := user.NewRepository()
-	businessRepo := business.NewRepository()
+	authRepo := auth.NewRepository(pgPool)
+	userRepo := user.NewRepository(pgPool)
+	authzRepo := authz.NewRepository(pgPool)
+	businessRepo := business.NewRepository(pgPool)
 	auditRepo := audit.NewNoopRepository()
-	taskRepo := task.NewRepository()
+	taskRepo := task.NewRepository(pgPool)
 
 	// ----------------------------------------------------------
-	// 6. Services
+	// 7. Services
 	// ----------------------------------------------------------
-	auditSvc := audit.NewService(auditRepo)
+	_ = audit.NewService(auditRepo) // wired in audit domain
+
 	userSvc := user.NewService(userRepo)
-	authSvc := auth.NewService(authRepo)
-	businessSvc := business.NewService(businessRepo)
+	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT)
+	authzSvc := authz.NewService(authzRepo, redisClient)
+	businessSvc := business.NewService(businessRepo, authzRepo, jwtManager)
 	taskSvc := task.NewService(taskRepo)
 
-	_ = auditSvc // used in Phase 1-B
-
 	// ----------------------------------------------------------
-	// 7. Handlers
+	// 8. Handlers
 	// ----------------------------------------------------------
 	authHandler := auth.NewHandler(authSvc)
 	userHandler := user.NewHandler(userSvc)
+	authzHandler := authz.NewHandler(authzSvc)
 	businessHandler := business.NewHandler(businessSvc)
 	taskHandler := task.NewHandler(taskSvc)
 
 	// ----------------------------------------------------------
-	// 8. Fiber app
+	// 9. Fiber
 	// ----------------------------------------------------------
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
-
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			slog.Error("unhandled error",
 				slog.Any("error", err),
@@ -123,19 +127,17 @@ func main() {
 			)
 			return response.InternalServerError(c)
 		},
-
-		ServerHeader:  "", // never leak server software
+		ServerHeader:  "",
 		StrictRouting: true,
 		CaseSensitive: true,
 	})
 
 	// ----------------------------------------------------------
-	// 9. Global middleware
+	// 10. Global middleware
 	// ----------------------------------------------------------
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger())
-
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
@@ -145,19 +147,19 @@ func main() {
 	}))
 
 	// ----------------------------------------------------------
-	// 10. Routes
+	// 11. Routes
 	// ----------------------------------------------------------
 	api := app.Group("/api/v1")
 
 	registerSystemRoutes(api, pgPool, redisClient)
 
-	auth.RegisterRoutes(api, authHandler)
-	user.RegisterRoutes(api, userHandler)
-	business.RegisterRoutes(api, businessHandler)
-	task.RegisterRoutes(api, taskHandler)
-	registerMemberRoutes(api)
+	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
+	user.RegisterRoutes(api, userHandler, requireAuth)
+	business.RegisterRoutes(api, businessHandler, requireAuth)
+	authz.RegisterRoutes(api, authzHandler, requireAuth, authzSvc)
+	task.RegisterRoutes(api, taskHandler, requireAuth, authzSvc)
 
-	// 404 fallback — must be the very last handler
+	// 404 fallback — must be last
 	app.Use(func(c fiber.Ctx) error {
 		return response.NotFound(c,
 			"ROUTE_NOT_FOUND",
@@ -168,7 +170,7 @@ func main() {
 	slog.Info("all routes registered")
 
 	// ----------------------------------------------------------
-	// 11. Graceful startup + shutdown
+	// 12. Start + graceful shutdown
 	// ----------------------------------------------------------
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -176,7 +178,6 @@ func main() {
 	go func() {
 		addr := ":" + cfg.App.Port
 		slog.Info("server listening", slog.String("addr", addr))
-
 		if listenErr := app.Listen(addr, fiber.ListenConfig{
 			DisableStartupMessage: !cfg.App.IsDevelopment(),
 		}); listenErr != nil {
@@ -186,7 +187,7 @@ func main() {
 	}()
 
 	<-quit
-	slog.Info("shutdown signal received, draining requests...")
+	slog.Info("shutdown signal received")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -199,54 +200,10 @@ func main() {
 	slog.Info("server stopped cleanly")
 }
 
-// setupLogger configures the global slog logger.
-//
-// Development → tint colored handler, DEBUG level, human-readable timestamps.
-// Production  → JSON handler, INFO level, machine-readable for log aggregators.
-//
-// Both environments apply a ReplaceAttr that redacts sensitive keys so that
-// accidentally logging a token or password is never exposed in any environment.
-func setupLogger(isDev bool) {
-	// Sensitive keys that must never appear in logs as plain values.
-	sensitiveKeys := map[string]bool{
-		"password":      true,
-		"token":         true,
-		"secret":        true,
-		"refresh_token": true,
-		"access_token":  true,
-		"reset_token":   true,
-		"api_key":       true,
-	}
+// ----------------------------------------------------------
+// System routes
+// ----------------------------------------------------------
 
-	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
-		if sensitiveKeys[a.Key] {
-			return slog.String(a.Key, "[REDACTED]")
-		}
-		return a
-	}
-
-	if isDev {
-		slog.SetDefault(slog.New(
-			tint.NewHandler(os.Stdout, &tint.Options{
-				Level:       slog.LevelDebug,
-				TimeFormat:  time.TimeOnly, // "15:04:05" — clean for dev terminal
-				AddSource:   false,         // flip to true to see file:line in logs
-				ReplaceAttr: replaceAttr,
-			}),
-		))
-		return
-	}
-
-	// Production: structured JSON, INFO and above only.
-	slog.SetDefault(slog.New(
-		slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level:       slog.LevelInfo,
-			ReplaceAttr: replaceAttr,
-		}),
-	))
-}
-
-// registerSystemRoutes wires /api/v1/health and /api/v1/hello.
 func registerSystemRoutes(router fiber.Router, pgPool *pgxpool.Pool, redisClient *redis.Client) {
 	router.Get("/health", func(c fiber.Ctx) error {
 		ctx := context.Background()
@@ -286,24 +243,38 @@ func registerSystemRoutes(router fiber.Router, pgPool *pgxpool.Pool, redisClient
 	})
 }
 
-// registerMemberRoutes wires member/role/permission management routes.
-// Full implementation comes in Phase 1-B.
-func registerMemberRoutes(router fiber.Router) {
-	members := router.Group("/members",
-		middleware.RequireAuth(),
-		middleware.RequireBusiness(),
-	)
-	members.Get("/", func(c fiber.Ctx) error { return response.NotImplemented(c) })
-	members.Post("/:userId/role", func(c fiber.Ctx) error { return response.NotImplemented(c) })
+// ----------------------------------------------------------
+// Logger
+// ----------------------------------------------------------
 
-	roles := router.Group("/roles", middleware.RequireAuth())
-	roles.Get("/", func(c fiber.Ctx) error { return response.NotImplemented(c) })
+func setupLogger(isDev bool) {
+	sensitiveKeys := map[string]bool{
+		"password": true, "token": true, "secret": true,
+		"refresh_token": true, "access_token": true,
+		"reset_token": true, "api_key": true,
+	}
+	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
+		if sensitiveKeys[a.Key] {
+			return slog.String(a.Key, "[REDACTED]")
+		}
+		return a
+	}
 
-	perms := router.Group("/permissions", middleware.RequireAuth())
-	perms.Get("/", func(c fiber.Ctx) error { return response.NotImplemented(c) })
+	if isDev {
+		slog.SetDefault(slog.New(tint.NewHandler(os.Stdout, &tint.Options{
+			Level:       slog.LevelDebug,
+			TimeFormat:  time.TimeOnly,
+			ReplaceAttr: replaceAttr,
+		})))
+		return
+	}
+
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level:       slog.LevelInfo,
+		ReplaceAttr: replaceAttr,
+	})))
 }
 
-// healthStatus returns a human-readable status string.
 func healthStatus(ok bool) string {
 	if ok {
 		return "ok"
@@ -311,7 +282,6 @@ func healthStatus(ok bool) string {
 	return "degraded"
 }
 
-// healthMessage returns a human-readable health message.
 func healthMessage(ok bool) string {
 	if ok {
 		return "Service healthy"

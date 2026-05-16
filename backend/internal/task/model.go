@@ -1,11 +1,10 @@
-// Package task implements the test CRUD module for permission validation.
-// It demonstrates how every BusinessSAAS module should be structured:
-// handler → service → repository, all scoped to a business_id.
+// backend/internal/task/model.go
 package task
 
 import "time"
 
 // TaskStatus defines the allowed values for a task's status field.
+// Must match the task_status enum in migration 00006.
 type TaskStatus string
 
 const (
@@ -14,7 +13,17 @@ const (
 	StatusDone       TaskStatus = "done"
 )
 
+// IsValid returns true when the status value is one of the allowed enum values.
+func (s TaskStatus) IsValid() bool {
+	switch s {
+	case StatusTodo, StatusInProgress, StatusDone:
+		return true
+	}
+	return false
+}
+
 // Task is the core domain type for the task module.
+// Every field maps directly to the tasks table column of the same name.
 type Task struct {
 	ID          string     `db:"id"          json:"id"`
 	BusinessID  string     `db:"business_id" json:"business_id"`
@@ -26,23 +35,22 @@ type Task struct {
 	UpdatedAt   time.Time  `db:"updated_at"  json:"updated_at"`
 }
 
-// CreateTaskRequest is the request body for POST /api/v1/tasks.
-// Requires permission: tasks.create
+// CreateTaskRequest is the body for POST /api/v1/tasks.
 type CreateTaskRequest struct {
-	Title       string `json:"title"       validate:"required,min=1,max=255"`
-	Description string `json:"description" validate:"max=2000"`
-	Status      string `json:"status"      validate:"omitempty,oneof=todo in_progress done"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"` // optional — defaults to "todo"
 }
 
-// UpdateTaskRequest is the request body for PATCH /api/v1/tasks/:id.
-// Requires permission: tasks.update
+// UpdateTaskRequest is the body for PATCH /api/v1/tasks/:id.
+// All fields are optional — only non-nil fields are applied.
 type UpdateTaskRequest struct {
-	Title       *string `json:"title"       validate:"omitempty,min=1,max=255"`
-	Description *string `json:"description" validate:"omitempty,max=2000"`
-	Status      *string `json:"status"      validate:"omitempty,oneof=todo in_progress done"`
+	Title       *string `json:"title"`
+	Description *string `json:"description"`
+	Status      *string `json:"status"`
 }
 
-// TaskListResponse wraps a paginated list of tasks.
+// TaskListResponse wraps the list response with a total count.
 type TaskListResponse struct {
 	Tasks []*Task `json:"tasks"`
 	Total int     `json:"total"`

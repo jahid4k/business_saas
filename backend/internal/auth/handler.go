@@ -1,13 +1,17 @@
+// backend/internal/auth/handler.go
 package auth
 
 import (
+	"errors"
+	"log/slog"
+	"strings"
+
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
 // Handler handles all auth HTTP endpoints.
-// It depends only on the Service interface — no direct DB or Redis access.
 type Handler struct {
 	service Service
 }
@@ -18,81 +22,181 @@ func NewHandler(service Service) *Handler {
 }
 
 // Signup handles POST /api/v1/auth/signup
-// Creates a new user account.
-// STATUS: Phase 1-B stub.
 func (h *Handler) Signup(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Parse and validate SignupRequest body
-	// 2. Call h.service.Signup(ctx, req)
-	// 3. Return 201 Created with sanitised user data
-	return response.NotImplemented(c)
+	var req SignupRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	if err := validateSignupRequest(req); err != nil {
+		return response.BadRequest(c, "VALIDATION_ERROR", err.Error())
+	}
+
+	u, err := h.service.Signup(c.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrEmailAlreadyExists) {
+			// Generic message — prevent email enumeration
+			return response.BadRequest(c, "SIGNUP_FAILED", "Unable to create account with the provided details")
+		}
+		slog.Error("auth: signup error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.Created(c, fiber.Map{"user": u}, "Account created successfully")
 }
 
 // Login handles POST /api/v1/auth/login
-// Authenticates user and returns JWT access + opaque refresh token.
-// STATUS: Phase 1-B stub.
 func (h *Handler) Login(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Parse and validate LoginRequest body
-	// 2. Call h.service.Login(ctx, req, ip, userAgent)
-	// 3. Return generic error for any auth failure (never reveal which field failed)
-	// 4. Return 200 OK with TokenPair on success
-	return response.NotImplemented(c)
+	var req LoginRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+	}
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+		return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+	}
+
+	ip := c.IP()
+	userAgent := string(c.Request().Header.Peek("User-Agent"))
+
+	pair, err := h.service.Login(c.Context(), req, ip, userAgent)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCredentials):
+			return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+		case errors.Is(err, ErrAccountLocked):
+			return response.Unauthorized(c, "ACCOUNT_LOCKED", "Account temporarily locked. Please try again later.")
+		default:
+			slog.Error("auth: login error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	return response.OK(c, pair, "Login successful")
 }
 
 // Refresh handles POST /api/v1/auth/refresh
-// Exchanges a valid opaque refresh token for a new token pair.
-// STATUS: Phase 1-B stub.
 func (h *Handler) Refresh(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Parse RefreshRequest body
-	// 2. Call h.service.Refresh(ctx, refreshToken)
-	// 3. Rotate the refresh token (revoke old, issue new)
-	// 4. Return new TokenPair
-	return response.NotImplemented(c)
+	var req RefreshRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.Unauthorized(c, "INVALID_TOKEN", "Invalid or expired refresh token")
+	}
+
+	if strings.TrimSpace(req.RefreshToken) == "" {
+		return response.Unauthorized(c, "MISSING_TOKEN", "Refresh token is required")
+	}
+
+	pair, err := h.service.Refresh(c.Context(), req.RefreshToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCredentials),
+			errors.Is(err, ErrSessionNotFound),
+			errors.Is(err, ErrSessionRevoked),
+			errors.Is(err, ErrSessionExpired):
+			return response.Unauthorized(c, "INVALID_TOKEN", "Invalid or expired refresh token")
+		default:
+			slog.Error("auth: refresh error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	return response.OK(c, pair, "Token refreshed")
 }
 
 // Logout handles POST /api/v1/auth/logout
-// Revokes the current session.
-// STATUS: Phase 1-B stub.
 func (h *Handler) Logout(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Extract refresh token from request body
-	// 2. Call h.service.Logout(ctx, refreshToken)
-	// 3. Return 204 No Content
-	return response.NotImplemented(c)
+	var req RefreshRequest
+	if err := c.Bind().JSON(&req); err == nil && req.RefreshToken != "" {
+		if err := h.service.Logout(c.Context(), req.RefreshToken); err != nil {
+			slog.Error("auth: logout error", slog.Any("error", err))
+		}
+	}
+	// Always return 204 — logout should always appear to succeed
+	return response.NoContent(c)
 }
 
 // LogoutAll handles POST /api/v1/auth/logout-all
-// Revokes all sessions for the authenticated user.
-// STATUS: Phase 1-B stub.
 func (h *Handler) LogoutAll(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Extract user_id from c.Locals (set by RequireAuth middleware)
-	// 2. Call h.service.LogoutAll(ctx, userID)
-	// 3. Return 204 No Content
-	return response.NotImplemented(c)
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
+
+	if err := h.service.LogoutAll(c.Context(), userID); err != nil {
+		slog.Error("auth: logout-all error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.NoContent(c)
+}
+
+// Me handles GET /api/v1/auth/me
+func (h *Handler) Me(c fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
+
+	u, err := h.service.Me(c.Context(), userID)
+	if err != nil {
+		slog.Error("auth: me error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.OK(c, fiber.Map{"user": u}, "OK")
 }
 
 // PasswordResetRequest handles POST /api/v1/auth/password-reset/request
-// Sends a password reset email with a single-use time-limited token.
-// STATUS: Phase 1-B stub.
 func (h *Handler) PasswordResetRequest(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Parse email from body
-	// 2. Call h.service.RequestPasswordReset(ctx, email)
-	// 3. Always return 200 OK regardless of whether email exists (prevent enumeration)
-	return response.NotImplemented(c)
+	var req PasswordResetRequestBody
+	// Parse but always return same response — never reveal whether email exists
+	if err := c.Bind().JSON(&req); err == nil && req.Email != "" {
+		_ = h.service.RequestPasswordReset(c.Context(), req.Email)
+	}
+	return response.OK(c, nil, "If that email is registered, a reset link has been sent")
 }
 
 // PasswordResetConfirm handles POST /api/v1/auth/password-reset/confirm
-// Validates the reset token and sets a new password.
-// STATUS: Phase 1-B stub.
 func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
-	// TODO (Phase 1-B):
-	// 1. Parse token + new_password
-	// 2. Call h.service.ConfirmPasswordReset(ctx, token, newPassword)
-	// 3. Invalidate all existing sessions after password change
-	// 4. Return 200 OK
-	return response.NotImplemented(c)
+	var req PasswordResetConfirmBody
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+	if req.Token == "" || req.NewPassword == "" {
+		return response.BadRequest(c, "MISSING_FIELDS", "Token and new password are required")
+	}
+	if err := h.service.ConfirmPasswordReset(c.Context(), req.Token, req.NewPassword); err != nil {
+		return response.BadRequest(c, "RESET_FAILED", "Invalid or expired reset token")
+	}
+	return response.OK(c, nil, "Password reset successful")
+}
+
+// ----------------------------------------------------------
+// Validation
+// ----------------------------------------------------------
+
+func validateSignupRequest(req SignupRequest) error {
+	req.Email = strings.TrimSpace(req.Email)
+	if req.Email == "" {
+		return errors.New("email is required")
+	}
+	if len(req.Email) > 255 {
+		return errors.New("email must not exceed 255 characters")
+	}
+	if req.Password == "" {
+		return errors.New("password is required")
+	}
+	if len(req.Password) < 8 {
+		return errors.New("password must be at least 8 characters")
+	}
+	if len(req.Password) > 72 {
+		return errors.New("password must not exceed 72 characters")
+	}
+	if strings.TrimSpace(req.FirstName) == "" {
+		return errors.New("first name is required")
+	}
+	if strings.TrimSpace(req.LastName) == "" {
+		return errors.New("last name is required")
+	}
+	return nil
 }

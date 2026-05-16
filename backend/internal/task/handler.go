@@ -1,14 +1,20 @@
+// backend/internal/task/handler.go
 package task
 
 import (
+	"errors"
+	"log/slog"
+
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
 // Handler handles task CRUD endpoints.
-// Each route is protected by RequirePermission middleware — the handler
-// itself does NOT re-check permissions. Middleware is the enforcement layer.
+//
+// Permission enforcement is done entirely by RequirePermission middleware
+// before the handler is called. The handler itself trusts that the middleware
+// has already verified the permission and focuses only on HTTP concerns.
 type Handler struct {
 	service Service
 }
@@ -20,61 +26,144 @@ func NewHandler(service Service) *Handler {
 
 // List handles GET /api/v1/tasks
 // Requires: tasks.read
-// STATUS: Phase 1-E stub.
 func (h *Handler) List(c fiber.Ctx) error {
-	// TODO (Phase 1-E):
-	// 1. Extract business_id from c.Locals("business_id")
-	// 2. Call h.service.List(ctx, businessID)
-	// 3. Return TaskListResponse
-	return response.NotImplemented(c)
+	businessID, ok := c.Locals("business_id").(string)
+	if !ok || businessID == "" {
+		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	}
+
+	result, err := h.service.List(c.Context(), businessID)
+	if err != nil {
+		slog.Error("task: List error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.OK(c, result, "OK")
 }
 
 // Create handles POST /api/v1/tasks
 // Requires: tasks.create
-// STATUS: Phase 1-E stub.
 func (h *Handler) Create(c fiber.Ctx) error {
-	// TODO (Phase 1-E):
-	// 1. Extract user_id and business_id from c.Locals
-	// 2. Parse and validate CreateTaskRequest
-	// 3. Call h.service.Create(ctx, businessID, userID, req)
-	// 4. Return 201 Created with the new task
-	return response.NotImplemented(c)
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
+
+	businessID, ok := c.Locals("business_id").(string)
+	if !ok || businessID == "" {
+		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	}
+
+	var req CreateTaskRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	t, err := h.service.Create(c.Context(), businessID, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrTitleRequired):
+			return response.BadRequest(c, "TITLE_REQUIRED", "Title is required")
+		case errors.Is(err, ErrTitleTooLong):
+			return response.BadRequest(c, "TITLE_TOO_LONG", "Title must not exceed 255 characters")
+		case errors.Is(err, ErrDescriptionTooLong):
+			return response.BadRequest(c, "DESCRIPTION_TOO_LONG", "Description must not exceed 2000 characters")
+		case errors.Is(err, ErrInvalidStatus):
+			return response.BadRequest(c, "INVALID_STATUS", "Status must be one of: todo, in_progress, done")
+		default:
+			slog.Error("task: Create error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	return response.Created(c, fiber.Map{"task": t}, "Task created")
 }
 
 // Get handles GET /api/v1/tasks/:id
 // Requires: tasks.read
-// STATUS: Phase 1-E stub.
 func (h *Handler) Get(c fiber.Ctx) error {
-	// TODO (Phase 1-E):
-	// 1. Extract business_id from c.Locals
-	// 2. Get task ID from c.Params("id")
-	// 3. Call h.service.GetByID(ctx, businessID, taskID)
-	// 4. Return 404 if not found OR if business_id does not match (tenant isolation)
-	return response.NotImplemented(c)
+	businessID, ok := c.Locals("business_id").(string)
+	if !ok || businessID == "" {
+		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	}
+
+	taskID := c.Params("id")
+	if taskID == "" {
+		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
+	}
+
+	t, err := h.service.GetByID(c.Context(), businessID, taskID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
+		}
+		slog.Error("task: Get error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.OK(c, fiber.Map{"task": t}, "OK")
 }
 
 // Update handles PATCH /api/v1/tasks/:id
 // Requires: tasks.update
-// STATUS: Phase 1-E stub.
 func (h *Handler) Update(c fiber.Ctx) error {
-	// TODO (Phase 1-E):
-	// 1. Extract business_id from c.Locals
-	// 2. Get task ID from c.Params("id")
-	// 3. Parse and validate UpdateTaskRequest
-	// 4. Call h.service.Update(ctx, businessID, taskID, req)
-	// 5. Verify task belongs to business before updating (tenant isolation)
-	return response.NotImplemented(c)
+	businessID, ok := c.Locals("business_id").(string)
+	if !ok || businessID == "" {
+		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	}
+
+	taskID := c.Params("id")
+	if taskID == "" {
+		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
+	}
+
+	var req UpdateTaskRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	t, err := h.service.Update(c.Context(), businessID, taskID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
+		case errors.Is(err, ErrTitleRequired):
+			return response.BadRequest(c, "TITLE_REQUIRED", "Title is required")
+		case errors.Is(err, ErrTitleTooLong):
+			return response.BadRequest(c, "TITLE_TOO_LONG", "Title must not exceed 255 characters")
+		case errors.Is(err, ErrDescriptionTooLong):
+			return response.BadRequest(c, "DESCRIPTION_TOO_LONG", "Description must not exceed 2000 characters")
+		case errors.Is(err, ErrInvalidStatus):
+			return response.BadRequest(c, "INVALID_STATUS", "Status must be one of: todo, in_progress, done")
+		default:
+			slog.Error("task: Update error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	return response.OK(c, fiber.Map{"task": t}, "Task updated")
 }
 
 // Delete handles DELETE /api/v1/tasks/:id
 // Requires: tasks.delete
-// STATUS: Phase 1-E stub.
 func (h *Handler) Delete(c fiber.Ctx) error {
-	// TODO (Phase 1-E):
-	// 1. Extract business_id from c.Locals
-	// 2. Get task ID from c.Params("id")
-	// 3. Call h.service.Delete(ctx, businessID, taskID)
-	// 4. Verify task belongs to business before deleting (tenant isolation)
-	// 5. Return 204 No Content
-	return response.NotImplemented(c)
+	businessID, ok := c.Locals("business_id").(string)
+	if !ok || businessID == "" {
+		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	}
+
+	taskID := c.Params("id")
+	if taskID == "" {
+		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
+	}
+
+	if err := h.service.Delete(c.Context(), businessID, taskID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
+		}
+		slog.Error("task: Delete error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.NoContent(c)
 }

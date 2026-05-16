@@ -1,14 +1,17 @@
+// backend/internal/auth/repository.go
 package auth
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository defines the data access interface for auth operations.
-// The service depends on this interface, not pgx directly.
-// This keeps SQL isolated to the repository layer and makes services testable.
+// Repository defines the data access interface for auth session operations.
 type Repository interface {
 	CreateSession(ctx context.Context, session *Session) error
 	GetSessionByTokenHash(ctx context.Context, tokenHash string) (*Session, error)
@@ -16,60 +19,91 @@ type Repository interface {
 	RevokeAllUserSessions(ctx context.Context, userID string) error
 }
 
-// repoImpl is the concrete pgx implementation of Repository.
 type repoImpl struct {
-	// TODO (Phase 1-B): add pgxpool.Pool field
+	db *pgxpool.Pool
 }
 
-// NewRepository creates a new auth repository.
-// Phase 1-B will wire in the actual pgxpool.Pool.
-func NewRepository() Repository {
-	return &repoImpl{}
+// NewRepository creates a new auth repository backed by a pgxpool.
+func NewRepository(db *pgxpool.Pool) Repository {
+	return &repoImpl{db: db}
 }
 
-// TODO (Phase 1-B): implement all repository methods with real pgx queries.
-// All queries must use parameterized statements — never string concatenation.
+// CreateSession inserts a new session row.
+// NEVER pass the raw token — only pass the SHA-256 hash in session.TokenHash.
+func (r *repoImpl) CreateSession(ctx context.Context, s *Session) error {
+	const q = `
+		INSERT INTO sessions (user_id, token_hash, user_agent, ip_address, expires_at)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, created_at`
 
-func (r *repoImpl) CreateSession(_ context.Context, _ *Session) error {
-	return errNotImplemented("CreateSession")
+	err := r.db.QueryRow(ctx, q,
+		s.UserID, s.TokenHash, s.UserAgent, s.IPAddress, s.ExpiresAt,
+	).Scan(&s.ID, &s.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("auth: CreateSession: %w", err)
+	}
+	return nil
 }
 
-func (r *repoImpl) GetSessionByTokenHash(_ context.Context, _ string) (*Session, error) {
-	return nil, errNotImplemented("GetSessionByTokenHash")
+// GetSessionByTokenHash looks up a session by its SHA-256 token hash.
+func (r *repoImpl) GetSessionByTokenHash(ctx context.Context, tokenHash string) (*Session, error) {
+	const q = `
+		SELECT id, user_id, token_hash, user_agent, ip_address,
+		       expires_at, revoked_at, created_at
+		FROM sessions
+		WHERE token_hash = $1`
+
+	s := &Session{}
+	err := r.db.QueryRow(ctx, q, tokenHash).Scan(
+		&s.ID, &s.UserID, &s.TokenHash,
+		&s.UserAgent, &s.IPAddress,
+		&s.ExpiresAt, &s.RevokedAt, &s.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrSessionNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("auth: GetSessionByTokenHash: %w", err)
+	}
+	return s, nil
 }
 
-func (r *repoImpl) RevokeSession(_ context.Context, _ string) error {
-	return errNotImplemented("RevokeSession")
+// RevokeSession marks a single session revoked by setting revoked_at = NOW().
+func (r *repoImpl) RevokeSession(ctx context.Context, sessionID string) error {
+	const q = `
+		UPDATE sessions
+		SET revoked_at = $1
+		WHERE id = $2 AND revoked_at IS NULL`
+
+	_, err := r.db.Exec(ctx, q, time.Now(), sessionID)
+	if err != nil {
+		return fmt.Errorf("auth: RevokeSession: %w", err)
+	}
+	return nil
 }
 
-func (r *repoImpl) RevokeAllUserSessions(_ context.Context, _ string) error {
-	return errNotImplemented("RevokeAllUserSessions")
+// RevokeAllUserSessions marks every active session for the user revoked.
+// Used by logout-all and password-change flows.
+func (r *repoImpl) RevokeAllUserSessions(ctx context.Context, userID string) error {
+	const q = `
+		UPDATE sessions
+		SET revoked_at = $1
+		WHERE user_id = $2 AND revoked_at IS NULL`
+
+	_, err := r.db.Exec(ctx, q, time.Now(), userID)
+	if err != nil {
+		return fmt.Errorf("auth: RevokeAllUserSessions: %w", err)
+	}
+	return nil
 }
 
 // ----------------------------------------------------------
-// Shared sentinel errors for the auth package
+// Sentinel errors
 // ----------------------------------------------------------
 
-// ErrInvalidCredentials is returned when email/password do not match.
-// IMPORTANT: this is intentionally vague — never reveal which field failed.
 var ErrInvalidCredentials = errors.New("invalid credentials")
-
-// ErrSessionNotFound is returned when a refresh token cannot be found.
 var ErrSessionNotFound = errors.New("session not found")
-
-// ErrSessionRevoked is returned when a session has been explicitly revoked.
 var ErrSessionRevoked = errors.New("session revoked")
-
-// ErrSessionExpired is returned when a session has passed its TTL.
 var ErrSessionExpired = errors.New("session expired")
-
-// ErrEmailAlreadyExists is returned during signup if the email is taken.
 var ErrEmailAlreadyExists = errors.New("email already registered")
-
-// ErrAccountLocked is returned after too many failed login attempts.
 var ErrAccountLocked = errors.New("account temporarily locked")
-
-// errNotImplemented is a helper for stub methods.
-func errNotImplemented(method string) error {
-	return fmt.Errorf("auth: %s: not yet implemented", method)
-}
