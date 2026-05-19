@@ -3,78 +3,98 @@ package authz
 
 import "time"
 
-// Role represents a system-defined role (Owner, Admin, Member, Viewer).
-// Roles are seeded in migrations and are not user-editable in Phase 1.
 type Role struct {
-	ID          string    `db:"id"          json:"id"`
-	Name        string    `db:"name"        json:"name"`
+	ID          string    `db:"id" json:"id"`
+	PublicID    string    `db:"public_id" json:"publicId"`
+	OrgID       *string   `db:"org_id" json:"organizationId,omitempty"`
+	Name        string    `db:"name" json:"name"`
 	Description string    `db:"description" json:"description"`
-	IsSystem    bool      `db:"is_system"   json:"is_system"`
-	CreatedAt   time.Time `db:"created_at"  json:"created_at"`
+	Permissions []string  `db:"permissions" json:"permissionKeys"`
+	IsSystem    bool      `db:"is_system" json:"isSystem"`
+	IsCustom    bool      `db:"is_custom" json:"isCustom"`
+	CreatedAt   time.Time `db:"created_at" json:"createdAt"`
+	UpdatedAt   time.Time `db:"updated_at" json:"updatedAt"`
 }
 
-// Permission represents a granular capability in the format resource.action.
 type Permission struct {
-	ID          string    `db:"id"          json:"id"`
-	Resource    string    `db:"resource"    json:"resource"`
-	Action      string    `db:"action"      json:"action"`
+	ID          string    `db:"id" json:"id"`
+	PublicID    string    `db:"public_id" json:"publicId"`
+	KeyName     string    `db:"key" json:"key"`
+	Resource    string    `db:"resource" json:"resource"`
+	Action      string    `db:"action" json:"action"`
 	Description string    `db:"description" json:"description"`
-	CreatedAt   time.Time `db:"created_at"  json:"created_at"`
+	IsSystem    bool      `db:"is_system" json:"isSystem"`
+	CreatedAt   time.Time `db:"created_at" json:"createdAt"`
+	UpdatedAt   time.Time `db:"updated_at" json:"updatedAt"`
 }
 
-// Key returns the canonical dot-separated permission string e.g. "tasks.delete".
-func (p *Permission) Key() string {
+func (p *Permission) PermissionKey() string {
+	if p.KeyName != "" {
+		return p.KeyName
+	}
 	return p.Resource + "." + p.Action
 }
 
-// Membership connects a User to a Business with a Role.
-// One user can have at most one membership per business.
+// Key returns the canonical dot-separated permission string, e.g. crm.deals.create.
+func (p *Permission) Key() string { return p.PermissionKey() }
+
+// Membership connects a User to an Organization with a Role.
 type Membership struct {
-	ID         string    `db:"id"          json:"id"`
-	UserID     string    `db:"user_id"     json:"user_id"`
-	BusinessID string    `db:"business_id" json:"business_id"`
-	RoleID     string    `db:"role_id"     json:"role_id"`
-	CreatedAt  time.Time `db:"created_at"  json:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at"  json:"updated_at"`
+	ID                   string     `db:"id" json:"id"`
+	PublicID             string     `db:"public_id" json:"publicId"`
+	UserID               string     `db:"user_id" json:"userId"`
+	OrganizationID       string     `db:"org_id" json:"organizationId"`
+	RoleID               *string    `db:"role_id" json:"roleId,omitempty"`
+	RoleKey              string     `db:"role_key" json:"role"`
+	Title                string     `db:"title" json:"title,omitempty"`
+	Department           string     `db:"department" json:"department,omitempty"`
+	Status               string     `db:"status" json:"status"`
+	CustomPermissions    []string   `db:"custom_permissions" json:"customPermissions"`
+	InvitationStatus     string     `db:"invitation_status" json:"invitationStatus"`
+	InvitedBy            *string    `db:"invited_by" json:"invitedBy,omitempty"`
+	InvitationSentAt     *time.Time `db:"invitation_sent_at" json:"invitationSentAt,omitempty"`
+	InvitationAcceptedAt *time.Time `db:"invitation_accepted_at" json:"invitationAcceptedAt,omitempty"`
+	JoinedAt             time.Time  `db:"joined_at" json:"joinedAt"`
+	CreatedAt            time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt            time.Time  `db:"updated_at" json:"updatedAt"`
 }
 
-// MemberWithUser is the enriched membership returned by GET /api/v1/members.
-// Joins: memberships + users + roles in one query.
 type MemberWithUser struct {
-	MembershipID string    `json:"membership_id"`
-	UserID       string    `json:"user_id"`
-	Email        string    `json:"email"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
+	MembershipID string    `json:"membershipId"`
+	UserID       string    `json:"userId"`
+	Email        string    `json:"email,omitempty"`
+	DisplayName  string    `json:"displayName"`
+	FirstName    string    `json:"firstName,omitempty"`
+	LastName     string    `json:"lastName,omitempty"`
+	PhotoURL     string    `json:"photoURL,omitempty"`
 	Role         string    `json:"role"`
-	JoinedAt     time.Time `json:"joined_at"`
+	Status       string    `json:"status"`
+	Title        string    `json:"title,omitempty"`
+	Department   string    `json:"department,omitempty"`
+	JoinedAt     time.Time `json:"joinedAt"`
 }
 
-// RoleWithPermissions enriches a Role with its full permission list.
-// Returned by GET /api/v1/roles.
 type RoleWithPermissions struct {
 	Role        *Role         `json:"role"`
 	Permissions []*Permission `json:"permissions"`
 }
 
-// MyMembershipResponse is returned by GET /api/v1/members/me.
 type MyMembershipResponse struct {
-	MembershipID string    `json:"membership_id"`
-	BusinessID   string    `json:"business_id"`
-	Role         string    `json:"role"`
-	Permissions  []string  `json:"permissions"` // list of "resource.action" strings
-	JoinedAt     time.Time `json:"joined_at"`
+	MembershipID   string    `json:"membershipId"`
+	OrganizationID string    `json:"organizationId"`
+	Role           string    `json:"role"`
+	Permissions    []string  `json:"permissions"`
+	JoinedAt       time.Time `json:"joinedAt"`
 }
 
-// AssignRoleRequest is the body for POST /api/v1/members/:userId/role.
 type AssignRoleRequest struct {
-	Role string `json:"role"` // one of: admin, member, viewer (not owner)
+	Role string `json:"role"`
 }
 
-// SystemRoles defines the names of seeded system roles.
 const (
-	RoleOwner  = "owner"
-	RoleAdmin  = "admin"
-	RoleMember = "member"
-	RoleViewer = "viewer"
+	RoleOwner   = "owner"
+	RoleAdmin   = "admin"
+	RoleManager = "manager"
+	RoleMember  = "member"
+	RoleViewer  = "viewer"
 )

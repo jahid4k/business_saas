@@ -21,11 +21,10 @@ import (
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
-	"github.com/mridha/businesssaas/internal/business"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
-	"github.com/mridha/businesssaas/internal/task"
+	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/user"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -89,9 +88,8 @@ func main() {
 	authRepo := auth.NewRepository(pgPool)
 	userRepo := user.NewRepository(pgPool)
 	authzRepo := authz.NewRepository(pgPool)
-	businessRepo := business.NewRepository(pgPool)
+	businessRepo := organizations.NewRepository(pgPool)
 	auditRepo := audit.NewNoopRepository()
-	taskRepo := task.NewRepository(pgPool)
 
 	// ----------------------------------------------------------
 	// 7. Services
@@ -101,8 +99,7 @@ func main() {
 	userSvc := user.NewService(userRepo)
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT)
 	authzSvc := authz.NewService(authzRepo, redisClient)
-	businessSvc := business.NewService(businessRepo, authzRepo, jwtManager)
-	taskSvc := task.NewService(taskRepo)
+	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
 
 	// ----------------------------------------------------------
 	// 8. Handlers
@@ -110,8 +107,7 @@ func main() {
 	authHandler := auth.NewHandler(authSvc)
 	userHandler := user.NewHandler(userSvc)
 	authzHandler := authz.NewHandler(authzSvc)
-	businessHandler := business.NewHandler(businessSvc)
-	taskHandler := task.NewHandler(taskSvc)
+	businessHandler := organizations.NewHandler(businessSvc)
 
 	// ----------------------------------------------------------
 	// 9. Fiber
@@ -159,13 +155,15 @@ func main() {
 
 	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
 	user.RegisterRoutes(api, userHandler, requireAuth)
-	business.RegisterRoutes(api, businessHandler, requireAuth)
+	organizations.RegisterRoutes(api, businessHandler, requireAuth)
 
 	requireBusiness := middleware.RequireBusiness()
-	requireMembersManage := middleware.RequirePermission(authzSvc, "members.manage")
+	requireMembersManage := middleware.RequirePermission(authzSvc, "roles.assign")
 	authz.RegisterRoutes(api, authzHandler, requireAuth, requireBusiness, requireMembersManage)
 
-	task.RegisterRoutes(api, taskHandler, requireAuth, authzSvc)
+	// Task/CRM routes are intentionally not registered here.
+	// The old task module used the previous businesses/business_id schema.
+	// Add CRM Phase 1 modules after crm_* migrations are introduced.
 
 	// 404 fallback — must be last
 	app.Use(func(c fiber.Ctx) error {

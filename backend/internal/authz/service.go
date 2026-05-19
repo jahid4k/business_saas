@@ -18,24 +18,24 @@ const permCacheTTL = 5 * time.Minute
 
 // Service defines the authorization interface.
 type Service interface {
-	// Can checks whether userID has the given permission within businessID.
+	// Can checks whether userID has the given permission within organizationID.
 	// Checks Redis cache first; falls back to the database on a miss.
-	Can(ctx context.Context, userID, businessID, resource, action string) (bool, error)
+	Can(ctx context.Context, userID, organizationID, resource, action string) (bool, error)
 
-	// GetMembership returns the user's membership in a business.
-	GetMembership(ctx context.Context, userID, businessID string) (*Membership, error)
+	// GetMembership returns the user's membership in a organization.
+	GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error)
 
 	// MyMembership returns the current user's membership enriched with their
 	// full permission list. Used by GET /api/v1/members/me.
-	MyMembership(ctx context.Context, userID, businessID string) (*MyMembershipResponse, error)
+	MyMembership(ctx context.Context, userID, organizationID string) (*MyMembershipResponse, error)
 
-	// ListMembers returns all members of a business with their user profile + role.
-	ListMembers(ctx context.Context, businessID string) ([]*MemberWithUser, error)
+	// ListMembers returns all members of a organization with their user profile + role.
+	ListMembers(ctx context.Context, organizationID string) ([]*MemberWithUser, error)
 
-	// AssignRole changes a member's role within a business.
+	// AssignRole changes a member's role within a organization.
 	// The owner role cannot be assigned via API.
 	// Invalidates the Redis permission cache for the affected user.
-	AssignRole(ctx context.Context, callerID, targetUserID, businessID, roleName string) error
+	AssignRole(ctx context.Context, callerID, targetUserID, organizationID, roleName string) error
 
 	// ListRoles returns all system roles with their associated permissions.
 	ListRoles(ctx context.Context) ([]*RoleWithPermissions, error)
@@ -61,18 +61,18 @@ func NewService(repo Repository, redisClient *redis.Client) Service {
 // Can — the core permission check
 // ----------------------------------------------------------
 
-// Can returns true if the user holds the given permission in the business.
+// Can returns true if the user holds the given permission in the organization.
 //
-// Cache strategy (Redis Set per user+business):
-//  1. SISMEMBER "perm:<userID>:<businessID>" "<resource>.<action>"
+// Cache strategy (Redis Set per user+organization):
+//  1. SISMEMBER "perm:<userID>:<organizationID>" "<resource>.<action>"
 //  2. On hit: return immediately — no DB query
 //  3. On miss: query DB for all permissions, write them all to Redis Set with TTL
 //  4. Return whether the requested permission is in the set
 //
 // Invalidation: AssignRole deletes the key immediately on role change.
-func (s *serviceImpl) Can(ctx context.Context, userID, businessID, resource, action string) (bool, error) {
+func (s *serviceImpl) Can(ctx context.Context, userID, organizationID, resource, action string) (bool, error) {
 	permKey := resource + "." + action
-	cacheKey := permCacheKey(userID, businessID)
+	cacheKey := permCacheKey(userID, organizationID)
 
 	// Check Redis first
 	cached, err := s.redis.SIsMember(ctx, cacheKey, permKey).Result()
@@ -88,7 +88,7 @@ func (s *serviceImpl) Can(ctx context.Context, userID, businessID, resource, act
 	}
 
 	// DB fallback
-	perms, err := s.repo.GetUserPermissions(ctx, userID, businessID)
+	perms, err := s.repo.GetUserPermissions(ctx, userID, organizationID)
 	if err != nil {
 		return false, fmt.Errorf("authz: Can: %w", err)
 	}
@@ -123,8 +123,8 @@ func (s *serviceImpl) Can(ctx context.Context, userID, businessID, resource, act
 // GetMembership
 // ----------------------------------------------------------
 
-func (s *serviceImpl) GetMembership(ctx context.Context, userID, businessID string) (*Membership, error) {
-	m, err := s.repo.GetMembership(ctx, userID, businessID)
+func (s *serviceImpl) GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error) {
+	m, err := s.repo.GetMembership(ctx, userID, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("authz: GetMembership: %w", err)
 	}
@@ -135,10 +135,10 @@ func (s *serviceImpl) GetMembership(ctx context.Context, userID, businessID stri
 // MyMembership
 // ----------------------------------------------------------
 
-// MyMembership returns the caller's membership + full permission list for a business.
+// MyMembership returns the caller's membership + full permission list for a organization.
 // This is what the frontend uses to know which buttons to show/hide.
-func (s *serviceImpl) MyMembership(ctx context.Context, userID, businessID string) (*MyMembershipResponse, error) {
-	membership, err := s.repo.GetMembership(ctx, userID, businessID)
+func (s *serviceImpl) MyMembership(ctx context.Context, userID, organizationID string) (*MyMembershipResponse, error) {
+	membership, err := s.repo.GetMembership(ctx, userID, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("authz: MyMembership: get membership: %w", err)
 	}
@@ -146,15 +146,18 @@ func (s *serviceImpl) MyMembership(ctx context.Context, userID, businessID strin
 		return nil, ErrMemberNotFound
 	}
 
-	role, err := s.repo.GetRoleByID(ctx, membership.RoleID)
-	if err != nil {
-		return nil, fmt.Errorf("authz: MyMembership: get role: %w", err)
-	}
-	if role == nil {
-		return nil, fmt.Errorf("authz: MyMembership: role not found for membership")
+	roleName := membership.RoleKey
+	if membership.RoleID != nil {
+		role, err := s.repo.GetRoleByID(ctx, *membership.RoleID)
+		if err != nil {
+			return nil, fmt.Errorf("authz: MyMembership: get role: %w", err)
+		}
+		if role != nil {
+			roleName = role.Name
+		}
 	}
 
-	perms, err := s.repo.GetUserPermissions(ctx, userID, businessID)
+	perms, err := s.repo.GetUserPermissions(ctx, userID, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("authz: MyMembership: get permissions: %w", err)
 	}
@@ -165,11 +168,11 @@ func (s *serviceImpl) MyMembership(ctx context.Context, userID, businessID strin
 	}
 
 	return &MyMembershipResponse{
-		MembershipID: membership.ID,
-		BusinessID:   businessID,
-		Role:         role.Name,
-		Permissions:  permKeys,
-		JoinedAt:     membership.CreatedAt,
+		MembershipID:   membership.ID,
+		OrganizationID: organizationID,
+		Role:           roleName,
+		Permissions:    permKeys,
+		JoinedAt:       membership.CreatedAt,
 	}, nil
 }
 
@@ -177,8 +180,8 @@ func (s *serviceImpl) MyMembership(ctx context.Context, userID, businessID strin
 // ListMembers
 // ----------------------------------------------------------
 
-func (s *serviceImpl) ListMembers(ctx context.Context, businessID string) ([]*MemberWithUser, error) {
-	members, err := s.repo.ListMembers(ctx, businessID)
+func (s *serviceImpl) ListMembers(ctx context.Context, organizationID string) ([]*MemberWithUser, error) {
+	members, err := s.repo.ListMembers(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("authz: ListMembers: %w", err)
 	}
@@ -192,16 +195,16 @@ func (s *serviceImpl) ListMembers(ctx context.Context, businessID string) ([]*Me
 // AssignRole
 // ----------------------------------------------------------
 
-// AssignRole changes a member's role within a business.
+// AssignRole changes a member's role within a organization.
 //
 // Rules:
-//   - Owner role cannot be assigned via API (set only at business creation)
+//   - Owner role cannot be assigned via API (set only at organization creation)
 //   - Caller cannot downgrade themselves (prevents accidental lockout)
-//   - Target user must be a member of the business
+//   - Target user must be a member of the organization
 //
 // After changing the role, the Redis permission cache for the target user
 // is immediately invalidated so the new role takes effect on the next request.
-func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, businessID, roleName string) error {
+func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, organizationID, roleName string) error {
 	// Prevent assigning owner via API
 	if strings.EqualFold(roleName, RoleOwner) {
 		return ErrCannotAssignOwner
@@ -221,8 +224,8 @@ func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, bu
 		return ErrRoleNotFound
 	}
 
-	// Verify the target is a member of this business
-	membership, err := s.repo.GetMembership(ctx, targetUserID, businessID)
+	// Verify the target is a member of this organization
+	membership, err := s.repo.GetMembership(ctx, targetUserID, organizationID)
 	if err != nil {
 		return fmt.Errorf("authz: AssignRole: get membership: %w", err)
 	}
@@ -231,12 +234,12 @@ func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, bu
 	}
 
 	// Update membership role
-	if err := s.repo.UpdateMembershipRole(ctx, targetUserID, businessID, role.ID); err != nil {
+	if err := s.repo.UpdateMembershipRole(ctx, targetUserID, organizationID, role.ID); err != nil {
 		return fmt.Errorf("authz: AssignRole: update: %w", err)
 	}
 
 	// Invalidate Redis cache — next request will re-query the DB
-	cacheKey := permCacheKey(targetUserID, businessID)
+	cacheKey := permCacheKey(targetUserID, organizationID)
 	if delErr := s.redis.Del(ctx, cacheKey).Err(); delErr != nil {
 		// Non-fatal — cache will expire on its own within permCacheTTL
 		slog.Warn("authz: failed to invalidate permission cache",
@@ -248,7 +251,7 @@ func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, bu
 	slog.Info("authz: role assigned",
 		slog.String("caller_id", callerID),
 		slog.String("target_user", targetUserID),
-		slog.String("business_id", businessID),
+		slog.String("organization_id", organizationID),
 		slog.String("role", roleName),
 	)
 
@@ -285,8 +288,8 @@ func (s *serviceImpl) ListPermissions(ctx context.Context) ([]*Permission, error
 // Helpers
 // ----------------------------------------------------------
 
-func permCacheKey(userID, businessID string) string {
-	return "perm:" + userID + ":" + businessID
+func permCacheKey(userID, organizationID string) string {
+	return "perm:" + userID + ":" + organizationID
 }
 
 // ----------------------------------------------------------
@@ -296,4 +299,4 @@ func permCacheKey(userID, businessID string) string {
 var ErrCannotAssignOwner = errors.New("owner role cannot be assigned via API")
 var ErrCannotChangeOwnRole = errors.New("you cannot change your own role")
 var ErrRoleNotFound = errors.New("role not found")
-var ErrMemberNotFound = errors.New("member not found in this business")
+var ErrMemberNotFound = errors.New("member not found in this organization")

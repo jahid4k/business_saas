@@ -10,17 +10,11 @@ import (
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
-// Handler handles user profile endpoints.
-type Handler struct {
-	service Service
-}
+type Handler struct{ service Service }
 
-// NewHandler creates a new user Handler.
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
-}
+func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
-// Me handles GET /api/v1/users/me
+// Me handles GET /api/v1/users/me and GET /api/v1/me.
 func (h *Handler) Me(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
@@ -39,7 +33,7 @@ func (h *Handler) Me(c fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"user": u.ToSafe()}, "OK")
 }
 
-// UpdateMe handles PATCH /api/v1/users/me
+// UpdateMe handles PATCH /api/v1/users/me and PATCH /api/v1/me.
 func (h *Handler) UpdateMe(c fiber.Ctx) error {
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
@@ -59,6 +53,5 @@ func (h *Handler) UpdateMe(c fiber.Ctx) error {
 		slog.Error("user: UpdateMe error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
-
 	return response.OK(c, fiber.Map{"user": u.ToSafe()}, "Profile updated")
 }

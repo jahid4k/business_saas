@@ -192,11 +192,7 @@ func validateSignupRequest(req SignupRequest) error {
 	if len(req.Password) > 72 {
 		return errors.New("password must not exceed 72 characters")
 	}
-	if strings.TrimSpace(req.FirstName) == "" {
-		return errors.New("first name is required")
-	}
-	if strings.TrimSpace(req.LastName) == "" {
-		return errors.New("last name is required")
-	}
+	// First/last name are optional because OAuth and SaaS onboarding flows
+	// may initially provide only email + displayName.
 	return nil
 }
