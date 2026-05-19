@@ -127,7 +127,7 @@ git clone https://github.com/yourusername/BusinessSAAS.git
 cd BusinessSAAS
 
 # Copy the environment template
-cp .env.example .env
+cp .env .env
 ```
 
 Open `.env` and set your own values for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `JWT_SECRET`. The defaults work for local development but should never be used in production.

@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,7 +16,6 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lmittmann/tint"
-
 	"github.com/redis/go-redis/v9"
 
 	"github.com/mridha/businesssaas/internal/audit"
@@ -95,7 +96,7 @@ func main() {
 	// ----------------------------------------------------------
 	// 7. Services
 	// ----------------------------------------------------------
-	_ = audit.NewService(auditRepo) // wired in audit domain
+	_ = audit.NewService(auditRepo)
 
 	userSvc := user.NewService(userRepo)
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT)
@@ -151,18 +152,19 @@ func main() {
 	// ----------------------------------------------------------
 	api := app.Group("/api/v1")
 
-	registerSystemRoutes(api, pgPool, redisClient)
+	// System routes — /routes handler uses app reference lazily (called at
+	// request time), so it always reflects the full registered route table
+	// even though this is registered before the other route groups below.
+	registerSystemRoutes(api, app, pgPool, redisClient, cfg)
 
 	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
 	user.RegisterRoutes(api, userHandler, requireAuth)
 	business.RegisterRoutes(api, businessHandler, requireAuth)
+
 	requireBusiness := middleware.RequireBusiness()
 	requireMembersManage := middleware.RequirePermission(authzSvc, "members.manage")
-	authz.RegisterRoutes(api,
-		authzHandler,
-		requireAuth,
-		requireBusiness,
-		requireMembersManage)
+	authz.RegisterRoutes(api, authzHandler, requireAuth, requireBusiness, requireMembersManage)
+
 	task.RegisterRoutes(api, taskHandler, requireAuth, authzSvc)
 
 	// 404 fallback — must be last
@@ -210,7 +212,14 @@ func main() {
 // System routes
 // ----------------------------------------------------------
 
-func registerSystemRoutes(router fiber.Router, pgPool *pgxpool.Pool, redisClient *redis.Client) {
+func registerSystemRoutes(
+	router fiber.Router,
+	app *fiber.App,
+	pgPool *pgxpool.Pool,
+	redisClient *redis.Client,
+	cfg *config.Config,
+) {
+	// ── Health ────────────────────────────────────────────────────────────────
 	router.Get("/health", func(c fiber.Ctx) error {
 		ctx := context.Background()
 
@@ -244,9 +253,105 @@ func registerSystemRoutes(router fiber.Router, pgPool *pgxpool.Pool, redisClient
 		})
 	})
 
+	// ── Hello ─────────────────────────────────────────────────────────────────
 	router.Get("/hello", func(c fiber.Ctx) error {
 		return response.OK(c, nil, "Hello from Go backend")
 	})
+
+	// ── Routes — dynamic route table ──────────────────────────────────────────
+	// app.GetRoutes() is called at request time (not at registration time),
+	// so the handler always reflects the complete route table regardless of
+	// registration order. This endpoint is restricted to development only.
+	router.Get("/routes", func(c fiber.Ctx) error {
+		// Hide this endpoint in production — return a generic 404 so the
+		// route table is not publicly enumerable.
+		if cfg.App.IsProduction() {
+			return response.NotFound(c, "ROUTE_NOT_FOUND", "not found")
+		}
+
+		type routeInfo struct {
+			Method string `json:"method"`
+			Path   string `json:"path"`
+		}
+
+		grouped := make(map[string][]routeInfo)
+
+		for _, r := range app.GetRoutes(true) {
+			// Skip auto-generated HEAD duplicates and internal catch-alls
+			if r.Method == fiber.MethodHead {
+				continue
+			}
+			if r.Path == "/*" || r.Path == "" {
+				continue
+			}
+
+			group := routeGroup(r.Path)
+			grouped[group] = append(grouped[group], routeInfo{
+				Method: r.Method,
+				Path:   r.Path,
+			})
+		}
+
+		// Stable sort: groups alphabetically, routes within each group by path then method
+		type groupEntry struct {
+			Group  string      `json:"group"`
+			Count  int         `json:"count"`
+			Routes []routeInfo `json:"routes"`
+		}
+
+		groupKeys := make([]string, 0, len(grouped))
+		for k := range grouped {
+			groupKeys = append(groupKeys, k)
+		}
+		sort.Strings(groupKeys)
+
+		total := 0
+		result := make([]groupEntry, 0, len(groupKeys))
+
+		for _, k := range groupKeys {
+			routes := grouped[k]
+			sort.Slice(routes, func(i, j int) bool {
+				if routes[i].Path != routes[j].Path {
+					return routes[i].Path < routes[j].Path
+				}
+				return routes[i].Method < routes[j].Method
+			})
+			total += len(routes)
+			result = append(result, groupEntry{
+				Group:  k,
+				Count:  len(routes),
+				Routes: routes,
+			})
+		}
+
+		return response.OK(c, fiber.Map{
+			"total":  total,
+			"groups": result,
+		}, "Route table")
+	})
+}
+
+// routeGroup derives a human-readable group key from a registered Fiber path.
+//
+//	/api/v1/auth/login      → "auth"
+//	/api/v1/tasks/:id       → "tasks"
+//	/api/v1/health          → "system"
+//	/api/v1/hello           → "system"
+//	/api/v1/routes          → "system"
+func routeGroup(path string) string {
+	// Strip leading slash and split into segments
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	// Expected layout: ["api", "v1", "<group>", ...]
+	if len(parts) >= 3 {
+		seg := parts[2]
+		switch seg {
+		case "health", "hello", "routes":
+			return "system"
+		default:
+			return seg
+		}
+	}
+	return "other"
 }
 
 // ----------------------------------------------------------
@@ -255,10 +360,15 @@ func registerSystemRoutes(router fiber.Router, pgPool *pgxpool.Pool, redisClient
 
 func setupLogger(isDev bool) {
 	sensitiveKeys := map[string]bool{
-		"password": true, "token": true, "secret": true,
-		"refresh_token": true, "access_token": true,
-		"reset_token": true, "api_key": true,
+		"password":      true,
+		"token":         true,
+		"secret":        true,
+		"refresh_token": true,
+		"access_token":  true,
+		"reset_token":   true,
+		"api_key":       true,
 	}
+
 	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
 		if sensitiveKeys[a.Key] {
 			return slog.String(a.Key, "[REDACTED]")
@@ -280,6 +390,10 @@ func setupLogger(isDev bool) {
 		ReplaceAttr: replaceAttr,
 	})))
 }
+
+// ----------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------
 
 func healthStatus(ok bool) string {
 	if ok {

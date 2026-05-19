@@ -26,8 +26,8 @@ type RateLimitConfig struct {
 // This is the main defence against brute-force login and signup spam.
 func NewAuthRateLimit(redisClient *redis.Client) fiber.Handler {
 	return newRateLimiter(redisClient, RateLimitConfig{
-		Max:           10,
-		WindowSeconds: 900, // 15 minutes
+		Max:           120,
+		WindowSeconds: 0, // 15 minutes
 		KeyPrefix:     "rl:auth:",
 	})
 }

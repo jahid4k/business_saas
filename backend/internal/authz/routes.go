@@ -26,7 +26,7 @@ func RegisterRoutes(
 	members.Get("/me", handler.MyMembership)
 
 	// GET /members — requires members.manage
-	members.Get("/", requireMembersManage, handler.ListMembers)
+	members.Get("", requireMembersManage, handler.ListMembers)
 
 	// POST /members/:userId/role — requires members.manage
 	members.Post("/:userId/role", requireMembersManage, handler.AssignRole)
