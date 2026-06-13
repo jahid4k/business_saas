@@ -16,6 +16,7 @@ func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Han
 	auth.Post("/refresh-token", handler.Refresh)
 	auth.Post("/password-reset/request", handler.PasswordResetRequest)
 	auth.Post("/password-reset/confirm", handler.PasswordResetConfirm)
+	auth.Post("/oauth/sync", handler.OAuthSync)
 
 	auth.Get("/me", requireAuth, handler.Me)
 	// Logout is intentionally not behind RequireAuth; expired access-token users can still revoke refresh tokens.
@@ -44,6 +45,7 @@ func RegisterRoutesWithRateLimit(
 	auth.Post("/refresh-token", rateLimit, handler.Refresh)
 	auth.Post("/password-reset/request", rateLimit, handler.PasswordResetRequest)
 	auth.Post("/password-reset/confirm", rateLimit, handler.PasswordResetConfirm)
+	auth.Post("/oauth/sync", rateLimit, handler.OAuthSync)
 
 	// Protected — JWT required
 	auth.Get("/me", requireAuth, handler.Me)
