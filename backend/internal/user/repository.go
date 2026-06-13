@@ -12,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const maxFailedLogins = 5
-const lockDuration = 15 * time.Minute
+const (
+	maxFailedLogins = 5
+	lockDuration    = 15 * time.Minute
+)
 
 // Repository defines the data access interface for user operations.
 type Repository interface {
@@ -22,6 +24,7 @@ type Repository interface {
 	Create(ctx context.Context, u *User) error
 	Update(ctx context.Context, u *User) error
 	UpdateSettings(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error)
+	UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error)
 	RecordFailedLogin(ctx context.Context, userID string) error
 	RecordSuccessfulLogin(ctx context.Context, userID string) error
 }
@@ -109,7 +112,7 @@ func (r *repoImpl) Create(ctx context.Context, u *User) error {
 			NULLIF($1, ''), NULLIF($2, ''), NULLIF($3, ''), $4, $5, $6, $7,
 			NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''), $11,
 			$12, $13, NULLIF($14, ''), $15, $16, $17, $18,
-			$19, $20, $21, $22,
+			$19, $20, $21, COALESCE($22, ARRAY[]::TEXT[]),
 			$23, $24, $25, $26
 		)
 		RETURNING id, public_id, created_at, updated_at`
@@ -151,7 +154,7 @@ func (r *repoImpl) Update(ctx context.Context, u *User) error {
 		    status             = $18,
 		    account_type       = $19,
 		    login_redirect_url = $20,
-		    shortcuts          = $21,
+		    shortcuts          = COALESCE($21, ARRAY[]::TEXT[]),
 		    settings           = $22,
 		    preferences        = $23,
 		    onboarding         = $24,
@@ -176,69 +179,81 @@ func (r *repoImpl) Update(ctx context.Context, u *User) error {
 	return nil
 }
 
+// UpdateSettings applies a partial profile update using a targeted SQL UPDATE,
+// avoiding the read-modify-write race and the 3-query pattern of the old implementation.
+// FIX: replaces the old FindByID → Update → FindByID pattern (3 round trips, stale-read risk).
 func (r *repoImpl) UpdateSettings(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error) {
-	existing, err := r.FindByID(ctx, userID)
-	if err != nil || existing == nil {
-		return existing, err
+	const q = `
+		UPDATE users
+		SET username           = CASE WHEN $1 <> '' THEN $1           ELSE username           END,
+		    display_name       = CASE WHEN $2 <> '' THEN $2           ELSE display_name       END,
+		    first_name         = CASE WHEN $3 <> '' THEN $3           ELSE first_name         END,
+		    last_name          = CASE WHEN $4 <> '' THEN $4           ELSE last_name          END,
+		    photo_url          = CASE WHEN $5 <> '' THEN $5           ELSE photo_url          END,
+		    cover_photo_url    = CASE WHEN $6 <> '' THEN $6           ELSE cover_photo_url    END,
+		    phone              = CASE WHEN $7 <> '' THEN $7           ELSE phone              END,
+		    country            = CASE WHEN $8 <> '' THEN $8           ELSE country            END,
+		    timezone           = CASE WHEN $9 <> '' THEN $9           ELSE timezone           END,
+		    locale             = CASE WHEN $10 <> '' THEN $10         ELSE locale             END,
+		    language           = CASE WHEN $11 <> '' THEN $11         ELSE language           END,
+		    currency           = CASE WHEN $12 <> '' THEN $12         ELSE currency           END,
+		    login_redirect_url = CASE WHEN $13 <> '' THEN $13         ELSE login_redirect_url END,
+		    shortcuts          = CASE WHEN $14::TEXT[] IS NOT NULL THEN $14 ELSE shortcuts    END,
+		    settings           = CASE WHEN $15::JSONB IS NOT NULL THEN $15  ELSE settings     END,
+		    preferences        = CASE WHEN $16::JSONB IS NOT NULL THEN $16  ELSE preferences  END,
+		    onboarding         = CASE WHEN $17::JSONB IS NOT NULL THEN $17  ELSE onboarding   END,
+		    feature_flags      = CASE WHEN $18::JSONB IS NOT NULL THEN $18  ELSE feature_flags END,
+		    updated_at         = NOW()
+		WHERE id = $19 AND deleted_at IS NULL
+		RETURNING ` + userSelectColumns
+
+	u, err := scanUser(r.db.QueryRow(ctx, q,
+		strings.TrimSpace(req.Username),
+		strings.TrimSpace(req.DisplayName),
+		strings.TrimSpace(req.FirstName),
+		strings.TrimSpace(req.LastName),
+		strings.TrimSpace(req.PhotoURL),
+		strings.TrimSpace(req.CoverPhotoURL),
+		strings.TrimSpace(req.Phone),
+		strings.TrimSpace(req.Country),
+		strings.TrimSpace(req.Timezone),
+		strings.TrimSpace(req.Locale),
+		strings.TrimSpace(req.Language),
+		strings.TrimSpace(req.Currency),
+		strings.TrimSpace(req.LoginRedirectURL),
+		req.Shortcuts,
+		req.Settings,
+		req.Preferences,
+		req.Onboarding,
+		req.FeatureFlags,
+		userID,
+	))
+	if err != nil {
+		return nil, fmt.Errorf("user: UpdateSettings: %w", err)
 	}
-	if req.Username != "" {
-		existing.Username = strings.TrimSpace(req.Username)
+	if u == nil {
+		return nil, ErrNotFound
 	}
-	if req.DisplayName != "" {
-		existing.DisplayName = strings.TrimSpace(req.DisplayName)
+	return u, nil
+}
+
+// UpdateAvatar sets the user's photo URL.
+// FIX: returns ErrNotFound (not nil, nil) when user does not exist.
+func (r *repoImpl) UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error) {
+	const q = `
+		UPDATE users
+		SET photo_url  = NULLIF($1, ''),
+		    updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+		RETURNING ` + userSelectColumns
+	u, err := scanUser(r.db.QueryRow(ctx, q, strings.TrimSpace(photoURL), userID))
+	if err != nil {
+		return nil, fmt.Errorf("user: UpdateAvatar: %w", err)
 	}
-	if req.FirstName != "" {
-		existing.FirstName = strings.TrimSpace(req.FirstName)
+	if u == nil {
+		return nil, ErrNotFound
 	}
-	if req.LastName != "" {
-		existing.LastName = strings.TrimSpace(req.LastName)
-	}
-	if req.PhotoURL != "" {
-		existing.PhotoURL = strings.TrimSpace(req.PhotoURL)
-	}
-	if req.CoverPhotoURL != "" {
-		existing.CoverPhotoURL = strings.TrimSpace(req.CoverPhotoURL)
-	}
-	if req.Phone != "" {
-		existing.Phone = strings.TrimSpace(req.Phone)
-	}
-	if req.Country != "" {
-		existing.Country = strings.TrimSpace(req.Country)
-	}
-	if req.Timezone != "" {
-		existing.Timezone = strings.TrimSpace(req.Timezone)
-	}
-	if req.Locale != "" {
-		existing.Locale = strings.TrimSpace(req.Locale)
-	}
-	if req.Language != "" {
-		existing.Language = strings.TrimSpace(req.Language)
-	}
-	if req.Currency != "" {
-		existing.Currency = strings.TrimSpace(req.Currency)
-	}
-	if req.LoginRedirectURL != "" {
-		existing.LoginRedirectURL = strings.TrimSpace(req.LoginRedirectURL)
-	}
-	if req.Shortcuts != nil {
-		existing.Shortcuts = req.Shortcuts
-	}
-	if len(req.Settings) > 0 {
-		existing.Settings = req.Settings
-	}
-	if len(req.Preferences) > 0 {
-		existing.Preferences = req.Preferences
-	}
-	if len(req.Onboarding) > 0 {
-		existing.Onboarding = req.Onboarding
-	}
-	if len(req.FeatureFlags) > 0 {
-		existing.FeatureFlags = req.FeatureFlags
-	}
-	if err := r.Update(ctx, existing); err != nil {
-		return nil, err
-	}
-	return r.FindByID(ctx, userID)
+	return u, nil
 }
 
 func (r *repoImpl) RecordFailedLogin(ctx context.Context, userID string) error {
@@ -261,11 +276,11 @@ func (r *repoImpl) RecordFailedLogin(ctx context.Context, userID string) error {
 func (r *repoImpl) RecordSuccessfulLogin(ctx context.Context, userID string) error {
 	const q = `
 		UPDATE users
-		SET failed_logins = 0,
-		    locked_until = NULL,
-		    last_login_at = NOW(),
+		SET failed_logins    = 0,
+		    locked_until     = NULL,
+		    last_login_at    = NOW(),
 		    last_activity_at = NOW(),
-		    updated_at = NOW()
+		    updated_at       = NOW()
 		WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, userID)
 	if err != nil {

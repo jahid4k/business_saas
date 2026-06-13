@@ -14,6 +14,7 @@ type Service interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	Create(ctx context.Context, u *User) error
 	UpdateProfile(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error)
+	UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error)
 }
 
 type serviceImpl struct{ repo Repository }
@@ -48,6 +49,20 @@ func (s *serviceImpl) UpdateProfile(ctx context.Context, userID string, req Upda
 	u, err := s.repo.UpdateSettings(ctx, userID, req)
 	if err != nil {
 		return nil, fmt.Errorf("user: UpdateProfile: %w", err)
+	}
+	if u == nil {
+		return nil, ErrNotFound
+	}
+	return u, nil
+}
+
+func (s *serviceImpl) UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error) {
+	if strings.TrimSpace(photoURL) == "" {
+		return nil, errors.New("avatar url is required")
+	}
+	u, err := s.repo.UpdateAvatar(ctx, userID, photoURL)
+	if err != nil {
+		return nil, fmt.Errorf("user: UpdateAvatar: %w", err)
 	}
 	if u == nil {
 		return nil, ErrNotFound

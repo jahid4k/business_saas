@@ -90,6 +90,9 @@ func (u *User) NormaliseForCreate() {
 	if u.LoginRedirectURL == "" {
 		u.LoginRedirectURL = "/dashboard"
 	}
+	if u.Shortcuts == nil {
+		u.Shortcuts = []string{}
+	}
 	if len(u.Settings) == 0 {
 		u.Settings = json.RawMessage(`{}`)
 	}
@@ -228,4 +231,10 @@ type UpdateProfileRequest struct {
 	Preferences      json.RawMessage `json:"preferences"`
 	Onboarding       json.RawMessage `json:"onboarding"`
 	FeatureFlags     json.RawMessage `json:"featureFlags"`
+}
+
+// AvatarRequest supports POST /api/v1/me/avatar with either a JSON URL
+// or multipart file upload handled by the HTTP handler.
+type AvatarRequest struct {
+	PhotoURL string `json:"photoURL"`
 }
