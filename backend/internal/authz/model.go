@@ -35,10 +35,8 @@ func (p *Permission) PermissionKey() string {
 	return p.Resource + "." + p.Action
 }
 
-// Key returns the canonical dot-separated permission string, e.g. crm.deals.create.
 func (p *Permission) Key() string { return p.PermissionKey() }
 
-// Membership connects a User to an Organization with a Role.
 type Membership struct {
 	ID                   string     `db:"id" json:"id"`
 	PublicID             string     `db:"public_id" json:"publicId"`
@@ -50,6 +48,7 @@ type Membership struct {
 	Department           string     `db:"department" json:"department,omitempty"`
 	Status               string     `db:"status" json:"status"`
 	CustomPermissions    []string   `db:"custom_permissions" json:"customPermissions"`
+	DeniedPermissions    []string   `db:"denied_permissions" json:"deniedPermissions"`
 	InvitationStatus     string     `db:"invitation_status" json:"invitationStatus"`
 	InvitedBy            *string    `db:"invited_by" json:"invitedBy,omitempty"`
 	InvitationSentAt     *time.Time `db:"invitation_sent_at" json:"invitationSentAt,omitempty"`
@@ -60,18 +59,21 @@ type Membership struct {
 }
 
 type MemberWithUser struct {
-	MembershipID string    `json:"membershipId"`
-	UserID       string    `json:"userId"`
-	Email        string    `json:"email,omitempty"`
-	DisplayName  string    `json:"displayName"`
-	FirstName    string    `json:"firstName,omitempty"`
-	LastName     string    `json:"lastName,omitempty"`
-	PhotoURL     string    `json:"photoURL,omitempty"`
-	Role         string    `json:"role"`
-	Status       string    `json:"status"`
-	Title        string    `json:"title,omitempty"`
-	Department   string    `json:"department,omitempty"`
-	JoinedAt     time.Time `json:"joinedAt"`
+	MembershipID     string    `json:"membershipId"`
+	MembershipPublic string    `json:"membershipPublicId,omitempty"`
+	UserID           string    `json:"userId"`
+	UserPublicID     string    `json:"userPublicId,omitempty"`
+	Email            string    `json:"email,omitempty"`
+	DisplayName      string    `json:"displayName"`
+	FirstName        string    `json:"firstName,omitempty"`
+	LastName         string    `json:"lastName,omitempty"`
+	PhotoURL         string    `json:"photoURL,omitempty"`
+	RoleID           *string   `json:"roleId,omitempty"`
+	Role             string    `json:"role"`
+	Status           string    `json:"status"`
+	Title            string    `json:"title,omitempty"`
+	Department       string    `json:"department,omitempty"`
+	JoinedAt         time.Time `json:"joinedAt"`
 }
 
 type RoleWithPermissions struct {
@@ -91,10 +93,133 @@ type AssignRoleRequest struct {
 	Role string `json:"role"`
 }
 
+type UpdateMemberRequest struct {
+	RoleID            string   `json:"roleId"`
+	Role              string   `json:"role"`
+	Status            string   `json:"status"`
+	Title             string   `json:"title"`
+	Department        string   `json:"department"`
+	CustomPermissions []string `json:"customPermissions"`
+	DeniedPermissions []string `json:"deniedPermissions"`
+}
+
+type CreateRoleRequest struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	PermissionKeys []string `json:"permissionKeys"`
+}
+
+type UpdateRoleRequest struct {
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	PermissionKeys []string `json:"permissionKeys"`
+}
+
+type UpdateRolePermissionsRequest struct {
+	PermissionKeys []string `json:"permissionKeys"`
+}
+
+type CloneRoleRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type MemberPermissionsResponse struct {
+	MemberID           string   `json:"memberId"`
+	UserID             string   `json:"userId"`
+	RolePermissionKeys []string `json:"rolePermissionKeys"`
+	CustomPermissions  []string `json:"customPermissions"`
+	DeniedPermissions  []string `json:"deniedPermissions"`
+	Effective          []string `json:"effectivePermissions"`
+}
+
+type UpdateMemberPermissionsRequest struct {
+	CustomPermissions []string `json:"customPermissions"`
+	DeniedPermissions []string `json:"deniedPermissions"`
+	Grant             []string `json:"grant"`
+	Deny              []string `json:"deny"`
+}
+
+type CheckMemberPermissionRequest struct {
+	MemberID   string `json:"memberId"`
+	UserID     string `json:"userId"`
+	Permission string `json:"permission"`
+	Resource   string `json:"resource"`
+	Action     string `json:"action"`
+}
+
+type CheckMemberPermissionResponse struct {
+	Allowed    bool   `json:"allowed"`
+	Permission string `json:"permission"`
+	MemberID   string `json:"memberId"`
+	UserID     string `json:"userId"`
+}
+
+type RolePermissionMatrixRow struct {
+	Role           *Role           `json:"role"`
+	PermissionKeys map[string]bool `json:"permissionKeys"`
+}
+
+type PermissionMatrixResponse struct {
+	Permissions []*Permission              `json:"permissions"`
+	Roles       []*Role                    `json:"roles"`
+	Matrix      []*RolePermissionMatrixRow `json:"matrix"`
+}
+
+type OrganizationInvitation struct {
+	ID                string     `json:"id"`
+	PublicID          string     `json:"publicId"`
+	OrganizationID    string     `json:"organizationId"`
+	Email             string     `json:"email"`
+	RoleID            *string    `json:"roleId,omitempty"`
+	RoleKey           string     `json:"role"`
+	Title             string     `json:"title,omitempty"`
+	Department        string     `json:"department,omitempty"`
+	CustomPermissions []string   `json:"customPermissions"`
+	DeniedPermissions []string   `json:"deniedPermissions"`
+	TokenHash         string     `json:"-"`
+	Status            string     `json:"status"`
+	InvitedBy         *string    `json:"invitedBy,omitempty"`
+	AcceptedBy        *string    `json:"acceptedBy,omitempty"`
+	ExpiresAt         time.Time  `json:"expiresAt"`
+	AcceptedAt        *time.Time `json:"acceptedAt,omitempty"`
+	RevokedAt         *time.Time `json:"revokedAt,omitempty"`
+	LastSentAt        time.Time  `json:"lastSentAt"`
+	ResendCount       int        `json:"resendCount"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	UpdatedAt         time.Time  `json:"updatedAt"`
+}
+
+type InviteMemberRequest struct {
+	Email             string   `json:"email"`
+	RoleID            string   `json:"roleId"`
+	Role              string   `json:"role"`
+	Title             string   `json:"title"`
+	Department        string   `json:"department"`
+	CustomPermissions []string `json:"customPermissions"`
+	DeniedPermissions []string `json:"deniedPermissions"`
+}
+
+type InviteMemberResponse struct {
+	Invitation *OrganizationInvitation `json:"invitation"`
+	Token      string                  `json:"token,omitempty"`
+}
+
+type ResendInvitationResponse struct {
+	Invitation *OrganizationInvitation `json:"invitation"`
+	Token      string                  `json:"token,omitempty"`
+}
+
 const (
 	RoleOwner   = "owner"
 	RoleAdmin   = "admin"
 	RoleManager = "manager"
 	RoleMember  = "member"
 	RoleViewer  = "viewer"
+)
+
+const (
+	MemberStatusActive    = "active"
+	MemberStatusInactive  = "inactive"
+	MemberStatusSuspended = "suspended"
 )
