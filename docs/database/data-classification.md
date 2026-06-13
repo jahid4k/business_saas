@@ -15,6 +15,7 @@ This document classifies database tables by business and security sensitivity.
 | subscriptions | High | Billing state and external customer/subscription ids. | Protect payment provider identifiers. |
 | organization_usage | Medium | Usage counters and plan limits. | Useful for billing enforcement; keep accurate. |
 | audit_logs | High | Security/business event trail with IP/user agent/changes. | Avoid secrets in metadata/changes. Define retention policy. |
+| tasks | Low/Operational | Task title, description, status, and assignment within an org. | Tenant-scoped; enforce org_id in all queries. No secrets stored. |
 
 ## Critical controls
 

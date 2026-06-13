@@ -23,6 +23,13 @@ roles
 
 subscriptions
   └── organization_usage
+
+organizations
+  └── tasks
+
+tasks
+  ├── users (created_by)
+  └── users (assigned_to)
 ```
 
 ## Mermaid ERD
@@ -45,6 +52,9 @@ erDiagram
 
     roles ||--o{ organization_members : "assigned to members"
     subscriptions ||--o{ organization_usage : "measured by usage"
+    organizations ||--o{ tasks : "has tasks"
+    users ||--o{ tasks : "created tasks"
+    users ||--o{ tasks : "assigned tasks"
 
     users {
         uuid id PK
@@ -142,6 +152,20 @@ erDiagram
         timestamptz period_end
         jsonb limits
         jsonb used
+    }
+
+    tasks {
+        uuid id PK
+        text public_id UK
+        uuid org_id FK
+        text title
+        text description
+        text status
+        timestamptz due_date
+        uuid created_by FK
+        uuid assigned_to FK
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     audit_logs {

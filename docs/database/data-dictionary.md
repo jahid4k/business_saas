@@ -259,3 +259,21 @@ Stores security and business audit events.
 | status | TEXT | No | NULL | Event outcome: success/failure/warning. | Operational/security |
 | error_message | TEXT | No | NULL | Error message when event failed. | Sensitive operational |
 | created_at | TIMESTAMPTZ | Yes | now() | Event time. | Operational |
+
+## tasks
+
+Stores org-scoped tasks. Reference CRUD module for permission enforcement and tenant isolation.
+
+| Column | Type | Required | Default | Business meaning | Sensitivity |
+| --- | --- | --- | --- | --- | --- |
+| id | UUID | Yes | gen_random_uuid() | Internal primary key. | Internal |
+| public_id | TEXT | Yes | 'task_' + generated UUID | API-facing task identifier. | Public identifier |
+| org_id | UUID | Yes | none | Organization this task belongs to. Enforces tenant isolation. | Internal |
+| title | TEXT | Yes | none | Short task summary. Max 255 characters. | Operational |
+| description | TEXT | Yes | '' | Longer task detail. Max 2000 characters. | Operational |
+| status | TEXT | Yes | 'todo' | Lifecycle state: todo, in_progress, done, cancelled. | Operational |
+| due_date | TIMESTAMPTZ | No | NULL | Optional deadline. UTC. | Operational |
+| created_by | UUID | No | NULL | User who created the task. SET NULL on user deletion. | Internal/PII link |
+| assigned_to | UUID | No | NULL | User the task is assigned to. Must be active org member. SET NULL on user deletion. | Internal/PII link |
+| created_at | TIMESTAMPTZ | Yes | NOW() | When the task was created. | Operational |
+| updated_at | TIMESTAMPTZ | Yes | NOW() | When the task was last modified. | Operational |

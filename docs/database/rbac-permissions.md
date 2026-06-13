@@ -45,16 +45,20 @@ projects.update
 | api_keys.view | api_keys | view |
 | api_keys.create | api_keys | create |
 | api_keys.revoke | api_keys | revoke |
+| tasks.view | tasks | view |
+| tasks.create | tasks | create |
+| tasks.update | tasks | update |
+| tasks.delete | tasks | delete |
 
 ## Seeded system roles
 
 | Role | Business meaning |
 | --- | --- |
-| owner | Full organization owner with all permissions. Includes billing.manage, members.remove, roles.assign, audit_logs.view, and API key controls. |
-| admin | Broad management access but slightly less powerful than owner. Current seed does not include members.remove or billing.manage. |
-| manager | Project and member visibility with project create/update but no billing or role management. |
-| member | Regular organization member with dashboard, organization view, project create/update, and settings view/update. |
-| viewer | Read-only organization viewer with dashboard, organization, members, projects, and settings view. |
+| owner | Full organization owner with all permissions. Includes billing.manage, members.remove, roles.assign, audit_logs.view, API key controls, and full task management (tasks.view/create/update/delete). |
+| admin | Broad management access but slightly less powerful than owner. Current seed does not include members.remove or billing.manage. Includes full task management (tasks.view/create/update/delete). |
+| manager | Project and member visibility with project create/update but no billing or role management. Includes tasks.view/create/update but not tasks.delete. |
+| member | Regular organization member with dashboard, organization view, project create/update, and settings view/update. Includes tasks.view/create/update but not tasks.delete. |
+| viewer | Read-only organization viewer with dashboard, organization, members, projects, settings, and tasks view. Includes tasks.view only. |
 
 ## Effective permission calculation
 
@@ -79,6 +83,10 @@ Then check whether the requested permission exists in the effective permission s
 | View audit logs | audit_logs.view |
 | Create project | projects.create |
 | Delete project | projects.delete |
+| View tasks | tasks.view |
+| Create task | tasks.create |
+| Update task | tasks.update |
+| Delete task | tasks.delete |
 
 ## Important SaaS-grade notes
 

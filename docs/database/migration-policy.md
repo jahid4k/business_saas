@@ -52,6 +52,7 @@ Examples:
 | subscriptions | `sub_` |
 | organization_usage | `usage_` |
 | audit_logs | `audit_` |
+| tasks | `task_` |
 
 ## Safe migration rules
 
