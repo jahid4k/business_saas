@@ -29,6 +29,7 @@ const (
 	EventBusinessCreated      EventType = "business.created"
 	EventRoleAssigned         EventType = "authz.role_assigned"
 	EventTaskCreated          EventType = "task.created"
+	EventTaskStatusChanged    EventType = "task.status_changed"
 	EventTaskDeleted          EventType = "task.deleted"
 )
 
@@ -110,14 +111,3 @@ func (s *serviceImpl) Log(ctx context.Context, eventType EventType, userID, busi
 }
 
 // noopRepo is used as a placeholder until migrations and a real repo exist.
-type noopRepo struct{}
-
-func (n *noopRepo) Insert(_ context.Context, e *Event) error {
-	slog.Debug("audit: noop insert", slog.String("event", string(e.EventType)))
-	return nil
-}
-
-// NewNoopRepository returns a no-op audit repository for development/testing.
-func NewNoopRepository() Repository {
-	return &noopRepo{}
-}
