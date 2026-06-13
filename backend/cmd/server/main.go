@@ -21,10 +21,11 @@ import (
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
-	"github.com/mridha/businesssaas/internal/business"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
+	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/security"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
@@ -32,29 +33,22 @@ import (
 )
 
 func main() {
-	// ----------------------------------------------------------
 	// 1. Config
-	// ----------------------------------------------------------
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	// ----------------------------------------------------------
 	// 2. Logger
-	// ----------------------------------------------------------
 	setupLogger(cfg.App.IsDevelopment())
 	slog.Info("starting BusinessSAAS backend",
 		slog.String("env", cfg.App.Env),
 		slog.String("port", cfg.App.Port),
 	)
 
-	// ----------------------------------------------------------
 	// 3. PostgreSQL
-	// ----------------------------------------------------------
 	ctx := context.Background()
-
 	pgPool, err := database.NewPostgresPool(ctx, cfg.Database)
 	if err != nil {
 		slog.Error("failed to connect to PostgreSQL", slog.Any("error", err))
@@ -62,9 +56,7 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	// ----------------------------------------------------------
 	// 4. Redis
-	// ----------------------------------------------------------
 	redisClient, err := database.NewRedisClient(ctx, cfg.Redis)
 	if err != nil {
 		slog.Error("failed to connect to Redis", slog.Any("error", err))
@@ -76,46 +68,41 @@ func main() {
 		}
 	}()
 
-	// ----------------------------------------------------------
-	// 5. JWT + middleware — built once, injected everywhere
-	// ----------------------------------------------------------
+	// 5. JWT + core middleware
 	jwtManager := jwtpkg.NewManager(cfg.JWT.Secret, cfg.JWT.AccessTokenTTL)
 	requireAuth := middleware.RequireAuth(jwtManager)
 	authRateLimit := middleware.NewAuthRateLimit(redisClient)
 
-	// ----------------------------------------------------------
-	// 6. Repositories — all receive pgPool
-	// ----------------------------------------------------------
+	// 6. Repositories
 	authRepo := auth.NewRepository(pgPool)
 	userRepo := user.NewRepository(pgPool)
 	authzRepo := authz.NewRepository(pgPool)
-	businessRepo := business.NewRepository(pgPool)
-	auditRepo := audit.NewNoopRepository()
+	businessRepo := organizations.NewRepository(pgPool)
+	// FIX: real audit repository — events are now persisted to audit_logs
+	auditRepo := audit.NewRepository(pgPool)
+	securityRepo := security.NewRepository(pgPool)
 	taskRepo := task.NewRepository(pgPool)
 
-	// ----------------------------------------------------------
 	// 7. Services
-	// ----------------------------------------------------------
-	_ = audit.NewService(auditRepo)
+	// FIX: audit service is wired and injected — login/signup/logout events are recorded
+	auditSvc := audit.NewService(auditRepo)
 
 	userSvc := user.NewService(userRepo)
-	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT)
+	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient)
-	businessSvc := business.NewService(businessRepo, authzRepo, jwtManager)
-	taskSvc := task.NewService(taskRepo)
+	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
+	securitySvc := security.NewService(securityRepo)
+	taskSvc := task.NewService(taskRepo, auditSvc)
 
-	// ----------------------------------------------------------
 	// 8. Handlers
-	// ----------------------------------------------------------
 	authHandler := auth.NewHandler(authSvc)
 	userHandler := user.NewHandler(userSvc)
 	authzHandler := authz.NewHandler(authzSvc)
-	businessHandler := business.NewHandler(businessSvc)
+	businessHandler := organizations.NewHandler(businessSvc)
+	securityHandler := security.NewHandler(securitySvc)
 	taskHandler := task.NewHandler(taskSvc)
 
-	// ----------------------------------------------------------
 	// 9. Fiber
-	// ----------------------------------------------------------
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
 		ReadTimeout:  30 * time.Second,
@@ -133,9 +120,7 @@ func main() {
 		CaseSensitive: true,
 	})
 
-	// ----------------------------------------------------------
 	// 10. Global middleware
-	// ----------------------------------------------------------
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger())
@@ -147,25 +132,26 @@ func main() {
 		MaxAge:           86400,
 	}))
 
-	// ----------------------------------------------------------
 	// 11. Routes
-	// ----------------------------------------------------------
 	api := app.Group("/api/v1")
-
-	// System routes — /routes handler uses app reference lazily (called at
-	// request time), so it always reflects the full registered route table
-	// even though this is registered before the other route groups below.
 	registerSystemRoutes(api, app, pgPool, redisClient, cfg)
 
 	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
 	user.RegisterRoutes(api, userHandler, requireAuth)
-	business.RegisterRoutes(api, businessHandler, requireAuth)
+	organizations.RegisterRoutes(api, businessHandler, requireAuth)
 
+	// FIX: permission middleware factory — eliminates 17 pre-built variables from main.go
+	// and breaks the authz ↔ middleware import cycle via the PermissionFunc pattern.
 	requireBusiness := middleware.RequireBusiness()
-	requireMembersManage := middleware.RequirePermission(authzSvc, "members.manage")
-	authz.RegisterRoutes(api, authzHandler, requireAuth, requireBusiness, requireMembersManage)
+	requireOrgParam := middleware.RequireOrganizationParam("orgId")
 
-	task.RegisterRoutes(api, taskHandler, requireAuth, authzSvc)
+	permFn := func(perm string) fiber.Handler {
+		return middleware.RequirePermission(authzSvc, perm)
+	}
+
+	authz.RegisterRoutes(api, authzHandler, permFn, requireAuth, requireBusiness, requireOrgParam)
+	security.RegisterRoutes(api, securityHandler, permFn, requireAuth, requireOrgParam)
+	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
 
 	// 404 fallback — must be last
 	app.Use(func(c fiber.Ctx) error {
@@ -177,9 +163,7 @@ func main() {
 
 	slog.Info("all routes registered")
 
-	// ----------------------------------------------------------
 	// 12. Start + graceful shutdown
-	// ----------------------------------------------------------
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -208,10 +192,6 @@ func main() {
 	slog.Info("server stopped cleanly")
 }
 
-// ----------------------------------------------------------
-// System routes
-// ----------------------------------------------------------
-
 func registerSystemRoutes(
 	router fiber.Router,
 	app *fiber.App,
@@ -219,9 +199,11 @@ func registerSystemRoutes(
 	redisClient *redis.Client,
 	cfg *config.Config,
 ) {
-	// ── Health ────────────────────────────────────────────────────────────────
 	router.Get("/health", func(c fiber.Ctx) error {
-		ctx := context.Background()
+		// FIX: 3-second timeout prevents the health endpoint blocking indefinitely
+		// when Postgres or Redis is hung rather than simply down.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 
 		pgStatus := "ok"
 		if err := database.Ping(ctx, pgPool); err != nil {
@@ -253,18 +235,11 @@ func registerSystemRoutes(
 		})
 	})
 
-	// ── Hello ─────────────────────────────────────────────────────────────────
 	router.Get("/hello", func(c fiber.Ctx) error {
 		return response.OK(c, nil, "Hello from Go backend")
 	})
 
-	// ── Routes — dynamic route table ──────────────────────────────────────────
-	// app.GetRoutes() is called at request time (not at registration time),
-	// so the handler always reflects the complete route table regardless of
-	// registration order. This endpoint is restricted to development only.
 	router.Get("/routes", func(c fiber.Ctx) error {
-		// Hide this endpoint in production — return a generic 404 so the
-		// route table is not publicly enumerable.
 		if cfg.App.IsProduction() {
 			return response.NotFound(c, "ROUTE_NOT_FOUND", "not found")
 		}
@@ -275,24 +250,17 @@ func registerSystemRoutes(
 		}
 
 		grouped := make(map[string][]routeInfo)
-
 		for _, r := range app.GetRoutes(true) {
-			// Skip auto-generated HEAD duplicates and internal catch-alls
 			if r.Method == fiber.MethodHead {
 				continue
 			}
 			if r.Path == "/*" || r.Path == "" {
 				continue
 			}
-
 			group := routeGroup(r.Path)
-			grouped[group] = append(grouped[group], routeInfo{
-				Method: r.Method,
-				Path:   r.Path,
-			})
+			grouped[group] = append(grouped[group], routeInfo{Method: r.Method, Path: r.Path})
 		}
 
-		// Stable sort: groups alphabetically, routes within each group by path then method
 		type groupEntry struct {
 			Group  string      `json:"group"`
 			Count  int         `json:"count"`
@@ -307,7 +275,6 @@ func registerSystemRoutes(
 
 		total := 0
 		result := make([]groupEntry, 0, len(groupKeys))
-
 		for _, k := range groupKeys {
 			routes := grouped[k]
 			sort.Slice(routes, func(i, j int) bool {
@@ -317,31 +284,15 @@ func registerSystemRoutes(
 				return routes[i].Method < routes[j].Method
 			})
 			total += len(routes)
-			result = append(result, groupEntry{
-				Group:  k,
-				Count:  len(routes),
-				Routes: routes,
-			})
+			result = append(result, groupEntry{Group: k, Count: len(routes), Routes: routes})
 		}
 
-		return response.OK(c, fiber.Map{
-			"total":  total,
-			"groups": result,
-		}, "Route table")
+		return response.OK(c, fiber.Map{"total": total, "groups": result}, "Route table")
 	})
 }
 
-// routeGroup derives a human-readable group key from a registered Fiber path.
-//
-//	/api/v1/auth/login      → "auth"
-//	/api/v1/tasks/:id       → "tasks"
-//	/api/v1/health          → "system"
-//	/api/v1/hello           → "system"
-//	/api/v1/routes          → "system"
 func routeGroup(path string) string {
-	// Strip leading slash and split into segments
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	// Expected layout: ["api", "v1", "<group>", ...]
 	if len(parts) >= 3 {
 		seg := parts[2]
 		switch seg {
@@ -354,46 +305,28 @@ func routeGroup(path string) string {
 	return "other"
 }
 
-// ----------------------------------------------------------
-// Logger
-// ----------------------------------------------------------
-
 func setupLogger(isDev bool) {
 	sensitiveKeys := map[string]bool{
-		"password":      true,
-		"token":         true,
-		"secret":        true,
-		"refresh_token": true,
-		"access_token":  true,
-		"reset_token":   true,
-		"api_key":       true,
+		"password": true, "token": true, "secret": true,
+		"refresh_token": true, "access_token": true,
+		"reset_token": true, "api_key": true,
 	}
-
 	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
 		if sensitiveKeys[a.Key] {
 			return slog.String(a.Key, "[REDACTED]")
 		}
 		return a
 	}
-
 	if isDev {
 		slog.SetDefault(slog.New(tint.NewHandler(os.Stdout, &tint.Options{
-			Level:       slog.LevelDebug,
-			TimeFormat:  time.TimeOnly,
-			ReplaceAttr: replaceAttr,
+			Level: slog.LevelDebug, TimeFormat: time.TimeOnly, ReplaceAttr: replaceAttr,
 		})))
 		return
 	}
-
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
-		ReplaceAttr: replaceAttr,
+		Level: slog.LevelInfo, ReplaceAttr: replaceAttr,
 	})))
 }
-
-// ----------------------------------------------------------
-// Helpers
-// ----------------------------------------------------------
 
 func healthStatus(ok bool) string {
 	if ok {

@@ -1,44 +1,32 @@
 // backend/internal/task/routes.go
 package task
 
-import (
-	"github.com/gofiber/fiber/v3"
+import "github.com/gofiber/fiber/v3"
 
-	"github.com/mridha/businesssaas/internal/authz"
-	"github.com/mridha/businesssaas/internal/middleware"
-)
+// PermissionFunc is a factory that returns permission-enforcing middleware.
+// Same pattern as authz.PermissionFunc and security.PermissionFunc — breaks
+// the task <-> middleware import cycle.
+type PermissionFunc func(permission string) fiber.Handler
 
-// RegisterRoutes mounts all task routes.
+// RegisterRoutes mounts all task routes under /organizations/:orgId/tasks.
 //
-// requireAuth and authzService are injected from main.go.
-//
-// Every task route requires:
-//
-//  1. Valid JWT                            (requireAuth)
-//
-//  2. Non-empty business_id in JWT        (RequireBusiness)
-//
-//  3. Specific permission (DB + cached)   (RequirePermission with authzService)
-//
-//     GET    /api/v1/tasks        ← tasks.read
-//     POST   /api/v1/tasks        ← tasks.create
-//     GET    /api/v1/tasks/:id    ← tasks.read
-//     PATCH  /api/v1/tasks/:id    ← tasks.update
-//     DELETE /api/v1/tasks/:id    ← tasks.delete
+//	GET    /organizations/:orgId/tasks         <- tasks.view
+//	POST   /organizations/:orgId/tasks         <- tasks.create
+//	GET    /organizations/:orgId/tasks/:taskId <- tasks.view
+//	PATCH  /organizations/:orgId/tasks/:taskId <- tasks.update
+//	DELETE /organizations/:orgId/tasks/:taskId <- tasks.delete
 func RegisterRoutes(
 	router fiber.Router,
 	handler *Handler,
+	permFn PermissionFunc,
 	requireAuth fiber.Handler,
-	authzService authz.Service,
+	requireOrganization fiber.Handler,
 ) {
-	tasks := router.Group("/tasks",
-		requireAuth,
-		middleware.RequireBusiness(),
-	)
+	tasks := router.Group("/organizations/:orgId/tasks", requireAuth, requireOrganization)
 
-	tasks.Get("/", middleware.RequirePermission(authzService, "tasks.read"), handler.List)
-	tasks.Post("/", middleware.RequirePermission(authzService, "tasks.create"), handler.Create)
-	tasks.Get("/:id", middleware.RequirePermission(authzService, "tasks.read"), handler.Get)
-	tasks.Patch("/:id", middleware.RequirePermission(authzService, "tasks.update"), handler.Update)
-	tasks.Delete("/:id", middleware.RequirePermission(authzService, "tasks.delete"), handler.Delete)
+	tasks.Get("", permFn("tasks.view"), handler.List)
+	tasks.Post("", permFn("tasks.create"), handler.Create)
+	tasks.Get("/:taskId", permFn("tasks.view"), handler.Get)
+	tasks.Patch("/:taskId", permFn("tasks.update"), handler.Update)
+	tasks.Delete("/:taskId", permFn("tasks.delete"), handler.Delete)
 }

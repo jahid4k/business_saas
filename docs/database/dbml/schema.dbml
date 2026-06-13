@@ -1,0 +1,218 @@
+Project BusinessSAAS {
+  database_type: 'PostgreSQL'
+  Note: 'Generated from BusinessSAAS Phase 1 migrations.'
+}
+
+Table users {
+  id uuid [pk]
+  public_id text [unique]
+  email text
+  password_hash text
+  username text
+  display_name text
+  first_name text
+  last_name text
+  full_name text
+  photo_url text
+  cover_photo_url text
+  phone text
+  phone_verified boolean
+  email_verified boolean
+  email_verified_at timestamptz
+  country char
+  timezone text
+  locale text
+  language text
+  currency text
+  status text
+  account_type text
+  suspended_at timestamptz
+  suspension_reason text
+  login_redirect_url text
+  shortcuts text
+  settings jsonb
+  preferences jsonb
+  onboarding jsonb
+  feature_flags jsonb
+  two_fa_enabled boolean
+  two_fa_secret text
+  backup_codes jsonb
+  last_login_at timestamptz
+  last_activity_at timestamptz
+  failed_logins integer
+  locked_until timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+  deleted_at timestamptz
+}
+
+Table organizations {
+  id uuid [pk]
+  public_id text [unique]
+  name text
+  slug text [unique]
+  legal_name text
+  type text
+  industry text
+  website text
+  logo_url text
+  country char
+  timezone text
+  currency text
+  status text
+  metadata jsonb
+  created_at timestamptz
+  updated_at timestamptz
+  deleted_at timestamptz
+}
+
+Table permissions {
+  id uuid [pk]
+  public_id text [unique]
+  key text [unique]
+  resource text
+  action text
+  description text
+  is_system boolean
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table roles {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  permissions text
+  is_system boolean
+  is_custom boolean
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table organization_members {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  user_id uuid [ref: > users.id]
+  role_id uuid [ref: > roles.id]
+  role_key text
+  title text
+  department text
+  status text
+  custom_permissions text
+  invitation_status text
+  invited_by uuid [ref: > users.id]
+  invitation_sent_at timestamptz
+  invitation_accepted_at timestamptz
+  joined_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table auth_accounts {
+  id uuid [pk]
+  public_id text [unique]
+  user_id uuid [ref: > users.id]
+  provider text
+  provider_account_id text
+  provider_type text
+  access_token text
+  refresh_token text
+  id_token text
+  token_type text
+  scope text
+  expires_at timestamptz
+  connected_at timestamptz
+  last_used_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table sessions {
+  id uuid [pk]
+  public_id text [unique]
+  user_id uuid [ref: > users.id]
+  org_id uuid [ref: > organizations.id]
+  token_hash text [unique]
+  device_name text
+  device_type text
+  browser text
+  os text
+  user_agent text
+  ip_address inet
+  country text
+  city text
+  region text
+  last_activity_at timestamptz
+  created_at timestamptz
+  expires_at timestamptz
+  revoked_at timestamptz
+}
+
+Table verification_tokens {
+  id uuid [pk]
+  public_id text [unique]
+  user_id uuid [ref: > users.id]
+  email text
+  token_hash text [unique]
+  type text
+  verified_at timestamptz
+  used_at timestamptz
+  expires_at timestamptz
+  created_at timestamptz
+}
+
+Table subscriptions {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  plan text
+  plan_name text
+  status text
+  billing_cycle text
+  currency text
+  amount numeric
+  trial_started_at timestamptz
+  trial_ends_at timestamptz
+  current_period_start timestamptz
+  current_period_end timestamptz
+  cancel_at_period_end boolean
+  payment_provider text
+  payment_customer_id text
+  payment_subscription_id text
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table organization_usage {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  subscription_id uuid [ref: > subscriptions.id]
+  period_start timestamptz
+  period_end timestamptz
+  limits jsonb
+  used jsonb
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table audit_logs {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  user_id uuid [ref: > users.id]
+  event_type text
+  description text
+  resource_type text
+  resource_id text
+  changes jsonb
+  metadata jsonb
+  ip_address inet
+  user_agent text
+  status text
+  error_message text
+  created_at timestamptz
+}

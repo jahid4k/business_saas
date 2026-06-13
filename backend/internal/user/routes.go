@@ -3,10 +3,17 @@ package user
 
 import "github.com/gofiber/fiber/v3"
 
-// RegisterRoutes mounts user routes.
-// requireAuth is injected from main.go.
 func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Handler) {
+	// Backward-compatible group.
 	users := router.Group("/users", requireAuth)
 	users.Get("/me", handler.Me)
 	users.Patch("/me", handler.UpdateMe)
+
+	// Preferred SaaS API shape.
+	me := router.Group("/me", requireAuth)
+	me.Get("", handler.Me)
+	me.Patch("", handler.UpdateMe)
+	me.Patch("/settings", handler.UpdateMe)
+	me.Patch("/preferences", handler.UpdateMe)
+	me.Post("/avatar", handler.UpdateAvatar)
 }

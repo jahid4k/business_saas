@@ -1,0 +1,241 @@
+/* ============================================================
+   Tailwind v4 — configuration lives here, not in tailwind.config.ts
+   @import replaces the old @tailwind directives
+   @theme replaces the old theme: { extend: {} } block
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+/* ============================================================
+   Design tokens — replaces tailwind.config.ts theme.extend
+   All custom values defined here become Tailwind utility classes.
+
+   Example: --color-brand-600 → you use class "bg-brand-600"
+            --font-sans       → you use class "font-sans"
+            --shadow-card     → you use class "shadow-card"
+   ============================================================ */
+
+@theme {
+  /* ----------------------------------------------------------
+     Fonts
+     Replaces: theme.extend.fontFamily
+     Usage: font-sans, font-mono
+  ---------------------------------------------------------- */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* ----------------------------------------------------------
+     Colors — Gray scale
+     Replaces: theme.extend.colors.gray
+     Usage: bg-gray-50, text-gray-900, border-gray-200, etc.
+  ---------------------------------------------------------- */
+  --color-gray-25: #fcfcfd;
+  --color-gray-50: #f9fafb;
+  --color-gray-100: #f3f4f6;
+  --color-gray-200: #e5e7eb;
+  --color-gray-300: #d1d5db;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-600: #4b5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-gray-950: #030712;
+
+  /* ----------------------------------------------------------
+     Colors — Brand (slate blue)
+     Replaces: theme.extend.colors.brand
+     Usage: bg-brand-600, text-brand-700, border-brand-200, etc.
+  ---------------------------------------------------------- */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+
+  /* ----------------------------------------------------------
+     Colors — Status
+     Replaces: theme.extend.colors.success / warning / error / info
+     Usage: text-success, bg-success-light, border-success-border
+  ---------------------------------------------------------- */
+  --color-success: #16a34a;
+  --color-success-light: #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
+  --color-warning-border: #fde68a;
+
+  --color-error: #dc2626;
+  --color-error-light: #fef2f2;
+  --color-error-border: #fecaca;
+
+  --color-info: #0284c7;
+  --color-info-light: #f0f9ff;
+  --color-info-border: #bae6fd;
+
+  /* ----------------------------------------------------------
+     Shadows
+     Replaces: theme.extend.boxShadow
+     Usage: shadow-xs, shadow-sm, shadow-md, shadow-ring
+  ---------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-ring: 0 0 0 3px rgb(37 99 235 / 0.15);
+
+  /* ----------------------------------------------------------
+     Border radius
+     Replaces: theme.extend.borderRadius
+     Usage: rounded-sm, rounded, rounded-md, rounded-lg, rounded-xl
+  ---------------------------------------------------------- */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ----------------------------------------------------------
+     Font sizes — extra small additions
+     Replaces: theme.extend.fontSize
+     Usage: text-2xs
+  ---------------------------------------------------------- */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 1rem;
+
+  /* ----------------------------------------------------------
+     Animations
+     Replaces: theme.extend.animation + keyframes
+     Usage: animate-fade-in, animate-slide-up, animate-spin-slow
+  ---------------------------------------------------------- */
+  --animate-fade-in: fadeIn 0.25s ease forwards;
+  --animate-slide-up: slideUp 0.3s ease forwards;
+  --animate-spin-slow: spin 1.5s linear infinite;
+}
+
+/* ============================================================
+   Keyframe definitions
+   These must live outside @theme — same as before in v3
+   ============================================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+   Base styles
+   Replaces: @layer base {}
+   ============================================================ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-size: 15px;
+  }
+
+  body {
+    background-color: var(--color-gray-50);
+    color: var(--color-gray-900);
+    min-height: 100vh;
+  }
+
+  ::selection {
+    background: rgb(37 99 235 / 0.12);
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-gray-300);
+    border-radius: 99px;
+  }
+}
+
+/* ============================================================
+   Component utilities
+   Replaces: @layer components {}
+   These are reusable class groups used across many pages.
+   ============================================================ */
+
+@layer components {
+  /* Dashboard page header bar */
+  .page-header {
+    padding-inline: 1.5rem;
+    padding-block: 1rem;
+    background-color: white;
+    border-bottom: 1px solid var(--color-gray-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Dashboard page title text */
+  .page-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-gray-900);
+    letter-spacing: -0.01em;
+  }
+
+  /* Dashboard page subtitle */
+  .page-subtitle {
+    font-size: 0.75rem;
+    color: var(--color-gray-500);
+    margin-top: 0.125rem;
+  }
+
+  /* Dashboard scrollable content area */
+  .page-content {
+    flex: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  /* Auth page centered card */
+  .auth-card {
+    width: 100%;
+    max-width: 24rem;
+    background-color: white;
+    border: 1px solid var(--color-gray-200);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    padding: 2rem;
+  }
+}
+
+body {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}

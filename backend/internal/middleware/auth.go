@@ -67,8 +67,8 @@ func RequireBusiness() fiber.Handler {
 		businessID, _ := c.Locals("business_id").(string)
 		if businessID == "" {
 			return response.BadRequest(c,
-				"NO_BUSINESS_CONTEXT",
-				"A business context is required. Select a workspace first.",
+				"NO_ORGANIZATION_CONTEXT",
+				"An organization context is required. Select a workspace first.",
 			)
 		}
 		return c.Next()

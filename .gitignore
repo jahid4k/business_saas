@@ -88,4 +88,4 @@ id_ed25519
 backend/coverage/
 frontend/coverage/
 *.cover
-*.out
+*.out*.zip

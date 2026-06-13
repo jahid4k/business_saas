@@ -75,6 +75,31 @@ func (h *Handler) Login(c fiber.Ctx) error {
 	return response.OK(c, pair, "Login successful")
 }
 
+// OAuthSync handles POST /api/v1/auth/oauth/sync.
+func (h *Handler) OAuthSync(c fiber.Ctx) error {
+	var req OAuthSyncRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+	result, err := h.service.OAuthSync(c.Context(), req, c.IP(), string(c.Request().Header.Peek("User-Agent")))
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrOAuthProviderRequired):
+			return response.BadRequest(c, "PROVIDER_REQUIRED", "OAuth provider is required")
+		case errors.Is(err, ErrOAuthAccountIDRequired):
+			return response.BadRequest(c, "PROVIDER_ACCOUNT_ID_REQUIRED", "Provider account ID is required")
+		case errors.Is(err, ErrOAuthEmailRequired):
+			return response.BadRequest(c, "EMAIL_REQUIRED", "Email is required when linking a new OAuth account")
+		case errors.Is(err, ErrAccountDisabled):
+			return response.Unauthorized(c, "ACCOUNT_DISABLED", "Account is disabled")
+		default:
+			slog.Error("auth: oauth sync error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+	return response.OK(c, result, "OAuth account synced")
+}
+
 // Refresh handles POST /api/v1/auth/refresh
 func (h *Handler) Refresh(c fiber.Ctx) error {
 	var req RefreshRequest
@@ -166,6 +191,9 @@ func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
 		return response.BadRequest(c, "MISSING_FIELDS", "Token and new password are required")
 	}
 	if err := h.service.ConfirmPasswordReset(c.Context(), req.Token, req.NewPassword); err != nil {
+		if errors.Is(err, ErrNotImplemented) {
+			return response.NotImplemented(c)
+		}
 		return response.BadRequest(c, "RESET_FAILED", "Invalid or expired reset token")
 	}
 	return response.OK(c, nil, "Password reset successful")
@@ -192,11 +220,7 @@ func validateSignupRequest(req SignupRequest) error {
 	if len(req.Password) > 72 {
 		return errors.New("password must not exceed 72 characters")
 	}
-	if strings.TrimSpace(req.FirstName) == "" {
-		return errors.New("first name is required")
-	}
-	if strings.TrimSpace(req.LastName) == "" {
-		return errors.New("last name is required")
-	}
+	// First/last name are optional because OAuth and SaaS onboarding flows
+	// may initially provide only email + displayName.
 	return nil
 }
