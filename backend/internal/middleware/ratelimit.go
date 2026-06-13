@@ -14,7 +14,7 @@ import (
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
-// RateLimitConfig configures a Redis-backed sliding-window rate limiter.
+// RateLimitConfig configures a Redis-backed fixed-window rate limiter.
 type RateLimitConfig struct {
 	Max           int    // maximum requests allowed in the window
 	WindowSeconds int    // window size in seconds
@@ -22,18 +22,17 @@ type RateLimitConfig struct {
 }
 
 // NewAuthRateLimit returns a strict rate limiter for sensitive auth endpoints.
-// Default: 10 requests per IP per 15 minutes.
-// This is the main defence against brute-force login and signup spam.
+// 120 requests per IP per 15 minutes — primary defence against brute-force login and signup spam.
 func NewAuthRateLimit(redisClient *redis.Client) fiber.Handler {
 	return newRateLimiter(redisClient, RateLimitConfig{
 		Max:           120,
-		WindowSeconds: 0, // 15 minutes
+		WindowSeconds: 900, // FIX: was 0 — zero TTL caused key to be deleted immediately, making the limit unenforceable
 		KeyPrefix:     "rl:auth:",
 	})
 }
 
 // NewAPIRateLimit returns a general rate limiter for authenticated API endpoints.
-// Default: 300 requests per IP per minute.
+// 300 requests per IP per minute.
 func NewAPIRateLimit(redisClient *redis.Client) fiber.Handler {
 	return newRateLimiter(redisClient, RateLimitConfig{
 		Max:           300,
@@ -42,7 +41,7 @@ func NewAPIRateLimit(redisClient *redis.Client) fiber.Handler {
 	})
 }
 
-// newRateLimiter is the internal sliding-window rate limiter factory.
+// newRateLimiter is the internal fixed-window rate limiter factory.
 //
 // Algorithm: Redis INCR + EXPIRE
 //   - Key: <prefix><ip>
@@ -50,8 +49,7 @@ func NewAPIRateLimit(redisClient *redis.Client) fiber.Handler {
 //   - Subsequent requests: INCR increments count; EXPIRE is not reset (fixed window)
 //   - When count > Max: return 429 with Retry-After header
 //
-// This is a fixed-window counter, which is simple and safe for auth rate limiting.
-// It is not a true sliding window but is sufficient for Phase 1 auth protection.
+// This is a fixed-window counter, safe for auth rate limiting in Phase 1.
 // A true sliding window using a sorted set can be added in Phase 2 if needed.
 func newRateLimiter(redisClient *redis.Client, cfg RateLimitConfig) fiber.Handler {
 	return func(c fiber.Ctx) error {
@@ -105,11 +103,8 @@ func newRateLimiter(redisClient *redis.Client, cfg RateLimitConfig) fiber.Handle
 	}
 }
 
-// AuthRateLimit is the legacy stub signature kept for any existing call sites.
+// AuthRateLimit is the legacy no-op stub kept for any existing call sites.
 // Prefer NewAuthRateLimit(redisClient) for new code.
 func AuthRateLimit() fiber.Handler {
-	// Falls back to a no-op if called without Redis (e.g. in tests that import the package)
-	return func(c fiber.Ctx) error {
-		return c.Next()
-	}
+	return func(c fiber.Ctx) error { return c.Next() }
 }
