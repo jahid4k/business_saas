@@ -61,7 +61,7 @@ jobs:
         run: go vet ./...
 
       - name: Run tests
-        run: go test -v -race -cover ./...
+        run: go test -v -race ./internal/tests/unit/
         # Note: integration tests requiring a real DB are skipped here.
         # They run via a separate integration test job once Phase 1-B is complete.
         # For now this validates unit tests and compilation.
@@ -82,7 +82,7 @@ jobs:
           retention-days: 1
 
   # ----------------------------------------------------------
-  # Frontend — Next.js
+  # Frontend — Next.js / Bun
   # ----------------------------------------------------------
   frontend:
     name: Frontend (Next.js)
@@ -90,7 +90,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: frontend
+        working-directory: frontend # এই line যোগ করো
 
     steps:
       - name: Checkout repository
