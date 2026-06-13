@@ -88,10 +88,6 @@ jobs:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: frontend # এই line যোগ করো
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -102,15 +98,19 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
+        working-directory: frontend
         run: bun install --frozen-lockfile
 
       - name: Run ESLint
+        working-directory: frontend
         run: bun run lint
 
       - name: Run TypeScript type check
+        working-directory: frontend
         run: bun run type-check
 
       - name: Build Next.js application
+        working-directory: frontend
         run: bun run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8080
