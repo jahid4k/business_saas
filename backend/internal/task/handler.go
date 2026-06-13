@@ -4,35 +4,67 @@ package task
 import (
 	"errors"
 	"log/slog"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
 // Handler handles task CRUD endpoints.
 //
 // Permission enforcement is done entirely by RequirePermission middleware
-// before the handler is called. The handler itself trusts that the middleware
-// has already verified the permission and focuses only on HTTP concerns.
+// before the handler is called — the handler trusts that and focuses only
+// on HTTP concerns.
 type Handler struct {
 	service Service
 }
 
-// NewHandler creates a new task Handler.
 func NewHandler(service Service) *Handler {
 	return &Handler{service: service}
 }
 
-// List handles GET /api/v1/tasks
-// Requires: tasks.read
+// List handles GET /api/v1/organizations/:orgId/tasks
+// Requires: tasks.view
+// Query params: status, assignedTo, sort, order (asc|desc), limit, offset
 func (h *Handler) List(c fiber.Ctx) error {
-	businessID, ok := c.Locals("business_id").(string)
-	if !ok || businessID == "" {
-		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
-	result, err := h.service.List(c.Context(), businessID)
+	filter := ListFilter{SortDesc: true}
+
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		s := TaskStatus(status)
+		if !s.IsValid() {
+			return response.BadRequest(c, "INVALID_STATUS", "status must be one of: todo, in_progress, done, cancelled")
+		}
+		filter.Status = s
+	}
+	filter.AssignedTo = strings.TrimSpace(c.Query("assignedTo"))
+
+	if sort := strings.TrimSpace(c.Query("sort")); sort != "" {
+		sf := SortField(sort)
+		if !sf.IsValid() {
+			return response.BadRequest(c, "INVALID_SORT", "sort must be one of: created_at, updated_at, due_date, title, status")
+		}
+		filter.SortBy = sf
+	}
+	if order := strings.ToLower(strings.TrimSpace(c.Query("order"))); order == "asc" {
+		filter.SortDesc = false
+	}
+
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil {
+		filter.Limit = limit
+	}
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil {
+		filter.Offset = offset
+	}
+
+	result, err := h.service.List(c.Context(), orgID, filter)
 	if err != nil {
 		slog.Error("task: List error", slog.Any("error", err))
 		return response.InternalServerError(c)
@@ -41,17 +73,16 @@ func (h *Handler) List(c fiber.Ctx) error {
 	return response.OK(c, result, "OK")
 }
 
-// Create handles POST /api/v1/tasks
+// Create handles POST /api/v1/organizations/:orgId/tasks
 // Requires: tasks.create
 func (h *Handler) Create(c fiber.Ctx) error {
-	userID, ok := c.Locals("user_id").(string)
-	if !ok || userID == "" {
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
 	}
-
-	businessID, ok := c.Locals("business_id").(string)
-	if !ok || businessID == "" {
-		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
 	var req CreateTaskRequest
@@ -59,62 +90,36 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
 
-	t, err := h.service.Create(c.Context(), businessID, userID, req)
+	t, err := h.service.Create(c.Context(), orgID, userID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrTitleRequired):
-			return response.BadRequest(c, "TITLE_REQUIRED", "Title is required")
-		case errors.Is(err, ErrTitleTooLong):
-			return response.BadRequest(c, "TITLE_TOO_LONG", "Title must not exceed 255 characters")
-		case errors.Is(err, ErrDescriptionTooLong):
-			return response.BadRequest(c, "DESCRIPTION_TOO_LONG", "Description must not exceed 2000 characters")
-		case errors.Is(err, ErrInvalidStatus):
-			return response.BadRequest(c, "INVALID_STATUS", "Status must be one of: todo, in_progress, done")
-		default:
-			slog.Error("task: Create error", slog.Any("error", err))
-			return response.InternalServerError(c)
-		}
+		return h.taskError(c, err)
 	}
 
 	return response.Created(c, fiber.Map{"task": t}, "Task created")
 }
 
-// Get handles GET /api/v1/tasks/:id
-// Requires: tasks.read
+// Get handles GET /api/v1/organizations/:orgId/tasks/:taskId
+// Requires: tasks.view
 func (h *Handler) Get(c fiber.Ctx) error {
-	businessID, ok := c.Locals("business_id").(string)
-	if !ok || businessID == "" {
-		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
-	taskID := c.Params("id")
-	if taskID == "" {
-		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
-	}
-
-	t, err := h.service.GetByID(c.Context(), businessID, taskID)
+	t, err := h.service.Get(c.Context(), orgID, c.Params("taskId"))
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
-		}
-		slog.Error("task: Get error", slog.Any("error", err))
-		return response.InternalServerError(c)
+		return h.taskError(c, err)
 	}
 
 	return response.OK(c, fiber.Map{"task": t}, "OK")
 }
 
-// Update handles PATCH /api/v1/tasks/:id
+// Update handles PATCH /api/v1/organizations/:orgId/tasks/:taskId
 // Requires: tasks.update
 func (h *Handler) Update(c fiber.Ctx) error {
-	businessID, ok := c.Locals("business_id").(string)
-	if !ok || businessID == "" {
-		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
-	}
-
-	taskID := c.Params("id")
-	if taskID == "" {
-		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
 	var req UpdateTaskRequest
@@ -122,48 +127,50 @@ func (h *Handler) Update(c fiber.Ctx) error {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
 
-	t, err := h.service.Update(c.Context(), businessID, taskID, req)
+	t, err := h.service.Update(c.Context(), orgID, c.Params("taskId"), req)
 	if err != nil {
-		switch {
-		case errors.Is(err, ErrNotFound):
-			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
-		case errors.Is(err, ErrTitleRequired):
-			return response.BadRequest(c, "TITLE_REQUIRED", "Title is required")
-		case errors.Is(err, ErrTitleTooLong):
-			return response.BadRequest(c, "TITLE_TOO_LONG", "Title must not exceed 255 characters")
-		case errors.Is(err, ErrDescriptionTooLong):
-			return response.BadRequest(c, "DESCRIPTION_TOO_LONG", "Description must not exceed 2000 characters")
-		case errors.Is(err, ErrInvalidStatus):
-			return response.BadRequest(c, "INVALID_STATUS", "Status must be one of: todo, in_progress, done")
-		default:
-			slog.Error("task: Update error", slog.Any("error", err))
-			return response.InternalServerError(c)
-		}
+		return h.taskError(c, err)
 	}
 
 	return response.OK(c, fiber.Map{"task": t}, "Task updated")
 }
 
-// Delete handles DELETE /api/v1/tasks/:id
+// Delete handles DELETE /api/v1/organizations/:orgId/tasks/:taskId
 // Requires: tasks.delete
 func (h *Handler) Delete(c fiber.Ctx) error {
-	businessID, ok := c.Locals("business_id").(string)
-	if !ok || businessID == "" {
-		return response.BadRequest(c, "NO_BUSINESS_CONTEXT", "Business context is required")
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
-	taskID := c.Params("id")
-	if taskID == "" {
-		return response.BadRequest(c, "MISSING_ID", "Task ID is required")
-	}
-
-	if err := h.service.Delete(c.Context(), businessID, taskID); err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
-		}
-		slog.Error("task: Delete error", slog.Any("error", err))
-		return response.InternalServerError(c)
+	if err := h.service.Delete(c.Context(), orgID, c.Params("taskId")); err != nil {
+		return h.taskError(c, err)
 	}
 
 	return response.NoContent(c)
+}
+
+// taskError maps service-layer sentinel errors to HTTP responses. Centralised
+// here so List/Get/Create/Update/Delete all map consistently — mirrors
+// authz.Handler.authzError.
+func (h *Handler) taskError(c fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
+	case errors.Is(err, ErrTitleRequired):
+		return response.BadRequest(c, "TITLE_REQUIRED", "Title is required")
+	case errors.Is(err, ErrTitleTooLong):
+		return response.BadRequest(c, "TITLE_TOO_LONG", "Title must not exceed 255 characters")
+	case errors.Is(err, ErrDescriptionTooLong):
+		return response.BadRequest(c, "DESCRIPTION_TOO_LONG", "Description must not exceed 2000 characters")
+	case errors.Is(err, ErrInvalidStatus):
+		return response.BadRequest(c, "INVALID_STATUS", "Status must be one of: todo, in_progress, done, cancelled")
+	case errors.Is(err, ErrInvalidDueDate):
+		return response.BadRequest(c, "INVALID_DUE_DATE", "dueDate must be a valid RFC3339 timestamp")
+	case errors.Is(err, ErrAssigneeNotFound):
+		return response.BadRequest(c, "ASSIGNEE_NOT_FOUND", "assignedTo must be an active member of this organization")
+	default:
+		slog.Error("task error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 }

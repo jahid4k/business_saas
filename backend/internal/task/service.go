@@ -6,62 +6,52 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/mridha/businesssaas/internal/audit"
 )
 
 // Service defines the business logic interface for task operations.
 type Service interface {
-	List(ctx context.Context, businessID string) (*TaskListResponse, error)
-	GetByID(ctx context.Context, businessID, taskID string) (*Task, error)
-	Create(ctx context.Context, businessID, createdBy string, req CreateTaskRequest) (*Task, error)
-	Update(ctx context.Context, businessID, taskID string, req UpdateTaskRequest) (*Task, error)
-	Delete(ctx context.Context, businessID, taskID string) error
+	List(ctx context.Context, orgID string, filter ListFilter) (*TaskListResponse, error)
+	Get(ctx context.Context, orgID, taskRef string) (*Task, error)
+	Create(ctx context.Context, orgID, createdBy string, req CreateTaskRequest) (*Task, error)
+	Update(ctx context.Context, orgID, taskRef string, req UpdateTaskRequest) (*Task, error)
+	Delete(ctx context.Context, orgID, taskRef string) error
 }
 
 type serviceImpl struct {
-	repo Repository
+	repo  Repository
+	audit audit.Service
 }
 
-// NewService creates a new task service.
-func NewService(repo Repository) Service {
-	return &serviceImpl{repo: repo}
+func NewService(repo Repository, auditSvc audit.Service) Service {
+	return &serviceImpl{repo: repo, audit: auditSvc}
 }
 
-// ----------------------------------------------------------
-// List
-// ----------------------------------------------------------
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter ListFilter) (*TaskListResponse, error) {
+	filter.Normalise()
 
-// List returns all tasks for the business.
-// Always returns an empty slice (not nil) so JSON encodes as [] not null.
-func (s *serviceImpl) List(ctx context.Context, businessID string) (*TaskListResponse, error) {
-	tasks, err := s.repo.FindAll(ctx, businessID)
+	tasks, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("task: List: %w", err)
 	}
-
-	// Never return nil slice — JSON must encode as [] not null
 	if tasks == nil {
 		tasks = []*Task{}
 	}
 
-	total, err := s.repo.Count(ctx, businessID)
+	total, err := s.repo.Count(ctx, orgID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("task: List: count: %w", err)
 	}
 
-	return &TaskListResponse{Tasks: tasks, Total: total}, nil
+	return &TaskListResponse{Tasks: tasks, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
-// ----------------------------------------------------------
-// GetByID
-// ----------------------------------------------------------
-
-// GetByID returns a task only if it belongs to the given business.
-// Returns ErrNotFound when the task does not exist OR belongs to another business.
-// The caller cannot tell the difference — this is intentional.
-func (s *serviceImpl) GetByID(ctx context.Context, businessID, taskID string) (*Task, error) {
-	t, err := s.repo.FindByID(ctx, businessID, taskID)
+func (s *serviceImpl) Get(ctx context.Context, orgID, taskRef string) (*Task, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, taskRef)
 	if err != nil {
-		return nil, fmt.Errorf("task: GetByID: %w", err)
+		return nil, fmt.Errorf("task: Get: %w", err)
 	}
 	if t == nil {
 		return nil, ErrNotFound
@@ -69,13 +59,7 @@ func (s *serviceImpl) GetByID(ctx context.Context, businessID, taskID string) (*
 	return t, nil
 }
 
-// ----------------------------------------------------------
-// Create
-// ----------------------------------------------------------
-
-// Create validates the request and inserts a new task.
-func (s *serviceImpl) Create(ctx context.Context, businessID, createdBy string, req CreateTaskRequest) (*Task, error) {
-	// Validate
+func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req CreateTaskRequest) (*Task, error) {
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
 		return nil, ErrTitleRequired
@@ -89,8 +73,7 @@ func (s *serviceImpl) Create(ctx context.Context, businessID, createdBy string, 
 		return nil, ErrDescriptionTooLong
 	}
 
-	// Default status to "todo" if not provided
-	status := TaskStatus(req.Status)
+	status := TaskStatus(strings.TrimSpace(req.Status))
 	if status == "" {
 		status = StatusTodo
 	}
@@ -98,31 +81,43 @@ func (s *serviceImpl) Create(ctx context.Context, businessID, createdBy string, 
 		return nil, ErrInvalidStatus
 	}
 
+	dueDate, err := parseDueDate(req.DueDate)
+	if err != nil {
+		return nil, err
+	}
+
 	t := &Task{
-		BusinessID:  businessID,
+		OrgID:       orgID,
 		Title:       title,
 		Description: description,
 		Status:      status,
-		CreatedBy:   createdBy,
+		DueDate:     dueDate,
+	}
+	if createdBy != "" {
+		t.CreatedBy = &createdBy
+	}
+
+	if req.AssignedTo != nil && strings.TrimSpace(*req.AssignedTo) != "" {
+		assigneeID, err := s.repo.ResolveOrgMember(ctx, orgID, strings.TrimSpace(*req.AssignedTo))
+		if err != nil {
+			return nil, err
+		}
+		t.AssignedTo = &assigneeID
 	}
 
 	if err := s.repo.Create(ctx, t); err != nil {
 		return nil, fmt.Errorf("task: Create: %w", err)
 	}
 
+	s.audit.Log(ctx, audit.EventTaskCreated, createdBy, orgID, "", "", map[string]string{
+		"task_id": t.ID, "title": t.Title,
+	})
+
 	return t, nil
 }
 
-// ----------------------------------------------------------
-// Update
-// ----------------------------------------------------------
-
-// Update applies partial updates to an existing task.
-// Only non-nil fields in the request are changed.
-// Verifies tenant ownership before updating.
-func (s *serviceImpl) Update(ctx context.Context, businessID, taskID string, req UpdateTaskRequest) (*Task, error) {
-	// Load existing — also enforces tenant isolation
-	t, err := s.repo.FindByID(ctx, businessID, taskID)
+func (s *serviceImpl) Update(ctx context.Context, orgID, taskRef string, req UpdateTaskRequest) (*Task, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, taskRef)
 	if err != nil {
 		return nil, fmt.Errorf("task: Update: %w", err)
 	}
@@ -130,7 +125,8 @@ func (s *serviceImpl) Update(ctx context.Context, businessID, taskID string, req
 		return nil, ErrNotFound
 	}
 
-	// Apply only the fields that were sent
+	previousStatus := t.Status
+
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
 		if title == "" {
@@ -151,29 +147,49 @@ func (s *serviceImpl) Update(ctx context.Context, businessID, taskID string, req
 	}
 
 	if req.Status != nil {
-		status := TaskStatus(*req.Status)
+		status := TaskStatus(strings.TrimSpace(*req.Status))
 		if !status.IsValid() {
 			return nil, ErrInvalidStatus
 		}
 		t.Status = status
 	}
 
+	if req.DueDate != nil {
+		dueDate, err := parseDueDate(req.DueDate)
+		if err != nil {
+			return nil, err
+		}
+		t.DueDate = dueDate // "" -> nil (cleared); RFC3339 string -> set
+	}
+
+	if req.AssignedTo != nil {
+		ref := strings.TrimSpace(*req.AssignedTo)
+		if ref == "" {
+			t.AssignedTo = nil // unassign
+		} else {
+			assigneeID, err := s.repo.ResolveOrgMember(ctx, orgID, ref)
+			if err != nil {
+				return nil, err
+			}
+			t.AssignedTo = &assigneeID
+		}
+	}
+
 	if err := s.repo.Update(ctx, t); err != nil {
 		return nil, fmt.Errorf("task: Update: %w", err)
+	}
+
+	if t.Status != previousStatus {
+		s.audit.Log(ctx, audit.EventTaskStatusChanged, "", orgID, "", "", map[string]string{
+			"task_id": t.ID, "from": string(previousStatus), "to": string(t.Status),
+		})
 	}
 
 	return t, nil
 }
 
-// ----------------------------------------------------------
-// Delete
-// ----------------------------------------------------------
-
-// Delete removes a task after verifying it belongs to the business.
-// Returns ErrNotFound when the task does not exist or belongs to another business.
-func (s *serviceImpl) Delete(ctx context.Context, businessID, taskID string) error {
-	// FindByID first — enforces tenant isolation
-	t, err := s.repo.FindByID(ctx, businessID, taskID)
+func (s *serviceImpl) Delete(ctx context.Context, orgID, taskRef string) error {
+	t, err := s.repo.FindByRef(ctx, orgID, taskRef)
 	if err != nil {
 		return fmt.Errorf("task: Delete: %w", err)
 	}
@@ -181,19 +197,47 @@ func (s *serviceImpl) Delete(ctx context.Context, businessID, taskID string) err
 		return ErrNotFound
 	}
 
-	if err := s.repo.Delete(ctx, businessID, taskID); err != nil {
+	if err := s.repo.Delete(ctx, orgID, taskRef); err != nil {
 		return fmt.Errorf("task: Delete: %w", err)
 	}
 
+	s.audit.Log(ctx, audit.EventTaskDeleted, "", orgID, "", "", map[string]string{
+		"task_id": t.ID, "title": t.Title,
+	})
+
 	return nil
+}
+
+// parseDueDate converts an optional RFC3339 string into *time.Time.
+//   - nil pointer            -> nil (no change / no due date)
+//   - pointer to ""          -> nil (explicitly clear)
+//   - pointer to valid RFC3339 -> parsed value
+//   - anything else          -> ErrInvalidDueDate
+func parseDueDate(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	t, err := time.Parse(time.RFC3339, trimmed)
+	if err != nil {
+		return nil, ErrInvalidDueDate
+	}
+	return &t, nil
 }
 
 // ----------------------------------------------------------
 // Sentinel errors
 // ----------------------------------------------------------
 
-var ErrNotFound = errors.New("task not found")
-var ErrTitleRequired = errors.New("title is required")
-var ErrTitleTooLong = errors.New("title must not exceed 255 characters")
-var ErrDescriptionTooLong = errors.New("description must not exceed 2000 characters")
-var ErrInvalidStatus = errors.New("status must be one of: todo, in_progress, done")
+var (
+	ErrNotFound           = errors.New("task not found")
+	ErrTitleRequired      = errors.New("title is required")
+	ErrTitleTooLong       = errors.New("title must not exceed 255 characters")
+	ErrDescriptionTooLong = errors.New("description must not exceed 2000 characters")
+	ErrInvalidStatus      = errors.New("status must be one of: todo, in_progress, done, cancelled")
+	ErrInvalidDueDate     = errors.New("dueDate must be a valid RFC3339 timestamp")
+	ErrAssigneeNotFound   = errors.New("assignedTo must be an active member of this organization")
+)

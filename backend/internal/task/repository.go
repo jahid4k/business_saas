@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,40 +13,94 @@ import (
 
 // Repository defines the data access interface for task operations.
 //
-// TENANT ISOLATION RULE: Every query MUST include business_id in the WHERE
-// clause. This is the application-level enforcement of multi-tenancy.
-// A task that exists but belongs to a different business must return nil, nil
-// — exactly the same as a task that does not exist at all.
-// Never return a task to a caller whose business_id does not match.
+// TENANT ISOLATION RULE: every query MUST include org_id in the WHERE clause.
+// FindByRef returns nil, nil for both "does not exist" and "exists in a
+// different organization" — callers must not be able to distinguish the two.
 type Repository interface {
-	FindAll(ctx context.Context, businessID string) ([]*Task, error)
-	FindByID(ctx context.Context, businessID, taskID string) (*Task, error)
+	FindAll(ctx context.Context, orgID string, filter ListFilter) ([]*Task, error)
+	Count(ctx context.Context, orgID string, filter ListFilter) (int, error)
+	FindByRef(ctx context.Context, orgID, taskRef string) (*Task, error)
 	Create(ctx context.Context, t *Task) error
 	Update(ctx context.Context, t *Task) error
-	Delete(ctx context.Context, businessID, taskID string) error
-	Count(ctx context.Context, businessID string) (int, error)
+	Delete(ctx context.Context, orgID, taskRef string) error
+
+	// ResolveOrgMember resolves a user reference (UUID, public_id, or email) to
+	// that user's internal UUID, but only if they are an active member of orgID.
+	// Returns ErrAssigneeNotFound if no active member matches.
+	ResolveOrgMember(ctx context.Context, orgID, userRef string) (string, error)
 }
 
 type repoImpl struct {
 	db *pgxpool.Pool
 }
 
-// NewRepository creates a new task repository backed by a pgxpool.
 func NewRepository(db *pgxpool.Pool) Repository {
 	return &repoImpl{db: db}
 }
 
-// FindAll returns all tasks for a business, ordered by created_at DESC.
-// Always filters by business_id — no cross-tenant leakage possible.
-func (r *repoImpl) FindAll(ctx context.Context, businessID string) ([]*Task, error) {
-	const q = `
-		SELECT id, business_id, title, description, status,
-		       created_by, created_at, updated_at
-		FROM tasks
-		WHERE business_id = $1
-		ORDER BY created_at DESC`
+const taskSelect = `id, public_id, org_id, title, description, status, due_date, created_by, assigned_to, created_at, updated_at`
 
-	rows, err := r.db.Query(ctx, q, businessID)
+func scanTask(row pgx.Row) (*Task, error) {
+	t := &Task{}
+	err := row.Scan(&t.ID, &t.PublicID, &t.OrgID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.CreatedBy, &t.AssignedTo, &t.CreatedAt, &t.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// sortColumn maps a validated SortField to its SQL column. ListFilter.Normalise
+// guarantees SortBy is always one of these keys before reaching here.
+var sortColumn = map[SortField]string{
+	SortByCreatedAt: "created_at",
+	SortByUpdatedAt: "updated_at",
+	SortByDueDate:   "due_date",
+	SortByTitle:     "title",
+	SortByStatus:    "status",
+}
+
+// buildListWhere returns the WHERE clause (without "WHERE") and its args for
+// FindAll/Count, scoped by org_id plus any optional filter fields.
+func buildListWhere(orgID string, filter ListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
+	args := []any{orgID}
+
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.AssignedTo != "" {
+		args = append(args, filter.AssignedTo)
+		clauses = append(clauses, fmt.Sprintf("assigned_to = $%d", len(args)))
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+// FindAll returns tasks for an organization, filtered/sorted/paginated per
+// filter. filter must already be normalised (see ListFilter.Normalise).
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter ListFilter) ([]*Task, error) {
+	where, args := buildListWhere(orgID, filter)
+
+	dir := "DESC"
+	if !filter.SortDesc {
+		dir = "ASC"
+	}
+	col := sortColumn[filter.SortBy]
+
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`
+		SELECT %s
+		FROM tasks
+		WHERE %s
+		ORDER BY %s %s, id DESC
+		LIMIT $%d OFFSET $%d`,
+		taskSelect, where, col, dir, len(args)-1, len(args),
+	)
+
+	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("task: FindAll: %w", err)
 	}
@@ -53,115 +108,110 @@ func (r *repoImpl) FindAll(ctx context.Context, businessID string) ([]*Task, err
 
 	var tasks []*Task
 	for rows.Next() {
-		t := &Task{}
-		if err := rows.Scan(
-			&t.ID, &t.BusinessID, &t.Title, &t.Description,
-			&t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
-		); err != nil {
+		t, err := scanTask(rows)
+		if err != nil {
 			return nil, fmt.Errorf("task: FindAll: scan: %w", err)
 		}
 		tasks = append(tasks, t)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("task: FindAll: rows: %w", err)
-	}
-
-	return tasks, nil
+	return tasks, rows.Err()
 }
 
-// FindByID returns a task only if it belongs to the given business.
-// Returns nil, nil when not found OR when the task belongs to a different business.
-// This is intentional — callers cannot distinguish "not found" from "wrong tenant".
-func (r *repoImpl) FindByID(ctx context.Context, businessID, taskID string) (*Task, error) {
-	const q = `
-		SELECT id, business_id, title, description, status,
-		       created_by, created_at, updated_at
-		FROM tasks
-		WHERE id          = $1
-		  AND business_id = $2`
+// Count returns the number of tasks matching filter (ignoring Limit/Offset/Sort)
+// — used to populate TaskListResponse.Total for pagination.
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter ListFilter) (int, error) {
+	where, args := buildListWhere(orgID, filter)
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM tasks WHERE %s`, where)
 
-	t := &Task{}
-	err := r.db.QueryRow(ctx, q, taskID, businessID).Scan(
-		&t.ID, &t.BusinessID, &t.Title, &t.Description,
-		&t.Status, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+	var count int
+	if err := r.db.QueryRow(ctx, q, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("task: Count: %w", err)
 	}
+	return count, nil
+}
+
+// FindByRef returns a task by internal UUID or public_id, scoped to orgID.
+// Returns nil, nil if not found OR if it belongs to a different
+// organization — intentional, see TENANT ISOLATION RULE above.
+func (r *repoImpl) FindByRef(ctx context.Context, orgID, taskRef string) (*Task, error) {
+	q := `SELECT ` + taskSelect + `
+		FROM tasks
+		WHERE org_id = $1 AND (id::TEXT = $2 OR public_id = $2)`
+	t, err := scanTask(r.db.QueryRow(ctx, q, orgID, strings.TrimSpace(taskRef)))
 	if err != nil {
-		return nil, fmt.Errorf("task: FindByID: %w", err)
+		return nil, fmt.Errorf("task: FindByRef: %w", err)
 	}
 	return t, nil
 }
 
-// Create inserts a new task row and populates ID, CreatedAt, UpdatedAt.
+// Create inserts a new task row and populates generated fields.
 func (r *repoImpl) Create(ctx context.Context, t *Task) error {
 	const q = `
-		INSERT INTO tasks (business_id, title, description, status, created_by)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, created_at, updated_at`
+		INSERT INTO tasks (org_id, title, description, status, due_date, created_by, assigned_to)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING ` + taskSelect
 
-	err := r.db.QueryRow(ctx, q,
-		t.BusinessID, t.Title, t.Description, t.Status, t.CreatedBy,
-	).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
+	created, err := scanTask(r.db.QueryRow(ctx, q, t.OrgID, t.Title, t.Description, t.Status, t.DueDate, t.CreatedBy, t.AssignedTo))
 	if err != nil {
 		return fmt.Errorf("task: Create: %w", err)
 	}
+	*t = *created
 	return nil
 }
 
-// Update saves changes to an existing task.
-// The business_id clause prevents cross-tenant modification — if the task
-// belongs to a different business the UPDATE affects 0 rows and we return nil
-// (the service layer will have already verified ownership via FindByID).
+// Update saves changes to an existing task, identified by t.ID (the service
+// has already resolved a ref via FindByRef). The org_id clause is defence in
+// depth: a mismatched org_id here means 0 rows returned -> ErrNotFound, never
+// a cross-tenant write.
 func (r *repoImpl) Update(ctx context.Context, t *Task) error {
 	const q = `
 		UPDATE tasks
-		SET title       = $1,
-		    description = $2,
-		    status      = $3,
-		    updated_at  = NOW()
-		WHERE id          = $4
-		  AND business_id = $5
-		RETURNING updated_at`
+		SET title = $1, description = $2, status = $3, due_date = $4, assigned_to = $5, updated_at = NOW()
+		WHERE id = $6 AND org_id = $7
+		RETURNING ` + taskSelect
 
-	err := r.db.QueryRow(ctx, q,
-		t.Title, t.Description, t.Status,
-		t.ID, t.BusinessID,
-	).Scan(&t.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("task: Update: task not found or tenant mismatch")
-	}
+	updated, err := scanTask(r.db.QueryRow(ctx, q, t.Title, t.Description, t.Status, t.DueDate, t.AssignedTo, t.ID, t.OrgID))
 	if err != nil {
 		return fmt.Errorf("task: Update: %w", err)
 	}
+	if updated == nil {
+		return ErrNotFound
+	}
+	*t = *updated
 	return nil
 }
 
-// Delete removes a task. Both taskID and businessID must match.
-// Returns nil even if no row was deleted — the service layer verifies existence
-// via FindByID before calling Delete.
-func (r *repoImpl) Delete(ctx context.Context, businessID, taskID string) error {
-	const q = `
-		DELETE FROM tasks
-		WHERE id          = $1
-		  AND business_id = $2`
-
-	_, err := r.db.Exec(ctx, q, taskID, businessID)
+// Delete removes a task by ref, scoped to orgID. Returns ErrNotFound if no
+// row matched (does not exist, or belongs to a different organization).
+func (r *repoImpl) Delete(ctx context.Context, orgID, taskRef string) error {
+	const q = `DELETE FROM tasks WHERE org_id = $1 AND (id::TEXT = $2 OR public_id = $2)`
+	cmd, err := r.db.Exec(ctx, q, orgID, strings.TrimSpace(taskRef))
 	if err != nil {
 		return fmt.Errorf("task: Delete: %w", err)
 	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNotFound
+	}
 	return nil
 }
 
-// Count returns the total number of tasks for a business.
-// Used to populate the Total field in TaskListResponse.
-func (r *repoImpl) Count(ctx context.Context, businessID string) (int, error) {
-	const q = `SELECT COUNT(*) FROM tasks WHERE business_id = $1`
-
-	var count int
-	if err := r.db.QueryRow(ctx, q, businessID).Scan(&count); err != nil {
-		return 0, fmt.Errorf("task: Count: %w", err)
+// ResolveOrgMember resolves userRef (internal UUID, public_id, or email) to an
+// active member's user UUID within orgID. Mirrors authz.GetMemberByRef's
+// ref-matching so the same identifier formats work everywhere in the API.
+func (r *repoImpl) ResolveOrgMember(ctx context.Context, orgID, userRef string) (string, error) {
+	const q = `
+		SELECT u.id::TEXT
+		FROM users u
+		JOIN organization_members om ON om.user_id = u.id
+		WHERE om.org_id = $1 AND om.status = 'active'
+		  AND (u.id::TEXT = $2 OR u.public_id = $2 OR LOWER(u.email) = LOWER($2))`
+	var userID string
+	err := r.db.QueryRow(ctx, q, orgID, strings.TrimSpace(userRef)).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrAssigneeNotFound
 	}
-	return count, nil
+	if err != nil {
+		return "", fmt.Errorf("task: ResolveOrgMember: %w", err)
+	}
+	return userID, nil
 }
