@@ -1,176 +1,112 @@
-/* ============================================================
-   Tailwind v4 — configuration lives here, not in tailwind.config.ts
-   @import replaces the old @tailwind directives
-   @theme replaces the old theme: { extend: {} } block
-   ============================================================ */
-
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
-/* ============================================================
-   Design tokens — replaces tailwind.config.ts theme.extend
-   All custom values defined here become Tailwind utility classes.
 
-   Example: --color-brand-600 → you use class "bg-brand-600"
-            --font-sans       → you use class "font-sans"
-            --shadow-card     → you use class "shadow-card"
+/* ============================================================
+   BusinessSAAS Design System — Tailwind v4
+   CSS-first configuration: tokens defined here, not in tailwind.config.js
    ============================================================ */
 
 @theme {
-  /* ----------------------------------------------------------
-     Fonts
-     Replaces: theme.extend.fontFamily
-     Usage: font-sans, font-mono
-  ---------------------------------------------------------- */
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  /* Fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* ----------------------------------------------------------
-     Colors — Gray scale
-     Replaces: theme.extend.colors.gray
-     Usage: bg-gray-50, text-gray-900, border-gray-200, etc.
-  ---------------------------------------------------------- */
-  --color-gray-25: #fcfcfd;
-  --color-gray-50: #f9fafb;
-  --color-gray-100: #f3f4f6;
-  --color-gray-200: #e5e7eb;
-  --color-gray-300: #d1d5db;
-  --color-gray-400: #9ca3af;
-  --color-gray-500: #6b7280;
-  --color-gray-600: #4b5563;
-  --color-gray-700: #374151;
-  --color-gray-800: #1f2937;
-  --color-gray-900: #111827;
-  --color-gray-950: #030712;
-
-  /* ----------------------------------------------------------
-     Colors — Brand (slate blue)
-     Replaces: theme.extend.colors.brand
-     Usage: bg-brand-600, text-brand-700, border-brand-200, etc.
-  ---------------------------------------------------------- */
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
-  --color-brand-900: #1e3a8a;
-
-  /* ----------------------------------------------------------
-     Colors — Status
-     Replaces: theme.extend.colors.success / warning / error / info
-     Usage: text-success, bg-success-light, border-success-border
-  ---------------------------------------------------------- */
-  --color-success: #16a34a;
-  --color-success-light: #f0fdf4;
-  --color-success-border: #bbf7d0;
-
-  --color-warning: #d97706;
-  --color-warning-light: #fffbeb;
-  --color-warning-border: #fde68a;
-
-  --color-error: #dc2626;
-  --color-error-light: #fef2f2;
-  --color-error-border: #fecaca;
-
-  --color-info: #0284c7;
-  --color-info-light: #f0f9ff;
-  --color-info-border: #bae6fd;
-
-  /* ----------------------------------------------------------
-     Shadows
-     Replaces: theme.extend.boxShadow
-     Usage: shadow-xs, shadow-sm, shadow-md, shadow-ring
-  ---------------------------------------------------------- */
-  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-ring: 0 0 0 3px rgb(37 99 235 / 0.15);
-
-  /* ----------------------------------------------------------
-     Border radius
-     Replaces: theme.extend.borderRadius
-     Usage: rounded-sm, rounded, rounded-md, rounded-lg, rounded-xl
-  ---------------------------------------------------------- */
-  --radius-sm: 6px;
-  --radius: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-
-  /* ----------------------------------------------------------
-     Font sizes — extra small additions
-     Replaces: theme.extend.fontSize
-     Usage: text-2xs
-  ---------------------------------------------------------- */
-  --text-2xs: 0.625rem;
-  --text-2xs--line-height: 1rem;
-
-  /* ----------------------------------------------------------
-     Animations
-     Replaces: theme.extend.animation + keyframes
-     Usage: animate-fade-in, animate-slide-up, animate-spin-slow
-  ---------------------------------------------------------- */
-  --animate-fade-in: fadeIn 0.25s ease forwards;
-  --animate-slide-up: slideUp 0.3s ease forwards;
-  --animate-spin-slow: spin 1.5s linear infinite;
+  /* Border radius — used by shadcn/ui */
+  --radius: 0.5rem;
 }
 
 /* ============================================================
-   Keyframe definitions
-   These must live outside @theme — same as before in v3
+   shadcn/ui CSS variables — light mode defaults
    ============================================================ */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ============================================================
-   Base styles
-   Replaces: @layer base {}
-   ============================================================ */
-
 @layer base {
-  *,
-  *::before,
-  *::after {
-    box-sizing: border-box;
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 221.2 83.2% 53.3%;
+
+    /* Chart colors */
+    --chart-1: 221.2 83.2% 53.3%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
-  html {
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-    font-size: 15px;
+  .dark {
+    --background: 224 71.4% 4.1%;
+    --foreground: 210 20% 98%;
+    --card: 224 71.4% 4.1%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71.4% 4.1%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 215 27.9% 16.9%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 27.9% 16.9%;
+    --muted-foreground: 217.9 10.6% 64.9%;
+    --accent: 215 27.9% 16.9%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 27.9% 16.9%;
+    --input: 215 27.9% 16.9%;
+    --ring: 216 12.2% 83.9%;
+
+    --chart-1: 217.2 91.2% 59.8%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
   }
 
   body {
-    background-color: var(--color-gray-50);
-    color: var(--color-gray-900);
-    min-height: 100vh;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  ::selection {
-    background: rgb(37 99 235 / 0.12);
-  }
-
+  /* Custom scrollbar */
   ::-webkit-scrollbar {
     width: 5px;
     height: 5px;
@@ -179,63 +115,41 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-gray-300);
-    border-radius: 99px;
+    background: hsl(var(--border));
+    border-radius: 9999px;
   }
 }
 
 /* ============================================================
-   Component utilities
-   Replaces: @layer components {}
-   These are reusable class groups used across many pages.
+   Tailwind utility that maps shadcn/ui HSL variables
    ============================================================ */
+@layer utilities {
+  .bg-background { background-color: hsl(var(--background)); }
+  .bg-foreground { background-color: hsl(var(--foreground)); }
+  .bg-card { background-color: hsl(var(--card)); }
+  .bg-card-foreground { background-color: hsl(var(--card-foreground)); }
+  .bg-popover { background-color: hsl(var(--popover)); }
+  .bg-primary { background-color: hsl(var(--primary)); }
+  .bg-primary-foreground { background-color: hsl(var(--primary-foreground)); }
+  .bg-secondary { background-color: hsl(var(--secondary)); }
+  .bg-muted { background-color: hsl(var(--muted)); }
+  .bg-accent { background-color: hsl(var(--accent)); }
+  .bg-destructive { background-color: hsl(var(--destructive)); }
 
-@layer components {
-  /* Dashboard page header bar */
-  .page-header {
-    padding-inline: 1.5rem;
-    padding-block: 1rem;
-    background-color: white;
-    border-bottom: 1px solid var(--color-gray-200);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
+  .text-foreground { color: hsl(var(--foreground)); }
+  .text-card-foreground { color: hsl(var(--card-foreground)); }
+  .text-popover-foreground { color: hsl(var(--popover-foreground)); }
+  .text-primary { color: hsl(var(--primary)); }
+  .text-primary-foreground { color: hsl(var(--primary-foreground)); }
+  .text-secondary-foreground { color: hsl(var(--secondary-foreground)); }
+  .text-muted-foreground { color: hsl(var(--muted-foreground)); }
+  .text-accent-foreground { color: hsl(var(--accent-foreground)); }
+  .text-destructive { color: hsl(var(--destructive)); }
+  .text-destructive-foreground { color: hsl(var(--destructive-foreground)); }
 
-  /* Dashboard page title text */
-  .page-title {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--color-gray-900);
-    letter-spacing: -0.01em;
-  }
+  .border-input { border-color: hsl(var(--input)); }
+  .border-border { border-color: hsl(var(--border)); }
 
-  /* Dashboard page subtitle */
-  .page-subtitle {
-    font-size: 0.75rem;
-    color: var(--color-gray-500);
-    margin-top: 0.125rem;
-  }
-
-  /* Dashboard scrollable content area */
-  .page-content {
-    flex: 1;
-    padding: 1.5rem;
-    overflow-y: auto;
-  }
-
-  /* Auth page centered card */
-  .auth-card {
-    width: 100%;
-    max-width: 24rem;
-    background-color: white;
-    border: 1px solid var(--color-gray-200);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
-    padding: 2rem;
-  }
-}
-
-body {
-  font-family: "Plus Jakarta Sans", sans-serif;
+  .ring-ring { --tw-ring-color: hsl(var(--ring)); }
+  .ring-offset-background { --tw-ring-offset-color: hsl(var(--background)); }
 }

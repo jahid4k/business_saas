@@ -1,269 +1,216 @@
-// frontend/lib/api.ts
-// All API calls to the real backend.
-// Every function maps 1:1 to a backend route.
+// lib/api.ts
+// The single HTTP client for all backend calls.
+//
+// Design (ADR-0006):
+//   - Access token stored in module-level variable (_accessToken) — never localStorage
+//   - Every request injects: Authorization: Bearer <token>
+//   - On 401: silent refresh via httpOnly cookie → retry once
+//   - On refresh failure: redirect to /login
+//   - All non-2xx responses throw ApiError (never raw Response)
 
-import type {
-  TokenPair,
-  User,
-  Business,
-  MembershipWithRole,
-  MemberWithUser,
-  MyMembership,
-  Role,
-  RoleWithPermissions,
-  Permission,
-  Task,
-  ApiResponse,
-} from "@/types";
-import { store } from "./store";
-
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import ky, { type KyResponse, type Options } from "ky";
+import { ApiError } from "@/types/api";
 
 // ----------------------------------------------------------
-// Core fetch wrapper
+// In-memory token store (ADR-0006)
 // ----------------------------------------------------------
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<ApiResponse<T>> {
-  const token = store.getAccessToken();
+let _accessToken: string | null = null;
+let _refreshPromise: Promise<boolean> | null = null;
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
+export function setAccessToken(token: string): void {
+  _accessToken = token;
+}
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+export function clearAccessToken(): void {
+  _accessToken = null;
+}
+
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+// ----------------------------------------------------------
+// Silent refresh
+// ----------------------------------------------------------
+
+async function attemptSilentRefresh(): Promise<boolean> {
+  // Deduplicate: if a refresh is already in-flight, wait for it
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const baseUrl =
+        typeof window !== "undefined"
+          ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"
+          : process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
+
+      const res = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include", // sends httpOnly bsaas_refresh cookie
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!res.ok) return false;
+
+      const body = await res.json();
+      const token = body?.data?.access_token;
+      if (!token) return false;
+
+      setAccessToken(token);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+// ----------------------------------------------------------
+// Error normalizer — converts any failed response to ApiError
+// ----------------------------------------------------------
+
+async function toApiError(response: KyResponse): Promise<ApiError> {
+  let code = "UNKNOWN_ERROR";
+  let message = "An unexpected error occurred";
+  let fields: Record<string, string> | undefined;
+  let requestId: string | undefined;
+
+  try {
+    const body = await response.json<{
+      success: boolean;
+      error?: { code: string; message: string; fields?: Record<string, string> };
+      request_id?: string;
+    }>();
+
+    if (body.error) {
+      code = body.error.code ?? code;
+      message = body.error.message ?? message;
+      fields = body.error.fields;
+    }
+    requestId = body.request_id;
+  } catch {
+    // response body wasn't JSON — use HTTP status text
+    message = response.statusText || message;
   }
 
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers,
-  });
-
-  // 204 No Content
-  if (res.status === 204) {
-    return { success: true };
-  }
-
-  const json = await res.json();
-  return json as ApiResponse<T>;
-}
-
-// ----------------------------------------------------------
-// System
-// ----------------------------------------------------------
-
-export async function getHealth() {
-  return request("/api/v1/health");
-}
-
-export async function getHello() {
-  return request("/api/v1/hello");
-}
-
-// ----------------------------------------------------------
-// Auth
-// ----------------------------------------------------------
-
-export async function signup(data: {
-  email: string;
-  password: string;
-  first_name: string;
-  last_name: string;
-}): Promise<ApiResponse<{ user: User }>> {
-  return request("/api/v1/auth/signup", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function login(data: {
-  email: string;
-  password: string;
-}): Promise<ApiResponse<TokenPair>> {
-  return request("/api/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function refresh(
-  refreshToken: string,
-): Promise<ApiResponse<TokenPair>> {
-  return request("/api/v1/auth/refresh", {
-    method: "POST",
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-}
-
-export async function logout(refreshToken: string): Promise<ApiResponse> {
-  return request("/api/v1/auth/logout", {
-    method: "POST",
-    body: JSON.stringify({ refresh_token: refreshToken }),
-  });
-}
-
-export async function logoutAll(): Promise<ApiResponse> {
-  return request("/api/v1/auth/logout-all", { method: "POST" });
-}
-
-export async function getAuthMe(): Promise<ApiResponse<{ user: User }>> {
-  return request("/api/v1/auth/me");
-}
-
-export async function passwordResetRequest(
-  email: string,
-): Promise<ApiResponse> {
-  return request("/api/v1/auth/password-reset/request", {
-    method: "POST",
-    body: JSON.stringify({ email }),
-  });
-}
-
-export async function passwordResetConfirm(data: {
-  token: string;
-  new_password: string;
-}): Promise<ApiResponse> {
-  return request("/api/v1/auth/password-reset/confirm", {
-    method: "POST",
-    body: JSON.stringify(data),
+  return new ApiError({
+    code,
+    message,
+    status: response.status,
+    fields,
+    requestId,
   });
 }
 
 // ----------------------------------------------------------
-// Users
+// ky instance
 // ----------------------------------------------------------
 
-export async function getMe(): Promise<ApiResponse<{ user: User }>> {
-  return request("/api/v1/users/me");
-}
+const baseUrl =
+  typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"
+    : process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
 
-export async function updateMe(data: {
-  first_name: string;
-  last_name: string;
-}): Promise<ApiResponse<{ user: User }>> {
-  return request("/api/v1/users/me", {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-}
+export const api = ky.create({
+  prefixUrl: baseUrl,
+  credentials: "include", // always include cookies (for refresh)
+  timeout: 30_000,
+  retry: 0, // we handle retry manually in afterResponse
+  hooks: {
+    beforeRequest: [
+      (request) => {
+        if (_accessToken) {
+          request.headers.set("Authorization", `Bearer ${_accessToken}`);
+        }
+      },
+    ],
+    afterResponse: [
+      async (request, options, response) => {
+        // Non-error responses — pass through
+        if (response.ok) return response;
 
-// ----------------------------------------------------------
-// Businesses
-// ----------------------------------------------------------
+        // 401 → attempt silent refresh, then retry once
+        if (response.status === 401) {
+          const refreshed = await attemptSilentRefresh();
 
-export async function createBusiness(data: {
-  name: string;
-  slug: string;
-}): Promise<ApiResponse<{ business: Business }>> {
-  return request("/api/v1/businesses", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
+          if (refreshed) {
+            // Retry original request with new token
+            const retryOptions: Options = {
+              ...options,
+              headers: {
+                ...Object.fromEntries(request.headers.entries()),
+                Authorization: `Bearer ${_accessToken}`,
+              },
+            };
+            return ky(request.url, retryOptions);
+          }
 
-export async function listBusinesses(): Promise<
-  ApiResponse<{ businesses: MembershipWithRole[] }>
-> {
-  return request("/api/v1/businesses");
-}
+          // Refresh failed — clear token and redirect to login
+          clearAccessToken();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          throw await toApiError(response);
+        }
 
-export async function getBusiness(
-  id: string,
-): Promise<ApiResponse<{ business: Business }>> {
-  return request(`/api/v1/businesses/${id}`);
-}
-
-export async function switchBusiness(
-  id: string,
-): Promise<ApiResponse<{ access_token: string; role: string }>> {
-  return request(`/api/v1/businesses/${id}/switch`, { method: "POST" });
-}
-
-// ----------------------------------------------------------
-// Members (business-scoped — needs business_id in token)
-// ----------------------------------------------------------
-
-export async function getMyMembership(): Promise<
-  ApiResponse<{ membership: MyMembership }>
-> {
-  return request("/api/v1/members/me");
-}
-
-export async function listMembers(): Promise<
-  ApiResponse<{ members: MemberWithUser[] }>
-> {
-  return request("/api/v1/members");
-}
-
-export async function assignRole(
-  userId: string,
-  role: string,
-): Promise<ApiResponse> {
-  return request(`/api/v1/members/${userId}/role`, {
-    method: "POST",
-    body: JSON.stringify({ role }),
-  });
-}
-
-// ----------------------------------------------------------
-// Roles & Permissions (JWT only, no business context needed)
-// ----------------------------------------------------------
-
-export async function listRoles(): Promise<
-  ApiResponse<{ roles: RoleWithPermissions[] }>
-> {
-  return request("/api/v1/roles");
-}
-
-export async function listPermissions(): Promise<
-  ApiResponse<{ permissions: Permission[] }>
-> {
-  return request("/api/v1/permissions");
-}
-
-// ----------------------------------------------------------
-// Tasks (business-scoped + permission-gated)
-// ----------------------------------------------------------
-
-export async function listTasks(): Promise<ApiResponse<Task[]>> {
-  return request("/api/v1/tasks");
-}
-
-export async function createTask(data: {
-  title: string;
-  description?: string;
-  status?: string;
-}): Promise<ApiResponse<{ task: Task }>> {
-  return request("/api/v1/tasks", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export async function getTask(
-  id: string,
-): Promise<ApiResponse<{ task: Task }>> {
-  return request(`/api/v1/tasks/${id}`);
-}
-
-export async function updateTask(
-  id: string,
-  data: {
-    title?: string;
-    description?: string;
-    status?: string;
+        // All other errors — throw ApiError
+        throw await toApiError(response);
+      },
+    ],
   },
-): Promise<ApiResponse<{ task: Task }>> {
-  return request(`/api/v1/tasks/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
+});
+
+// ----------------------------------------------------------
+// Typed request helpers
+// Used by all feature modules. Return typed data directly (unwrap envelope).
+// ----------------------------------------------------------
+
+export async function apiGet<T>(
+  path: string,
+  searchParams?: Record<string, string | number | boolean | undefined>,
+): Promise<T> {
+  const cleanParams = searchParams
+    ? Object.fromEntries(
+        Object.entries(searchParams)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)]),
+      )
+    : undefined;
+
+  const res = await api
+    .get(path, { searchParams: cleanParams })
+    .json<{ success: boolean; data?: T }>();
+
+  return res.data as T;
 }
 
-export async function deleteTask(id: string): Promise<ApiResponse> {
-  return request(`/api/v1/tasks/${id}`, { method: "DELETE" });
+export async function apiPost<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await api
+    .post(path, { json: body })
+    .json<{ success: boolean; data?: T }>();
+  return res.data as T;
+}
+
+export async function apiPatch<T>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await api
+    .patch(path, { json: body })
+    .json<{ success: boolean; data?: T }>();
+  return res.data as T;
+}
+
+export async function apiDelete<T = void>(path: string): Promise<T> {
+  const response = await api.delete(path);
+  if (response.status === 204) return undefined as T;
+  const res = await response.json<{ success: boolean; data?: T }>();
+  return res.data as T;
 }

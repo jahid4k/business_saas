@@ -1,9 +1,13 @@
-"use client";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
-export default function RootPage() {
-  return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <p className="text-gray-500 text-sm">Hello</p>
-    </div>
-  );
+export default async function RootPage() {
+  const session = await auth();
+
+  if (session?.user) {
+    const slug = session.user.activeOrgSlug;
+    redirect(slug ? `/app/${slug}/dashboard` : "/app/select-org");
+  }
+
+  redirect("/login");
 }
