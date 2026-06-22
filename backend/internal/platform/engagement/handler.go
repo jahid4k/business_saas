@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -34,6 +35,7 @@ func userID(c fiber.Ctx) string { id, _ := c.Locals("user_id").(string); return 
 // relatedType and relatedID come from the calling route via query params
 // set by upstream middleware, or directly from path params.
 func (h *Handler) GetTimeline(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	relatedType := c.Query("related_type")
 	relatedID := c.Query("related_id")
 	if relatedType == "" || relatedID == "" {
@@ -41,7 +43,7 @@ func (h *Handler) GetTimeline(c fiber.Ctx) error {
 	}
 	timeline, err := h.service.GetTimeline(c.Context(), orgID(c), relatedType, relatedID)
 	if err != nil {
-		slog.Error("engagement: GetTimeline", slog.Any("error", err))
+		log.Error("engagement: GetTimeline", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, timeline, "OK")
@@ -52,30 +54,33 @@ func (h *Handler) GetTimeline(c fiber.Ctx) error {
 // ============================================================
 
 func (h *Handler) ListNotesByRelated(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	notes, err := h.service.ListNotesByRelated(
 		c.Context(), orgID(c),
 		c.Query("related_type"), c.Query("related_id"),
 	)
 	if err != nil {
-		slog.Error("engagement: ListNotesByRelated", slog.Any("error", err))
+		log.Error("engagement: ListNotesByRelated", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"notes": notes}, "OK")
 }
 
 func (h *Handler) GetNote(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	note, err := h.service.GetNote(c.Context(), orgID(c), c.Params("noteId"))
 	if err != nil {
 		if errors.Is(err, ErrNoteNotFound) {
 			return response.NotFound(c, "NOTE_NOT_FOUND", "Note not found")
 		}
-		slog.Error("engagement: GetNote", slog.Any("error", err))
+		log.Error("engagement: GetNote", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"note": note}, "OK")
 }
 
 func (h *Handler) CreateNote(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateNoteRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -90,7 +95,7 @@ func (h *Handler) CreateNote(c fiber.Ctx) error {
 		case errors.Is(err, ErrRelatedIDRequired):
 			return response.BadRequest(c, "RELATED_ID_REQUIRED", "related_id is required")
 		default:
-			slog.Error("engagement: CreateNote", slog.Any("error", err))
+			log.Error("engagement: CreateNote", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -98,6 +103,7 @@ func (h *Handler) CreateNote(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateNote(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateNoteRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -107,18 +113,19 @@ func (h *Handler) UpdateNote(c fiber.Ctx) error {
 		if errors.Is(err, ErrNoteNotFound) {
 			return response.NotFound(c, "NOTE_NOT_FOUND", "Note not found")
 		}
-		slog.Error("engagement: UpdateNote", slog.Any("error", err))
+		log.Error("engagement: UpdateNote", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"note": note}, "Note updated")
 }
 
 func (h *Handler) DeleteNote(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteNote(c.Context(), orgID(c), c.Params("noteId")); err != nil {
 		if errors.Is(err, ErrNoteNotFound) {
 			return response.NotFound(c, "NOTE_NOT_FOUND", "Note not found")
 		}
-		slog.Error("engagement: DeleteNote", slog.Any("error", err))
+		log.Error("engagement: DeleteNote", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
@@ -129,39 +136,43 @@ func (h *Handler) DeleteNote(c fiber.Ctx) error {
 // ============================================================
 
 func (h *Handler) ListTasks(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	result, err := h.service.ListTasksByOrg(c.Context(), orgID(c))
 	if err != nil {
-		slog.Error("engagement: ListTasks", slog.Any("error", err))
+		log.Error("engagement: ListTasks", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
 }
 
 func (h *Handler) ListTasksByRelated(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	tasks, err := h.service.ListTasksByRelated(
 		c.Context(), orgID(c),
 		c.Query("related_type"), c.Query("related_id"),
 	)
 	if err != nil {
-		slog.Error("engagement: ListTasksByRelated", slog.Any("error", err))
+		log.Error("engagement: ListTasksByRelated", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"tasks": tasks}, "OK")
 }
 
 func (h *Handler) GetTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	task, err := h.service.GetTask(c.Context(), orgID(c), c.Params("taskId"))
 	if err != nil {
 		if errors.Is(err, ErrTaskNotFound) {
 			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
 		}
-		slog.Error("engagement: GetTask", slog.Any("error", err))
+		log.Error("engagement: GetTask", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"task": task}, "OK")
 }
 
 func (h *Handler) CreateTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateTaskRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -174,7 +185,7 @@ func (h *Handler) CreateTask(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidPriority):
 			return response.BadRequest(c, "INVALID_PRIORITY", "priority must be: low, medium, or high")
 		default:
-			slog.Error("engagement: CreateTask", slog.Any("error", err))
+			log.Error("engagement: CreateTask", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -182,6 +193,7 @@ func (h *Handler) CreateTask(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateTaskRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -194,7 +206,7 @@ func (h *Handler) UpdateTask(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidPriority):
 			return response.BadRequest(c, "INVALID_PRIORITY", "priority must be: low, medium, or high")
 		default:
-			slog.Error("engagement: UpdateTask", slog.Any("error", err))
+			log.Error("engagement: UpdateTask", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -202,41 +214,45 @@ func (h *Handler) UpdateTask(c fiber.Ctx) error {
 }
 
 func (h *Handler) DeleteTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteTask(c.Context(), orgID(c), c.Params("taskId")); err != nil {
 		if errors.Is(err, ErrTaskNotFound) {
 			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
 		}
-		slog.Error("engagement: DeleteTask", slog.Any("error", err))
+		log.Error("engagement: DeleteTask", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
 }
 
 func (h *Handler) CompleteTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	task, err := h.service.CompleteTask(c.Context(), orgID(c), c.Params("taskId"))
 	if err != nil {
 		if errors.Is(err, ErrTaskNotFound) {
 			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
 		}
-		slog.Error("engagement: CompleteTask", slog.Any("error", err))
+		log.Error("engagement: CompleteTask", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"task": task}, "Task completed")
 }
 
 func (h *Handler) ReopenTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	task, err := h.service.ReopenTask(c.Context(), orgID(c), c.Params("taskId"))
 	if err != nil {
 		if errors.Is(err, ErrTaskNotFound) {
 			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
 		}
-		slog.Error("engagement: ReopenTask", slog.Any("error", err))
+		log.Error("engagement: ReopenTask", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"task": task}, "Task reopened")
 }
 
 func (h *Handler) AssignTask(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req AssignTaskRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -246,7 +262,7 @@ func (h *Handler) AssignTask(c fiber.Ctx) error {
 		if errors.Is(err, ErrTaskNotFound) {
 			return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
 		}
-		slog.Error("engagement: AssignTask", slog.Any("error", err))
+		log.Error("engagement: AssignTask", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"task": task}, "Task assigned")
@@ -257,27 +273,30 @@ func (h *Handler) AssignTask(c fiber.Ctx) error {
 // ============================================================
 
 func (h *Handler) ListActivities(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	result, err := h.service.ListActivitiesByOrg(c.Context(), orgID(c))
 	if err != nil {
-		slog.Error("engagement: ListActivities", slog.Any("error", err))
+		log.Error("engagement: ListActivities", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
 }
 
 func (h *Handler) GetActivity(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	activity, err := h.service.GetActivity(c.Context(), orgID(c), c.Params("activityId"))
 	if err != nil {
 		if errors.Is(err, ErrActivityNotFound) {
 			return response.NotFound(c, "ACTIVITY_NOT_FOUND", "Activity not found")
 		}
-		slog.Error("engagement: GetActivity", slog.Any("error", err))
+		log.Error("engagement: GetActivity", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"activity": activity}, "OK")
 }
 
 func (h *Handler) CreateActivity(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateActivityRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -292,7 +311,7 @@ func (h *Handler) CreateActivity(c fiber.Ctx) error {
 		case errors.Is(err, ErrSubjectRequired):
 			return response.BadRequest(c, "SUBJECT_REQUIRED", "subject is required")
 		default:
-			slog.Error("engagement: CreateActivity", slog.Any("error", err))
+			log.Error("engagement: CreateActivity", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -300,6 +319,7 @@ func (h *Handler) CreateActivity(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateActivity(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateActivityRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -312,7 +332,7 @@ func (h *Handler) UpdateActivity(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidActivityType):
 			return response.BadRequest(c, "INVALID_TYPE", "type must be: call, email, meeting, note, task, or other")
 		default:
-			slog.Error("engagement: UpdateActivity", slog.Any("error", err))
+			log.Error("engagement: UpdateActivity", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -320,11 +340,12 @@ func (h *Handler) UpdateActivity(c fiber.Ctx) error {
 }
 
 func (h *Handler) DeleteActivity(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteActivity(c.Context(), orgID(c), c.Params("activityId")); err != nil {
 		if errors.Is(err, ErrActivityNotFound) {
 			return response.NotFound(c, "ACTIVITY_NOT_FOUND", "Activity not found")
 		}
-		slog.Error("engagement: DeleteActivity", slog.Any("error", err))
+		log.Error("engagement: DeleteActivity", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
@@ -335,27 +356,30 @@ func (h *Handler) DeleteActivity(c fiber.Ctx) error {
 // ============================================================
 
 func (h *Handler) ListEmailLogs(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	result, err := h.service.ListEmailLogsByOrg(c.Context(), orgID(c))
 	if err != nil {
-		slog.Error("engagement: ListEmailLogs", slog.Any("error", err))
+		log.Error("engagement: ListEmailLogs", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
 }
 
 func (h *Handler) GetEmailLog(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	email, err := h.service.GetEmailLog(c.Context(), orgID(c), c.Params("emailId"))
 	if err != nil {
 		if errors.Is(err, ErrEmailLogNotFound) {
 			return response.NotFound(c, "EMAIL_LOG_NOT_FOUND", "Email log not found")
 		}
-		slog.Error("engagement: GetEmailLog", slog.Any("error", err))
+		log.Error("engagement: GetEmailLog", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"email": email}, "OK")
 }
 
 func (h *Handler) CreateEmailLog(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateEmailLogRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -370,7 +394,7 @@ func (h *Handler) CreateEmailLog(c fiber.Ctx) error {
 		case errors.Is(err, ErrToEmailRequired):
 			return response.BadRequest(c, "TO_EMAIL_REQUIRED", "to_email is required")
 		default:
-			slog.Error("engagement: CreateEmailLog", slog.Any("error", err))
+			log.Error("engagement: CreateEmailLog", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -378,11 +402,12 @@ func (h *Handler) CreateEmailLog(c fiber.Ctx) error {
 }
 
 func (h *Handler) DeleteEmailLog(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteEmailLog(c.Context(), orgID(c), c.Params("emailId")); err != nil {
 		if errors.Is(err, ErrEmailLogNotFound) {
 			return response.NotFound(c, "EMAIL_LOG_NOT_FOUND", "Email log not found")
 		}
-		slog.Error("engagement: DeleteEmailLog", slog.Any("error", err))
+		log.Error("engagement: DeleteEmailLog", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)

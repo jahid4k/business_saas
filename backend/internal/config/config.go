@@ -29,6 +29,7 @@ type Config struct {
 	Redis    RedisConfig
 	JWT      JWTConfig
 	CORS     CORSConfig
+	Cookie   CookieConfig // NEW: controls httpOnly refresh token cookie behaviour
 }
 
 // AppConfig holds general application settings.
@@ -69,6 +70,32 @@ type JWTConfig struct {
 // CORSConfig holds CORS settings.
 type CORSConfig struct {
 	AllowedOrigins []string
+}
+
+// CookieConfig controls the attributes of the httpOnly refresh token cookie
+// that the backend sets on Login and clears on Logout.
+//
+// Security rules:
+//   - Secure must be true in production (HTTPS only). The backend enforces
+//     this automatically: if APP_ENV=production and COOKIE_SECURE is not
+//     explicitly set to "false", Secure defaults to true.
+//   - SameSite=Strict is the default. This prevents the cookie from being
+//     sent on cross-site navigations (e.g. a user clicking a link from
+//     another site). Use "Lax" only if you have a specific need (e.g. OAuth
+//     redirects that must carry the cookie).
+//   - Domain is left empty by default, which means the cookie is scoped to
+//     the exact host. Set COOKIE_DOMAIN only when frontend and backend share
+//     a parent domain (e.g. api.example.com + app.example.com → .example.com).
+//   - Path=/api/v1/auth means the browser only sends the cookie to auth
+//     endpoints, not to every API request. This limits the exposure window.
+type CookieConfig struct {
+	Name     string        // default: "bsaas_refresh"
+	Domain   string        // default: "" (scoped to current host)
+	Path     string        // default: "/api/v1/auth"
+	MaxAge   time.Duration // mirrors JWT.RefreshTokenTTL
+	Secure   bool          // true in production, false in development
+	HTTPOnly bool          // always true — JS must never read this cookie
+	SameSite string        // "Strict" | "Lax" | "None"
 }
 
 // Load reads environment variables (and optionally a .env file)
@@ -174,6 +201,47 @@ func Load() (*Config, error) {
 
 	cfg.CORS = CORSConfig{
 		AllowedOrigins: origins,
+	}
+
+	// ----------------------------------------------------------
+	// Cookie
+	//
+	// COOKIE_SECURE defaults:
+	//   - production  → true  (HTTPS required)
+	//   - development → false (HTTP localhost is fine)
+	//
+	// You can override with COOKIE_SECURE=true|false in .env.
+	// ----------------------------------------------------------
+	cookieSecureDefault := cfg.App.IsProduction()
+	cookieSecureEnv := getEnv("COOKIE_SECURE", "")
+	cookieSecure := cookieSecureDefault
+	if cookieSecureEnv == "true" {
+		cookieSecure = true
+	} else if cookieSecureEnv == "false" {
+		cookieSecure = false
+	}
+
+	cookieSameSite := getEnv("COOKIE_SAME_SITE", "Strict")
+	// Validate SameSite value — only allow known values.
+	switch cookieSameSite {
+	case "Strict", "Lax", "None":
+		// valid
+	default:
+		return nil, fmt.Errorf("config: COOKIE_SAME_SITE must be Strict, Lax, or None; got %q", cookieSameSite)
+	}
+	// SameSite=None requires Secure=true (browser requirement).
+	if cookieSameSite == "None" && !cookieSecure {
+		return nil, fmt.Errorf("config: COOKIE_SAME_SITE=None requires COOKIE_SECURE=true")
+	}
+
+	cfg.Cookie = CookieConfig{
+		Name:     getEnv("COOKIE_NAME", "bsaas_refresh"),
+		Domain:   getEnv("COOKIE_DOMAIN", ""),
+		Path:     getEnv("COOKIE_PATH", "/api/v1/auth"),
+		MaxAge:   refreshTTL, // cookie lifetime mirrors refresh token TTL
+		Secure:   cookieSecure,
+		HTTPOnly: true, // non-configurable — must always be true
+		SameSite: cookieSameSite,
 	}
 
 	return cfg, nil

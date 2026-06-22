@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -20,6 +21,7 @@ type Handler struct{ service Service }
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) Me(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -29,13 +31,14 @@ func (h *Handler) Me(c fiber.Ctx) error {
 		if errors.Is(err, ErrNotFound) {
 			return response.NotFound(c, "USER_NOT_FOUND", "User not found")
 		}
-		slog.Error("user: Me error", slog.Any("error", err))
+		log.Error("user: Me error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"user": u.ToSafe()}, "OK")
 }
 
 func (h *Handler) UpdateMe(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -49,13 +52,14 @@ func (h *Handler) UpdateMe(c fiber.Ctx) error {
 		if errors.Is(err, ErrNotFound) {
 			return response.NotFound(c, "USER_NOT_FOUND", "User not found")
 		}
-		slog.Error("user: UpdateMe error", slog.Any("error", err))
+		log.Error("user: UpdateMe error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"user": u.ToSafe()}, "Profile updated")
 }
 
 func (h *Handler) UpdateAvatar(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -78,13 +82,13 @@ func (h *Handler) UpdateAvatar(c fiber.Ctx) error {
 		}
 		dir := filepath.Join("uploads", "avatars")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			slog.Error("user: create avatar dir error", slog.Any("error", err))
+			log.Error("user: create avatar dir error", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 		filename := fmt.Sprintf("%s%s", uuid.NewString(), ext)
 		path := filepath.Join(dir, filename)
 		if err := c.SaveFile(file, path); err != nil {
-			slog.Error("user: save avatar error", slog.Any("error", err))
+			log.Error("user: save avatar error", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 		photoURL = "/" + filepath.ToSlash(path)
@@ -103,7 +107,7 @@ func (h *Handler) UpdateAvatar(c fiber.Ctx) error {
 		if errors.Is(err, ErrNotFound) {
 			return response.NotFound(c, "USER_NOT_FOUND", "User not found")
 		}
-		slog.Error("user: UpdateAvatar error", slog.Any("error", err))
+		log.Error("user: UpdateAvatar error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"user": u.ToSafe(), "photoURL": photoURL}, "Avatar updated")

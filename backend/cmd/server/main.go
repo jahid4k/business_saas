@@ -136,7 +136,7 @@ func main() {
 	// ----------------------------------------------------------------
 	// 8. Handlers
 	// ----------------------------------------------------------------
-	authHandler := auth.NewHandler(authSvc)
+	authHandler := auth.NewHandler(authSvc, cfg.Cookie)
 	userHandler := user.NewHandler(userSvc)
 	authzHandler := authz.NewHandler(authzSvc)
 	businessHandler := organizations.NewHandler(businessSvc)

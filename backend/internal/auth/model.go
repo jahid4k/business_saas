@@ -37,13 +37,14 @@ type AuthAccount struct {
 }
 
 type SignupRequest struct {
-	Email            string `json:"email"`
-	Password         string `json:"password"`
-	FirstName        string `json:"first_name"`
-	LastName         string `json:"last_name"`
-	DisplayName      string `json:"displayName"`
-	OrganizationName string `json:"organizationName"`
-	OrganizationSlug string `json:"organizationSlug"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	DisplayName string `json:"displayName"`
+	// OrganizationName and OrganizationSlug are intentionally omitted.
+	// Organizations are created separately via POST /api/v1/organizations
+	// after the user has signed up and logged in.
 }
 
 type LoginRequest struct {
@@ -51,14 +52,32 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
+// TokenPair is the INTERNAL token representation used between service and handler.
+//
+// Security contract:
+//   - RefreshToken is the RAW opaque token (never stored in DB — only its hash is).
+//   - RefreshToken has json:"-" so it is NEVER serialised into any JSON response.
+//   - The handler reads RefreshToken to set the httpOnly cookie, then discards it.
+//   - Only AccessToken and ExpiresIn travel to the client, via ClientTokenPair.
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
+	RefreshToken string `json:"-"`          // handler sets cookie; never in response body
+	ExpiresIn    int64  `json:"expires_in"` // seconds until access token expires
+}
+
+// ClientTokenPair is the JSON shape the handler writes to the response body.
+// It contains no refresh token — the httpOnly cookie carries it.
+func (t *TokenPair) ToClient() *ClientTokenPair {
+	return &ClientTokenPair{
+		AccessToken: t.AccessToken,
+		ExpiresIn:   t.ExpiresIn,
+	}
+}
+
+// ClientTokenPair is what the frontend receives in the response body.
+type ClientTokenPair struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int64  `json:"expires_in"`
 }
 
 type PasswordResetRequestBody struct {
@@ -89,10 +108,26 @@ type OAuthSyncRequest struct {
 	IssueTokens       *bool      `json:"issueTokens"`
 }
 
+// OAuthSyncResponse is the INTERNAL response from service to handler.
+//
+// Tokens carries the full *TokenPair (including raw RefreshToken) so the
+// handler can set the httpOnly cookie. The handler then calls Tokens.ToClient()
+// before writing the JSON response — the raw refresh token never reaches the wire.
+//
+// The json tags on Tokens use "-" so the whole TokenPair is never accidentally
+// serialised. The handler builds the final response shape manually.
 type OAuthSyncResponse struct {
 	User    any          `json:"user"`
 	Account *AuthAccount `json:"account"`
-	Tokens  *TokenPair   `json:"tokens,omitempty"`
+	Tokens  *TokenPair   `json:"-"` // handler extracts cookie + calls ToClient(); never serialised directly
+}
+
+// OAuthSyncClientResponse is the JSON shape the handler sends to the frontend.
+// It mirrors OAuthSyncResponse but replaces *TokenPair with *ClientTokenPair.
+type OAuthSyncClientResponse struct {
+	User    any              `json:"user"`
+	Account *AuthAccount     `json:"account"`
+	Tokens  *ClientTokenPair `json:"tokens,omitempty"`
 }
 
 type LoginEvent struct {
