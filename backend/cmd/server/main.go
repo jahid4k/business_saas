@@ -22,9 +22,15 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	crmdeals "github.com/mridha/businesssaas/internal/crm/deals"
+	crmleads "github.com/mridha/businesssaas/internal/crm/leads"
+	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
+	crmreports "github.com/mridha/businesssaas/internal/crm/reports"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/platform/contacts"
+	"github.com/mridha/businesssaas/internal/platform/engagement"
 	"github.com/mridha/businesssaas/internal/security"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
@@ -73,18 +79,38 @@ func main() {
 	requireAuth := middleware.RequireAuth(jwtManager)
 	authRateLimit := middleware.NewAuthRateLimit(redisClient)
 
+	// ----------------------------------------------------------------
 	// 6. Repositories
+	// ----------------------------------------------------------------
 	authRepo := auth.NewRepository(pgPool)
 	userRepo := user.NewRepository(pgPool)
 	authzRepo := authz.NewRepository(pgPool)
 	businessRepo := organizations.NewRepository(pgPool)
-	// FIX: real audit repository — events are now persisted to audit_logs
 	auditRepo := audit.NewRepository(pgPool)
 	securityRepo := security.NewRepository(pgPool)
 	taskRepo := task.NewRepository(pgPool)
 
+	// Platform
+	contactsRepo := contacts.NewRepository(pgPool)
+	engagementRepo := engagement.NewRepository(pgPool)
+
+	// CRM
+	pipelineRepo := crmpipeline.NewRepository(pgPool)
+	dealsRepo := crmdeals.NewRepository(pgPool)
+	leadsRepo := crmleads.NewRepository(pgPool)
+	reportsRepo := crmreports.NewRepository(pgPool)
+
+	// ----------------------------------------------------------------
 	// 7. Services
-	// FIX: audit service is wired and injected — login/signup/logout events are recorded
+	//
+	// Dependency order matters:
+	//   pipelineSvc  — no CRM deps
+	//   dealsSvc     — needs pipelineSvc
+	//   contactsSvc  — no CRM deps
+	//   engagementSvc — no CRM deps
+	//   leadsSvc     — needs contactsSvc (ContactCreator) + dealsSvc (DealCreator)
+	//   reportsSvc   — needs dealsSvc + leadsSvc + engagementSvc
+	// ----------------------------------------------------------------
 	auditSvc := audit.NewService(auditRepo)
 
 	userSvc := user.NewService(userRepo)
@@ -94,7 +120,22 @@ func main() {
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
+	// Platform
+	contactsSvc := contacts.NewService(contactsRepo)
+	engagementSvc := engagement.NewService(engagementRepo)
+
+	// CRM — wire in dependency order
+	pipelineSvc := crmpipeline.NewService(pipelineRepo)
+	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc)
+	// leadsSvc receives contactsSvc and dealsSvc through narrow interfaces
+	// (ContactCreator and DealCreator) defined in the leads package.
+	// This breaks the import cycle: leads does not import deals or contacts directly.
+	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc)
+	reportsSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
+
+	// ----------------------------------------------------------------
 	// 8. Handlers
+	// ----------------------------------------------------------------
 	authHandler := auth.NewHandler(authSvc)
 	userHandler := user.NewHandler(userSvc)
 	authzHandler := authz.NewHandler(authzSvc)
@@ -102,7 +143,21 @@ func main() {
 	securityHandler := security.NewHandler(securitySvc)
 	taskHandler := task.NewHandler(taskSvc)
 
+	// Platform
+	contactsHandler := contacts.NewHandler(contactsSvc)
+	// engagement handler is bound to "crm" — records are tagged module="crm".
+	// When HRM arrives: engagement.NewHandler(engagementSvc, "hrm")
+	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
+
+	// CRM
+	pipelineHandler := crmpipeline.NewHandler(pipelineSvc)
+	dealsHandler := crmdeals.NewHandler(dealsSvc)
+	leadsHandler := crmleads.NewHandler(leadsSvc)
+	reportsHandler := crmreports.NewHandler(reportsSvc)
+
+	// ----------------------------------------------------------------
 	// 9. Fiber
+	// ----------------------------------------------------------------
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
 		ReadTimeout:  30 * time.Second,
@@ -120,7 +175,9 @@ func main() {
 		CaseSensitive: true,
 	})
 
+	// ----------------------------------------------------------------
 	// 10. Global middleware
+	// ----------------------------------------------------------------
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger())
@@ -132,7 +189,9 @@ func main() {
 		MaxAge:           86400,
 	}))
 
+	// ----------------------------------------------------------------
 	// 11. Routes
+	// ----------------------------------------------------------------
 	api := app.Group("/api/v1")
 	registerSystemRoutes(api, app, pgPool, redisClient, cfg)
 
@@ -140,11 +199,11 @@ func main() {
 	user.RegisterRoutes(api, userHandler, requireAuth)
 	organizations.RegisterRoutes(api, businessHandler, requireAuth)
 
-	// FIX: permission middleware factory — eliminates 17 pre-built variables from main.go
-	// and breaks the authz ↔ middleware import cycle via the PermissionFunc pattern.
+	// Shared middleware factories
 	requireBusiness := middleware.RequireBusiness()
 	requireOrgParam := middleware.RequireOrganizationParam("orgId")
 
+	// permFn builds a permission-checking middleware for a named permission key.
 	permFn := func(perm string) fiber.Handler {
 		return middleware.RequirePermission(authzSvc, perm)
 	}
@@ -152,6 +211,20 @@ func main() {
 	authz.RegisterRoutes(api, authzHandler, permFn, requireAuth, requireBusiness, requireOrgParam)
 	security.RegisterRoutes(api, securityHandler, permFn, requireAuth, requireOrgParam)
 	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
+
+	// CRM tenant isolation guard — validates :orgId param against JWT business_id.
+	// All CRM and platform routes share this middleware; it must run after requireAuth.
+	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
+
+	// Platform layer (shared across all future modules)
+	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
+	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
+
+	// CRM domain routes
+	crmleads.RegisterRoutes(api, leadsHandler, permFn, requireAuth, requireOrgMatch)
+	crmpipeline.RegisterRoutes(api, pipelineHandler, permFn, requireAuth, requireOrgMatch)
+	crmdeals.RegisterRoutes(api, dealsHandler, permFn, requireAuth, requireOrgMatch)
+	crmreports.RegisterRoutes(api, reportsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// 404 fallback — must be last
 	app.Use(func(c fiber.Ctx) error {
@@ -163,7 +236,9 @@ func main() {
 
 	slog.Info("all routes registered")
 
+	// ----------------------------------------------------------------
 	// 12. Start + graceful shutdown
+	// ----------------------------------------------------------------
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -200,8 +275,6 @@ func registerSystemRoutes(
 	cfg *config.Config,
 ) {
 	router.Get("/health", func(c fiber.Ctx) error {
-		// FIX: 3-second timeout prevents the health endpoint blocking indefinitely
-		// when Postgres or Redis is hung rather than simply down.
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 

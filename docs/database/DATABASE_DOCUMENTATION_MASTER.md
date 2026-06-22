@@ -1,6 +1,6 @@
 # BusinessSAAS Database Documentation
 
-Generated from migration files on 2026-05-19.
+Generated from migration files on 2026-05-19. Updated for migration 00013 on 2026-06-14.
 
 This documentation describes the current Phase 1 SaaS foundation schema: identity, organizations, RBAC, membership, authentication/session security, billing/subscription state, usage metering, and audit logging.
 
@@ -38,6 +38,7 @@ This documentation describes the current Phase 1 SaaS foundation schema: identit
 | Authorization / RBAC | `permissions`, `roles` |
 | Billing / SaaS | `subscriptions`, `organization_usage` |
 | Security / Compliance | `audit_logs` |
+| Task Management | `tasks` |
 
 ## SaaS-grade documentation rule
 

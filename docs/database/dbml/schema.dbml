@@ -216,3 +216,17 @@ Table audit_logs {
   error_message text
   created_at timestamptz
 }
+
+Table tasks {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  title text
+  description text
+  status text
+  due_date timestamptz
+  created_by uuid [ref: > users.id]
+  assigned_to uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}

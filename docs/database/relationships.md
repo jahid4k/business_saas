@@ -29,6 +29,9 @@ This document explains how records connect and how deletion behavior should be i
 | organization_usage | Optionally belongs to subscriptions. |
 | audit_logs | Optionally belongs to organizations. |
 | audit_logs | Optionally belongs to users. |
+| tasks | Belongs to organizations via org_id. |
+| tasks | Optionally belongs to users via created_by. |
+| tasks | Optionally belongs to users via assigned_to. |
 
 ## Foreign key deletion behavior
 
@@ -48,6 +51,9 @@ This document explains how records connect and how deletion behavior should be i
 | organization_usage | subscription_id | subscriptions | ON DELETE SET NULL | Usage history can remain even if subscription reference is removed. |
 | audit_logs | org_id | organizations | ON DELETE CASCADE | Current schema removes tenant audit logs if organization is physically deleted. |
 | audit_logs | user_id | users | ON DELETE SET NULL | Audit event remains even if actor user is removed. |
+| tasks | org_id | organizations | ON DELETE CASCADE | All tasks are removed when organization is deleted. |
+| tasks | created_by | users | ON DELETE SET NULL | Task survives if creator is removed; created_by becomes NULL. |
+| tasks | assigned_to | users | ON DELETE SET NULL | Task survives if assignee is removed; assigned_to becomes NULL. |
 
 ## Recommended SaaS policy
 

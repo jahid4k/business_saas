@@ -1,0 +1,381 @@
+================================================================
+BusinessSAAS — Git & CI/CD Guide
+================================================================
+Last updated : June 2026
+Author       : BusinessSAAS Team
+Module       : github.com/mridha/businesssaas
+================================================================
+
+
+----------------------------------------------------------------
+1. WHAT IS THIS PROJECT
+----------------------------------------------------------------
+
+BusinessSAAS is a modular SaaS platform built with:
+
+  Backend  : Go 1.25, Fiber v3, PostgreSQL 16, Redis 7
+  Frontend : Next.js (App Router), TypeScript, Tailwind CSS, Bun
+  Infra    : Docker Compose (local), GitHub Actions (CI/CD)
+
+The repository is a monorepo:
+
+  BusinessSAAS/
+    .github/
+      workflows/
+        ci.yml          <- CI: runs on every PR and push to main
+        deploy.yml      <- Deploy: manual trigger, VPS placeholder
+    backend/            <- Go backend (Fiber v3)
+    frontend/           <- Next.js frontend (test interface)
+    docker-compose.yml  <- Local development
+    .gitignore
+    GIT_GUIDE.txt       <- This file
+
+
+----------------------------------------------------------------
+2. BRANCH STRATEGY
+----------------------------------------------------------------
+
+This project uses Feature Branch Workflow.
+
+  main
+    └── feature/your-feature-name    (you work here)
+    └── fix/bug-description          (hotfix here)
+    └── ci/workflow-changes          (CI-only changes)
+
+Rules:
+  - Never commit directly to main
+  - Always create a feature branch
+  - Open a Pull Request (PR) to merge into main
+  - CI must pass (green) before merging
+  - Use --no-ff merge to preserve branch history
+
+
+Create a new branch:
+
+  git checkout main
+  git pull origin main
+  git checkout -b feature/your-feature-name
+
+
+Push branch to GitHub:
+
+  git push origin feature/your-feature-name
+
+
+----------------------------------------------------------------
+3. COMMIT MESSAGE STANDARD
+----------------------------------------------------------------
+
+This project follows Conventional Commits standard.
+See: https://www.conventionalcommits.org
+
+Format:
+  <type>(<scope>): <short summary>
+
+  [optional body — explain WHY, not just WHAT]
+
+Types:
+  feat      New feature
+  fix       Bug fix
+  refactor  Code change, no new feature or bug fix
+  test      Adding or updating tests
+  ci        CI/CD workflow changes
+  chore     Maintenance (deps update, gitignore, etc.)
+  docs      Documentation only
+  perf      Performance improvement
+  revert    Reverting a previous commit
+
+Examples:
+
+  feat(task): implement production-grade task domain
+
+  fix(organizations): initialize custom/denied permissions on owner membership creation
+
+  fix(authz): fix Can() using SISMEMBER on missing Redis key (permanent 403)
+
+  ci: replace npm with bun in frontend workflow
+
+  test(unit): add 12 task service tests covering validation and tenant isolation
+
+
+Multi-line commit (title + body):
+
+  git commit -m "fix(authz): fix Can() Redis SISMEMBER bug" \
+             -m "SISMEMBER on a missing key returns (false, nil) in go-redis.
+  This caused Can() to short-circuit to false for every permission
+  check on a cold cache, resulting in permanent 403 for all users
+  including org owners. Fixed by checking key existence first with
+  EXISTS before calling SISMEMBER."
+
+
+The 50/72 rule:
+  - Subject line: keep under 72 characters (50 is ideal)
+  - Body lines: wrap at 72 characters
+  - Always separate subject and body with a blank line
+
+
+----------------------------------------------------------------
+4. DAILY WORKFLOW (step by step)
+----------------------------------------------------------------
+
+Start of day:
+
+  git checkout main
+  git pull origin main
+  git checkout your-branch
+  git merge main              <- stay up to date
+
+
+During work — commit often in small logical chunks:
+
+  git add internal/task/service.go
+  git commit -m "feat(task): add pagination to List query"
+
+  git add internal/task/handler.go
+  git commit -m "feat(task): add query param parsing for filters"
+
+
+End of day — push your branch:
+
+  git push origin your-branch
+
+
+Open a Pull Request:
+  GitHub -> your repo -> "Compare & pull request"
+  Wait for CI to go green, then merge.
+
+
+After merge — clean up:
+
+  git checkout main
+  git pull origin main
+  git branch -d your-branch              <- delete local branch
+  git push origin --delete your-branch  <- delete remote branch
+
+
+----------------------------------------------------------------
+5. USEFUL GIT COMMANDS
+----------------------------------------------------------------
+
+SEE HISTORY
+  git log --oneline --graph --all
+  git log --oneline -20
+  git log --oneline internal/task/service.go   <- one file history
+
+
+SEE CHANGES
+  git diff                          <- unstaged changes
+  git diff --staged                 <- staged changes
+  git show abc1234                  <- one specific commit
+  git diff main..your-branch        <- branch vs main
+
+
+FIND BUGS
+  git blame internal/authz/service.go          <- who wrote each line
+  git log -S "SISMEMBER" --oneline             <- search by code string
+  git bisect start                             <- binary search for bug
+
+
+UNDO THINGS
+  git restore file.go               <- discard unstaged changes
+  git restore --staged file.go      <- unstage a file
+  git revert abc1234                <- undo a commit safely (keeps history)
+  git reset --soft HEAD~1           <- undo last commit, keep changes staged
+
+
+BRANCHES
+  git branch -a                     <- all branches (local + remote)
+  git branch -d branch-name         <- delete local branch
+  git checkout -b new-branch        <- create and switch
+  git merge --no-ff branch-name     <- merge with merge commit
+
+
+STASH (save work temporarily)
+  git stash                         <- save current changes
+  git stash pop                     <- restore saved changes
+  git stash list                    <- see all stashes
+
+
+TAGS (mark releases)
+  git tag v1.0.0
+  git push origin v1.0.0
+
+
+USEFUL ALIAS (add once, use forever)
+  git config --global alias.visual \
+    "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --all"
+
+  Then use: git visual
+
+
+----------------------------------------------------------------
+6. CI/CD — GITHUB ACTIONS
+----------------------------------------------------------------
+
+Two workflow files live in .github/workflows/
+
+--- ci.yml ---
+
+Triggers:
+  - Push to main or develop
+  - Pull Request targeting main or develop
+
+Jobs (run in parallel):
+
+  backend (Go)
+    1. Checkout code
+    2. Set up Go 1.23
+    3. go mod download + verify
+    4. go vet ./...
+    5. go test -v -race ./internal/tests/unit/
+    6. go build (production binary, linux/amd64)
+    7. Upload binary as artifact (kept 1 day)
+
+  frontend (Next.js / Bun)
+    1. Checkout code
+    2. Set up Bun (latest)
+    3. bun install --frozen-lockfile
+    4. bun run lint
+    5. bun run type-check
+    6. bun run build
+
+  docker-build (runs after backend + frontend both pass)
+    1. Build backend Docker image (target: production)
+    2. Build frontend Docker image (target: production)
+    3. Does NOT push to any registry yet
+
+
+--- deploy.yml ---
+
+Status    : PLACEHOLDER — no real VPS connected yet
+Trigger   : Manual only (workflow_dispatch)
+Confirm   : Must type "DEPLOY" to proceed
+
+When VPS is ready, this workflow will:
+  1. SSH into VPS
+  2. Pull latest code
+  3. Write .env from GitHub Secrets
+  4. Run database migrations (goose)
+  5. Rebuild Docker containers
+  6. Health check (/api/v1/health)
+  7. Rollback if health check fails
+
+Required GitHub Secrets (set in repo Settings -> Secrets):
+  VPS_HOST            VPS IP address or hostname
+  VPS_USER            SSH username
+  VPS_SSH_KEY         Private SSH key (PEM format)
+  VPS_PORT            SSH port (usually 22)
+  VPS_DEPLOY_PATH     Path on VPS e.g. /opt/businesssaas
+  POSTGRES_PASSWORD   Production DB password
+  REDIS_PASSWORD      Production Redis password
+  JWT_SECRET          Production JWT secret (min 64 chars)
+  FRONTEND_URL        Production frontend URL
+  NEXT_PUBLIC_API_URL Production backend URL (browser-facing)
+
+
+See CI results:
+  GitHub -> Actions tab -> click any run -> expand steps
+
+
+----------------------------------------------------------------
+7. WHAT IS TRACKED / IGNORED
+----------------------------------------------------------------
+
+Tracked (committed to Git):
+  All Go source files          (.go)
+  All SQL migration files      (.sql)
+  All TypeScript/Next.js files (.ts, .tsx, .js)
+  Config files                 (go.mod, go.sum, package.json, bun.lock)
+  Docker files                 (Dockerfile, docker-compose.yml)
+  CI workflows                 (.github/workflows/)
+  Documentation                (*.md, *.txt)
+
+Never tracked (in .gitignore):
+  .env files                   (contain secrets)
+  node_modules/                (install with bun install)
+  .next/                       (generated build output)
+  backend/tmp/ backend/bin/    (generated binaries)
+  *.log *.pem *.key            (logs and secrets)
+  .DS_Store                    (macOS junk)
+  *.zip *.dump *.sql.bak       (binary/backup files)
+
+
+----------------------------------------------------------------
+8. PROJECT HISTORY SUMMARY
+----------------------------------------------------------------
+
+Phase 1 — Auth & RBAC Foundation (RBAC_backend branch)
+
+  Domains implemented:
+    auth          Signup, login, JWT, refresh token, logout
+    user          Profile, avatar, account management
+    organizations Create org, switch context, list members
+    authz         RBAC — roles, permissions, invitations,
+                  custom roles, member permission overrides
+    security      Session listing/revocation, login events
+    task          Full CRUD, pagination, filtering, sorting,
+                  tenant isolation, audit logging
+    audit         Append-only event log
+    middleware    Auth, permission, rate limit, org context
+
+  Migrations:    00001 → 00013
+  Unit tests:    31 passing (auth, JWT, password, task)
+  Permissions:   tasks.view / create / update / delete
+                 seeded into all system roles
+
+  Key bugs fixed in this phase:
+    - Can() Redis SISMEMBER returned false on cold cache (permanent 403)
+    - Owner membership insert failed NOT NULL on custom_permissions
+    - audit_logs used business_id column instead of org_id (silent 500)
+
+  Status: PR open -> merging into main
+
+
+Phase 2 — CRM Module (planned)
+Phase 3 — HRM Module (planned)
+Phase 4 — ERP / Accounting (planned)
+Phase 5 — Fuse React Production Dashboard (planned)
+
+
+----------------------------------------------------------------
+9. QUICK REFERENCE CARD
+----------------------------------------------------------------
+
+  Start new feature:
+    git checkout main && git pull origin main
+    git checkout -b feature/name
+
+  Save work:
+    git add <files>
+    git commit -m "type(scope): summary"
+
+  Push:
+    git push origin feature/name
+
+  Merge to main:
+    Open PR on GitHub -> wait for green CI -> merge
+
+  See history:
+    git log --oneline --graph --all
+
+  Undo last commit (keep changes):
+    git reset --soft HEAD~1
+
+  Run tests locally:
+    docker compose exec backend go test -v ./internal/tests/unit/
+
+  Run migrations:
+    docker compose exec backend sh -c \
+      'goose -dir internal/migrations postgres \
+      "postgres://$DATABASE_USER:$DATABASE_PASSWORD@$DATABASE_HOST:$DATABASE_PORT/$DATABASE_NAME?sslmode=disable" up'
+
+  Check CI locally before push:
+    docker compose build
+    docker compose up -d
+    docker compose exec backend go vet ./...
+    docker compose exec backend go test -v -race ./internal/tests/unit/
+
+
+================================================================
+END OF DOCUMENT
+================================================================
