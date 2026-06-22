@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -16,19 +17,21 @@ type Handler struct{ service Service }
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) ListMembers(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 	members, err := h.service.ListMembers(c.Context(), orgID)
 	if err != nil {
-		slog.Error("authz: ListMembers error", slog.Any("error", err))
+		log.Error("authz: ListMembers error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"members": members}, "OK")
 }
 
 func (h *Handler) GetMember(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
@@ -38,13 +41,14 @@ func (h *Handler) GetMember(c fiber.Ctx) error {
 		if errors.Is(err, ErrMemberNotFound) {
 			return response.NotFound(c, "MEMBER_NOT_FOUND", "Member not found")
 		}
-		slog.Error("authz: GetMember error", slog.Any("error", err))
+		log.Error("authz: GetMember error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"member": member}, "OK")
 }
 
 func (h *Handler) MyMembership(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := userIDFromCtx(c)
 	if !ok {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -58,7 +62,7 @@ func (h *Handler) MyMembership(c fiber.Ctx) error {
 		if errors.Is(err, ErrMemberNotFound) {
 			return response.Forbidden(c, "NOT_A_MEMBER", "You are not a member of this organization")
 		}
-		slog.Error("authz: MyMembership error", slog.Any("error", err))
+		log.Error("authz: MyMembership error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"membership": myMembership}, "OK")
@@ -182,22 +186,24 @@ func (h *Handler) RevokeInvitation(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListRoles(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	roles, err := h.service.ListRoles(c.Context())
 	if err != nil {
-		slog.Error("authz: ListRoles error", slog.Any("error", err))
+		log.Error("authz: ListRoles error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"roles": roles}, "OK")
 }
 
 func (h *Handler) ListOrganizationRoles(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 	roles, err := h.service.ListRolesForOrg(c.Context(), orgID)
 	if err != nil {
-		slog.Error("authz: ListOrganizationRoles error", slog.Any("error", err))
+		log.Error("authz: ListOrganizationRoles error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"roles": roles}, "OK")
@@ -291,9 +297,10 @@ func (h *Handler) CloneRole(c fiber.Ctx) error {
 }
 
 func (h *Handler) ListPermissions(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	perms, err := h.service.ListPermissions(c.Context())
 	if err != nil {
-		slog.Error("authz: ListPermissions error", slog.Any("error", err))
+		log.Error("authz: ListPermissions error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"permissions": perms}, "OK")
@@ -344,19 +351,21 @@ func (h *Handler) CheckMember(c fiber.Ctx) error {
 }
 
 func (h *Handler) PermissionMatrix(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 	matrix, err := h.service.PermissionMatrix(c.Context(), orgID)
 	if err != nil {
-		slog.Error("authz: PermissionMatrix error", slog.Any("error", err))
+		log.Error("authz: PermissionMatrix error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"matrix": matrix}, "OK")
 }
 
 func (h *Handler) authzError(c fiber.Ctx, err error) error {
+	log := logger.FromCtx(c)
 	switch {
 	case errors.Is(err, ErrCannotAssignOwner):
 		return response.BadRequest(c, "CANNOT_ASSIGN_OWNER", "The owner role cannot be assigned via API")
@@ -389,7 +398,7 @@ func (h *Handler) authzError(c fiber.Ctx, err error) error {
 	case errors.Is(err, ErrInvitationEmailMismatch):
 		return response.Forbidden(c, "INVITATION_EMAIL_MISMATCH", "This invitation belongs to a different email address")
 	default:
-		slog.Error("authz error", slog.Any("error", err))
+		log.Error("authz error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 }

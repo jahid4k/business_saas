@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -21,7 +22,7 @@ import (
 // 		c.Query("related_type"), c.Query("related_id"),
 // 	)
 // 	if err != nil {
-// 		slog.Error("engagement: ListTasksByRelated", slog.Any("error", err))
+// 		log.Error("engagement: ListTasksByRelated", slog.Any("error", err))
 // 		return response.InternalServerError(c)
 // 	}
 // 	return response.OK(c, fiber.Map{"tasks": tasks}, "OK")
@@ -30,12 +31,13 @@ import (
 // ListActivitiesByRelated handles GET requests scoped to a specific entity.
 // Used by: /crm/contacts/:contactId/activities, /crm/deals/:dealId/activities, etc.
 func (h *Handler) ListActivitiesByRelated(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	activities, err := h.service.ListActivitiesByRelated(
 		c.Context(), orgID(c),
 		c.Query("related_type"), c.Query("related_id"),
 	)
 	if err != nil {
-		slog.Error("engagement: ListActivitiesByRelated", slog.Any("error", err))
+		log.Error("engagement: ListActivitiesByRelated", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"activities": activities}, "OK")
@@ -44,12 +46,13 @@ func (h *Handler) ListActivitiesByRelated(c fiber.Ctx) error {
 // ListEmailLogsByRelated handles GET requests scoped to a specific entity.
 // Used by: /crm/contacts/:contactId/emails, /crm/deals/:dealId/emails, etc.
 func (h *Handler) ListEmailLogsByRelated(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	emails, err := h.service.ListEmailLogsByRelated(
 		c.Context(), orgID(c),
 		c.Query("related_type"), c.Query("related_id"),
 	)
 	if err != nil {
-		slog.Error("engagement: ListEmailLogsByRelated", slog.Any("error", err))
+		log.Error("engagement: ListEmailLogsByRelated", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"emails": emails}, "OK")

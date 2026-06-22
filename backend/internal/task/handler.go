@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/mridha/businesssaas/internal/middleware"
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -30,6 +31,7 @@ func NewHandler(service Service) *Handler {
 // Requires: tasks.view
 // Query params: status, assignedTo, sort, order (asc|desc), limit, offset
 func (h *Handler) List(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
@@ -66,7 +68,7 @@ func (h *Handler) List(c fiber.Ctx) error {
 
 	result, err := h.service.List(c.Context(), orgID, filter)
 	if err != nil {
-		slog.Error("task: List error", slog.Any("error", err))
+		log.Error("task: List error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 
@@ -154,6 +156,7 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 // here so List/Get/Create/Update/Delete all map consistently — mirrors
 // authz.Handler.authzError.
 func (h *Handler) taskError(c fiber.Ctx, err error) error {
+	log := logger.FromCtx(c)
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return response.NotFound(c, "TASK_NOT_FOUND", "Task not found")
@@ -170,7 +173,7 @@ func (h *Handler) taskError(c fiber.Ctx, err error) error {
 	case errors.Is(err, ErrAssigneeNotFound):
 		return response.BadRequest(c, "ASSIGNEE_NOT_FOUND", "assignedTo must be an active member of this organization")
 	default:
-		slog.Error("task error", slog.Any("error", err))
+		log.Error("task error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 }

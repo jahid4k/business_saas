@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/pagination"
 	"github.com/mridha/businesssaas/pkg/response"
 )
@@ -31,10 +32,11 @@ func userID(c fiber.Ctx) string { id, _ := c.Locals("user_id").(string); return 
 // ListContacts handles GET /api/v1/organizations/:orgId/crm/contacts
 // Accepts ?limit= and ?offset= query params (defaults: limit=50, max=200).
 func (h *Handler) ListContacts(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	p := pagination.FromCtx(c)
 	result, err := h.service.ListContacts(c.Context(), orgID(c), p)
 	if err != nil {
-		slog.Error("contacts: ListContacts", slog.Any("error", err))
+		log.Error("contacts: ListContacts", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
@@ -42,12 +44,13 @@ func (h *Handler) ListContacts(c fiber.Ctx) error {
 
 // GetContact handles GET /api/v1/organizations/:orgId/crm/contacts/:contactId
 func (h *Handler) GetContact(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	contact, err := h.service.GetContact(c.Context(), orgID(c), c.Params("contactId"))
 	if err != nil {
 		if errors.Is(err, ErrContactNotFound) {
 			return response.NotFound(c, "CONTACT_NOT_FOUND", "Contact not found")
 		}
-		slog.Error("contacts: GetContact", slog.Any("error", err))
+		log.Error("contacts: GetContact", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"contact": contact}, "OK")
@@ -55,6 +58,7 @@ func (h *Handler) GetContact(c fiber.Ctx) error {
 
 // CreateContact handles POST /api/v1/organizations/:orgId/crm/contacts
 func (h *Handler) CreateContact(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateContactRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -67,7 +71,7 @@ func (h *Handler) CreateContact(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidEmail):
 			return response.BadRequest(c, "INVALID_EMAIL", "Invalid email address")
 		default:
-			slog.Error("contacts: CreateContact", slog.Any("error", err))
+			log.Error("contacts: CreateContact", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -76,6 +80,7 @@ func (h *Handler) CreateContact(c fiber.Ctx) error {
 
 // UpdateContact handles PATCH /api/v1/organizations/:orgId/crm/contacts/:contactId
 func (h *Handler) UpdateContact(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateContactRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -90,7 +95,7 @@ func (h *Handler) UpdateContact(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidEmail):
 			return response.BadRequest(c, "INVALID_EMAIL", "Invalid email address")
 		default:
-			slog.Error("contacts: UpdateContact", slog.Any("error", err))
+			log.Error("contacts: UpdateContact", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -99,11 +104,12 @@ func (h *Handler) UpdateContact(c fiber.Ctx) error {
 
 // DeleteContact handles DELETE /api/v1/organizations/:orgId/crm/contacts/:contactId
 func (h *Handler) DeleteContact(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteContact(c.Context(), orgID(c), c.Params("contactId")); err != nil {
 		if errors.Is(err, ErrContactNotFound) {
 			return response.NotFound(c, "CONTACT_NOT_FOUND", "Contact not found")
 		}
-		slog.Error("contacts: DeleteContact", slog.Any("error", err))
+		log.Error("contacts: DeleteContact", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
@@ -111,9 +117,10 @@ func (h *Handler) DeleteContact(c fiber.Ctx) error {
 
 // GetContactsByCompany handles GET /api/v1/organizations/:orgId/crm/companies/:companyId/contacts
 func (h *Handler) GetContactsByCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	contacts, err := h.service.GetContactsByCompany(c.Context(), orgID(c), c.Params("companyId"))
 	if err != nil {
-		slog.Error("contacts: GetContactsByCompany", slog.Any("error", err))
+		log.Error("contacts: GetContactsByCompany", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"contacts": contacts}, "OK")
@@ -126,10 +133,11 @@ func (h *Handler) GetContactsByCompany(c fiber.Ctx) error {
 // ListCompanies handles GET /api/v1/organizations/:orgId/crm/companies
 // Accepts ?limit= and ?offset= query params (defaults: limit=50, max=200).
 func (h *Handler) ListCompanies(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	p := pagination.FromCtx(c)
 	result, err := h.service.ListCompanies(c.Context(), orgID(c), p)
 	if err != nil {
-		slog.Error("contacts: ListCompanies", slog.Any("error", err))
+		log.Error("contacts: ListCompanies", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
@@ -137,12 +145,13 @@ func (h *Handler) ListCompanies(c fiber.Ctx) error {
 
 // GetCompany handles GET /api/v1/organizations/:orgId/crm/companies/:companyId
 func (h *Handler) GetCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	company, err := h.service.GetCompany(c.Context(), orgID(c), c.Params("companyId"))
 	if err != nil {
 		if errors.Is(err, ErrCompanyNotFound) {
 			return response.NotFound(c, "COMPANY_NOT_FOUND", "Company not found")
 		}
-		slog.Error("contacts: GetCompany", slog.Any("error", err))
+		log.Error("contacts: GetCompany", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"company": company}, "OK")
@@ -150,6 +159,7 @@ func (h *Handler) GetCompany(c fiber.Ctx) error {
 
 // CreateCompany handles POST /api/v1/organizations/:orgId/crm/companies
 func (h *Handler) CreateCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateCompanyRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -159,7 +169,7 @@ func (h *Handler) CreateCompany(c fiber.Ctx) error {
 		if errors.Is(err, ErrNameRequired) {
 			return response.BadRequest(c, "NAME_REQUIRED", "name is required")
 		}
-		slog.Error("contacts: CreateCompany", slog.Any("error", err))
+		log.Error("contacts: CreateCompany", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.Created(c, fiber.Map{"company": company}, "Company created")
@@ -167,6 +177,7 @@ func (h *Handler) CreateCompany(c fiber.Ctx) error {
 
 // UpdateCompany handles PATCH /api/v1/organizations/:orgId/crm/companies/:companyId
 func (h *Handler) UpdateCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateCompanyRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -179,7 +190,7 @@ func (h *Handler) UpdateCompany(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidStatus):
 			return response.BadRequest(c, "INVALID_STATUS", "Invalid status value")
 		default:
-			slog.Error("contacts: UpdateCompany", slog.Any("error", err))
+			log.Error("contacts: UpdateCompany", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -188,11 +199,12 @@ func (h *Handler) UpdateCompany(c fiber.Ctx) error {
 
 // DeleteCompany handles DELETE /api/v1/organizations/:orgId/crm/companies/:companyId
 func (h *Handler) DeleteCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteCompany(c.Context(), orgID(c), c.Params("companyId")); err != nil {
 		if errors.Is(err, ErrCompanyNotFound) {
 			return response.NotFound(c, "COMPANY_NOT_FOUND", "Company not found")
 		}
-		slog.Error("contacts: DeleteCompany", slog.Any("error", err))
+		log.Error("contacts: DeleteCompany", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
