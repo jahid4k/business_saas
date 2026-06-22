@@ -1,118 +1,161 @@
-/**
- * lib/auth.ts — Auth state for httpOnly cookie token architecture.
- *
- * TOKEN ARCHITECTURE:
- * ─────────────────────────────────────────────────────────────────
- * Access token  → stored in MEMORY only (this module's variable).
- *                 Never written to localStorage or any JS-accessible storage.
- *                 Lost on page refresh — re-acquired via /auth/refresh.
- *
- * Refresh token → stored in httpOnly cookie set by the BACKEND.
- *                 The frontend JavaScript NEVER reads or writes it.
- *                 The browser sends it automatically on every request
- *                 to the backend when withCredentials: true.
- *
- * On page load → call /auth/refresh (cookie sent automatically)
- *               → backend validates cookie, returns new access token
- *               → store in memory, user is logged in silently
- *
- * BACKEND REQUIREMENTS (Phase 1-B):
- *   POST /api/v1/auth/login
- *     Response: { access_token: "..." }  (body)
- *               Set-Cookie: bsaas_refresh=<token>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth
- *
- *   POST /api/v1/auth/refresh
- *     Request:  Cookie: bsaas_refresh=<token>  (automatic)
- *     Response: { access_token: "..." }  (body)
- *               Set-Cookie: bsaas_refresh=<new_token>; HttpOnly; ...  (rotation)
- *
- *   POST /api/v1/auth/logout
- *     Response: Set-Cookie: bsaas_refresh=; HttpOnly; Max-Age=0  (clear cookie)
- * ─────────────────────────────────────────────────────────────────
- *
- * EVENT BUS:
- * setAccessToken() dispatches a "bsaas:token-set" CustomEvent on window.
- * usePermission subscribes to this event so it can update the role
- * reactively when the silent refresh sets the token after mount —
- * without polling, without setState-in-useEffect, without cascading renders.
- */
+// lib/auth.ts
+// next-auth v5 configuration.
+//
+// Strategy (ADR-0006):
+//   - Credentials provider calls Go backend POST /auth/login
+//   - On success, Go returns { access_token, user }
+//   - We store access_token in next-auth JWT so middleware can read it
+//   - access_token is also hydrated into the in-memory store on session load
+//   - The httpOnly refresh cookie is set by Go — browser sends it on /auth/refresh automatically
 
-import type { JwtClaims } from "@/types/auth";
+import NextAuth, { type DefaultSession, type NextAuthConfig } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 
-// In-memory access token — survives re-renders, lost on page refresh (by design)
-let _accessToken: string | null = null;
+// ----------------------------------------------------------
+// Extend next-auth types to include our custom fields
+// ----------------------------------------------------------
 
-// Custom event name — used to notify subscribers when the token changes
-const TOKEN_SET_EVENT = "bsaas:token-set";
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      accessToken: string; // Go backend JWT
+      activeOrgId: string | null;
+      activeOrgSlug: string | null;
+      activeRole: string | null;
+    } & DefaultSession["user"];
+    error?: "RefreshFailed";
+  }
 
-// ------------------------------------------------------------------
-// In-memory access token management
-// ------------------------------------------------------------------
-
-export function getAccessToken(): string | null {
-  return _accessToken;
-}
-
-export function setAccessToken(token: string): void {
-  _accessToken = token;
-
-  // Notify subscribers (usePermission, any other hook that cares)
-  // Only dispatch in the browser — this module is also imported server-side
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(TOKEN_SET_EVENT));
+  interface User {
+    id: string;
+    email: string;
+    name: string;
+    accessToken: string;
+    activeOrgId: string | null;
+    activeOrgSlug: string | null;
+    activeRole: string | null;
   }
 }
 
-export function clearAccessToken(): void {
-  _accessToken = null;
-
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(TOKEN_SET_EVENT));
+declare module "next-auth/jwt" {
+  interface JWT {
+    accessToken: string;
+    userId: string;
+    activeOrgId: string | null;
+    activeOrgSlug: string | null;
+    activeRole: string | null;
+    error?: "RefreshFailed";
   }
 }
 
-// Token set event name — exported so subscribers can use the same constant
-export { TOKEN_SET_EVENT };
+// ----------------------------------------------------------
+// Auth config
+// ----------------------------------------------------------
 
-// ------------------------------------------------------------------
-// JWT decode — for UI display only, NOT for auth decisions.
-// The backend re-validates the token on every request regardless.
-// ------------------------------------------------------------------
+const backendUrl =
+  process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
 
-export function decodeAccessToken(token?: string | null): JwtClaims | null {
-  const t = token ?? _accessToken;
-  if (!t) return null;
+export const authConfig: NextAuthConfig = {
+  providers: [
+    Credentials({
+      id: "credentials",
+      name: "Email and password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
 
-  try {
-    const parts = t.split(".");
-    if (parts.length !== 3) return null;
-    const payload = parts[1];
-    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-    return JSON.parse(atob(padded)) as JwtClaims;
-  } catch {
-    return null;
-  }
-}
+        try {
+          const res = await fetch(`${backendUrl}/api/v1/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+            // Note: httpOnly cookie set by Go backend flows through automatically
+            // because this runs server-side and the response sets Set-Cookie
+          });
 
-// ------------------------------------------------------------------
-// Auth state checks — based on in-memory token
-// ------------------------------------------------------------------
+          if (!res.ok) return null;
 
-export function isAuthenticated(): boolean {
-  if (!_accessToken) return false;
-  const claims = decodeAccessToken(_accessToken);
-  if (!claims) return false;
-  return claims.exp * 1000 > Date.now();
-}
+          const body = await res.json();
+          const data = body?.data;
 
-export function getCurrentUserID(): string | null {
-  return decodeAccessToken()?.uid ?? null;
-}
+          if (!data?.access_token || !data?.user) return null;
 
-export function getCurrentBusinessID(): string | null {
-  return decodeAccessToken()?.bid ?? null;
-}
+          return {
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name ?? data.user.email,
+            accessToken: data.access_token,
+            activeOrgId: null,
+            activeOrgSlug: null,
+            activeRole: null,
+          };
+        } catch (err) {
+          console.error("[auth] Login failed:", err);
+          return null;
+        }
+      },
+    }),
+  ],
 
-export function getCurrentRole(): string | null {
-  return decodeAccessToken()?.role ?? null;
-}
+  pages: {
+    signIn: "/login",
+    error: "/login",
+  },
+
+  session: {
+    strategy: "jwt",
+    maxAge: 7 * 24 * 60 * 60, // 7 days (matches refresh token TTL)
+  },
+
+  callbacks: {
+    async jwt({ token, user, trigger, session: updateSession }) {
+      // Initial sign-in — user object is present
+      if (user) {
+        token.userId = user.id;
+        token.accessToken = user.accessToken;
+        token.activeOrgId = user.activeOrgId;
+        token.activeOrgSlug = user.activeOrgSlug;
+        token.activeRole = user.activeRole;
+      }
+
+      // Session update triggered by useSession().update()
+      // Used when user switches org — we update the org context in the token
+      if (trigger === "update" && updateSession) {
+        if (updateSession.accessToken)
+          token.accessToken = updateSession.accessToken;
+        if (updateSession.activeOrgId !== undefined)
+          token.activeOrgId = updateSession.activeOrgId;
+        if (updateSession.activeOrgSlug !== undefined)
+          token.activeOrgSlug = updateSession.activeOrgSlug;
+        if (updateSession.activeRole !== undefined)
+          token.activeRole = updateSession.activeRole;
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      session.user.id = token.userId;
+      session.user.accessToken = token.accessToken;
+      session.user.activeOrgId = token.activeOrgId;
+      session.user.activeOrgSlug = token.activeOrgSlug;
+      session.user.activeRole = token.activeRole;
+      if (token.error) session.error = token.error;
+      return session;
+    },
+  },
+
+  trustHost: true,
+  secret: process.env.NEXTAUTH_SECRET,
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

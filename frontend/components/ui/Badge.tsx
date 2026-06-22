@@ -1,38 +1,41 @@
-import clsx from "clsx";
+import * as React from "react";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
 
-type BadgeVariant =
-  | "success"
-  | "warning"
-  | "error"
-  | "info"
-  | "neutral"
-  | "blue";
+const badgeVariants = cva(
+  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  {
+    variants: {
+      variant: {
+        default:
+          "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
+        secondary:
+          "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        destructive:
+          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
+        outline: "text-foreground",
+        success:
+          "border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+        warning:
+          "border-transparent bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+        info:
+          "border-transparent bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+);
 
-interface BadgeProps {
-  variant?: BadgeVariant;
-  children: React.ReactNode;
-  className?: string;
-}
+export interface BadgeProps
+  extends React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof badgeVariants> {}
 
-export function Badge({
-  variant = "neutral",
-  children,
-  className,
-}: BadgeProps) {
+function Badge({ className, variant, ...props }: BadgeProps) {
   return (
-    <span
-      className={clsx(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-        variant === "success" && "bg-success-light text-success",
-        variant === "warning" && "bg-warning-light text-warning",
-        variant === "error" && "bg-error-light   text-error",
-        variant === "info" && "bg-info-light     text-info",
-        variant === "blue" && "bg-brand-50 text-brand-700",
-        variant === "neutral" && "bg-gray-100 text-gray-600",
-        className,
-      )}
-    >
-      {children}
-    </span>
+    <div className={cn(badgeVariants({ variant }), className)} {...props} />
   );
 }
+
+export { Badge, badgeVariants };

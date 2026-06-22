@@ -1,17 +1,16 @@
 # ============================================================
 # BusinessSAAS Frontend — Dockerfile
-# Next.js Test Interface using Bun
+# Next.js 15 + Bun package manager
 # ============================================================
-#
 # Stages:
-#   deps          — Install dependencies using Bun
-#   development   — Next.js dev server with hot reload using Bun
-#   builder       — Build production Next.js output using Bun
-#   production    — Minimal Node runtime with standalone output
+#   deps        — Install dependencies with Bun
+#   development — Dev server with hot reload
+#   builder     — Production build
+#   production  — Minimal Node.js runtime (standalone output)
 # ============================================================
 
 # ----------------------------------------------------------
-# Stage 1: deps — Install dependencies with Bun
+# Stage 1: deps
 # ----------------------------------------------------------
 FROM oven/bun:1-alpine AS deps
 
@@ -19,14 +18,11 @@ RUN apk add --no-cache libc6-compat
 
 WORKDIR /app
 
-# Copy Bun package manifests
 COPY package.json bun.lock* ./
-
-# Install dependencies
 RUN bun install --frozen-lockfile
 
 # ----------------------------------------------------------
-# Stage 2: development — Hot reload dev server
+# Stage 2: development
 # ----------------------------------------------------------
 FROM oven/bun:1-alpine AS development
 
@@ -35,18 +31,17 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-
 COPY . .
-
-EXPOSE 3000
 
 ENV HOSTNAME="0.0.0.0"
 ENV PORT=3000
 
+EXPOSE 3000
+
 CMD ["bun", "run", "dev"]
 
 # ----------------------------------------------------------
-# Stage 3: builder — Build production output
+# Stage 3: builder
 # ----------------------------------------------------------
 FROM oven/bun:1-alpine AS builder
 
@@ -55,7 +50,6 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
-
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -64,7 +58,7 @@ ENV NODE_ENV=production
 RUN bun run build
 
 # ----------------------------------------------------------
-# Stage 4: production — Minimal runtime image
+# Stage 4: production
 # ----------------------------------------------------------
 FROM node:20-alpine AS production
 
@@ -88,7 +82,7 @@ USER nextjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD wget -qO- http://localhost:3000/ || exit 1
 
 CMD ["node", "server.js"]
