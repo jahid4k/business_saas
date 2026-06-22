@@ -11,6 +11,8 @@ export default async function AppLayout({
 }) {
   const session = await auth();
 
+  console.log("The is from Sesssion but layout.app: ", session);
+
   if (!session?.user) {
     redirect("/login");
   }
@@ -26,9 +28,7 @@ export default async function AppLayout({
         <div className="flex flex-1 flex-col overflow-hidden">
           <Topbar />
 
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
+          <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </div>
     </>
