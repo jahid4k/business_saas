@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
+import { z } from "zod";
 import { Eye, EyeOff } from "lucide-react";
 
-import { signupSchema, type SignupInput } from "@/lib/validations/auth";
-import { apiPost } from "@/lib/api";
+import { authApi } from "@/lib/api/auth";
 import { ApiError } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,27 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { createLogger } from "@/lib/debug";
+
+const log = createLogger("signup");
+
+const signupSchema = z
+  .object({
+    first_name: z.string().min(1, "First name is required"),
+    last_name: z.string().min(1, "Last name is required"),
+    email: z.string().email("Enter a valid email"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(72, "Password must not exceed 72 characters"),
+    confirm_password: z.string(),
+  })
+  .refine((d) => d.password === d.confirm_password, {
+    message: "Passwords do not match",
+    path: ["confirm_password"],
+  });
+
+type SignupInput = z.infer<typeof signupSchema>;
 
 export function SignupForm() {
   const router = useRouter();
@@ -29,53 +50,61 @@ export function SignupForm() {
   const form = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      name: "",
+      first_name: "",
+      last_name: "",
       email: "",
       password: "",
-      confirmPassword: "",
+      confirm_password: "",
     },
   });
 
   async function onSubmit(data: SignupInput) {
     setServerError(null);
 
+    // Step 1 — create account
+    log.step("calling backend signup", { email: data.email });
     try {
-      // 1. Create the account via Go backend
-      await apiPost("api/v1/auth/signup", {
-        name: data.name,
+      const res = await authApi.signup({
         email: data.email,
         password: data.password,
+        first_name: data.first_name,
+        last_name: data.last_name,
       });
+      log.ok("account created", res?.user);
+    } catch (err) {
+      log.fail("signup failed", err);
+      if (err instanceof ApiError) {
+        setServerError(err.message);
+      } else {
+        setServerError("Something went wrong. Please try again.");
+      }
+      return;
+    }
 
-      // 2. Auto-login via next-auth credentials provider
+    // Step 2 — auto-login
+    log.step("calling next-auth signIn");
+    try {
       const result = await signIn("credentials", {
         email: data.email,
         password: data.password,
         redirect: false,
       });
+      log.ok("signIn result", result);
 
       if (result?.error) {
-        // Signup succeeded but login failed — redirect to login page
-        router.push("/login?message=account-created");
+        log.fail("signIn returned error", result.error);
+        router.push("/login?message=account_created");
         return;
       }
-
-      // 3. Redirect to org selection (new users have no org yet)
-      router.push("/app/select-org");
-      router.refresh();
-    } catch (error) {
-      if (error instanceof ApiError) {
-        if (error.code === "EMAIL_TAKEN") {
-          form.setError("email", {
-            message: "This email is already registered",
-          });
-        } else {
-          setServerError(error.message);
-        }
-      } else {
-        setServerError("Something went wrong. Please try again.");
-      }
+    } catch (err) {
+      log.fail("signIn threw exception", err);
+      router.push("/login?message=account_created");
+      return;
     }
+
+    log.ok("all done — redirecting to /app");
+    router.push("/app");
+    router.refresh();
   }
 
   return (
@@ -87,23 +116,42 @@ export function SignupForm() {
           </div>
         )}
 
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Full name</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder="Jane Doe"
-                  autoComplete="name"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            control={form.control}
+            name="first_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>First name</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="John"
+                    autoComplete="given-name"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="last_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Last name</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Doe"
+                    autoComplete="family-name"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <FormField
           control={form.control}
@@ -143,7 +191,6 @@ export function SignupForm() {
                     type="button"
                     onClick={() => setShowPassword((s) => !s)}
                     className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -160,14 +207,14 @@ export function SignupForm() {
 
         <FormField
           control={form.control}
-          name="confirmPassword"
+          name="confirm_password"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Confirm password</FormLabel>
               <FormControl>
                 <Input
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Repeat your password"
                   autoComplete="new-password"
                   {...field}
                 />
@@ -180,9 +227,9 @@ export function SignupForm() {
         <Button
           type="submit"
           className="w-full"
-          loading={form.formState.isSubmitting}
+          disabled={form.formState.isSubmitting}
         >
-          Create account
+          {form.formState.isSubmitting ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </Form>

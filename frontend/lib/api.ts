@@ -1,18 +1,13 @@
 // lib/api.ts
-// The single HTTP client for all backend calls.
-//
-// Design (ADR-0006):
-//   - Access token stored in module-level variable (_accessToken) — never localStorage
-//   - Every request injects: Authorization: Bearer <token>
-//   - On 401: silent refresh via httpOnly cookie → retry once
-//   - On refresh failure: redirect to /login
-//   - All non-2xx responses throw ApiError (never raw Response)
-
-import ky, { type KyResponse, type Options } from "ky";
+import ky, {
+  type KyResponse,
+  type BeforeRequestState,
+  type AfterResponseState,
+} from "ky";
 import { ApiError } from "@/types/api";
 
 // ----------------------------------------------------------
-// In-memory token store (ADR-0006)
+// In-memory token store
 // ----------------------------------------------------------
 
 let _accessToken: string | null = null;
@@ -35,7 +30,6 @@ export function getAccessToken(): string | null {
 // ----------------------------------------------------------
 
 async function attemptSilentRefresh(): Promise<boolean> {
-  // Deduplicate: if a refresh is already in-flight, wait for it
   if (_refreshPromise) return _refreshPromise;
 
   _refreshPromise = (async () => {
@@ -47,7 +41,7 @@ async function attemptSilentRefresh(): Promise<boolean> {
 
       const res = await fetch(`${baseUrl}/api/v1/auth/refresh`, {
         method: "POST",
-        credentials: "include", // sends httpOnly bsaas_refresh cookie
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
 
@@ -70,7 +64,7 @@ async function attemptSilentRefresh(): Promise<boolean> {
 }
 
 // ----------------------------------------------------------
-// Error normalizer — converts any failed response to ApiError
+// Error normalizer
 // ----------------------------------------------------------
 
 async function toApiError(response: KyResponse): Promise<ApiError> {
@@ -82,7 +76,11 @@ async function toApiError(response: KyResponse): Promise<ApiError> {
   try {
     const body = await response.json<{
       success: boolean;
-      error?: { code: string; message: string; fields?: Record<string, string> };
+      error?: {
+        code: string;
+        message: string;
+        fields?: Record<string, string>;
+      };
       request_id?: string;
     }>();
 
@@ -93,7 +91,6 @@ async function toApiError(response: KyResponse): Promise<ApiError> {
     }
     requestId = body.request_id;
   } catch {
-    // response body wasn't JSON — use HTTP status text
     message = response.statusText || message;
   }
 
@@ -107,7 +104,7 @@ async function toApiError(response: KyResponse): Promise<ApiError> {
 }
 
 // ----------------------------------------------------------
-// ky instance
+// ky instance — v2 correct hook signatures
 // ----------------------------------------------------------
 
 const baseUrl =
@@ -116,40 +113,39 @@ const baseUrl =
     : process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
 
 export const api = ky.create({
-  prefixUrl: baseUrl,
-  credentials: "include", // always include cookies (for refresh)
+  baseUrl: baseUrl,
+  credentials: "include",
   timeout: 30_000,
-  retry: 0, // we handle retry manually in afterResponse
+  retry: 0,
   hooks: {
+    // ✅ ky v2: state object — access request via state.request
     beforeRequest: [
-      (request) => {
+      ({ request }: BeforeRequestState) => {
         if (_accessToken) {
           request.headers.set("Authorization", `Bearer ${_accessToken}`);
         }
       },
     ],
+
+    // ✅ ky v2: state object — access via state.request, state.response, state.options
     afterResponse: [
-      async (request, options, response) => {
-        // Non-error responses — pass through
+      async ({ request, response }: AfterResponseState) => {
         if (response.ok) return response;
 
-        // 401 → attempt silent refresh, then retry once
         if (response.status === 401) {
           const refreshed = await attemptSilentRefresh();
 
           if (refreshed) {
-            // Retry original request with new token
-            const retryOptions: Options = {
-              ...options,
-              headers: {
-                ...Object.fromEntries(request.headers.entries()),
-                Authorization: `Bearer ${_accessToken}`,
-              },
-            };
-            return ky(request.url, retryOptions);
+            // ✅ ky v2: retry with ky.retry() — not raw ky() call
+            const newHeaders = new Headers(request.headers);
+            newHeaders.set("Authorization", `Bearer ${_accessToken}`);
+
+            return ky.retry({
+              request: new Request(request, { headers: newHeaders }),
+              code: "TOKEN_REFRESHED",
+            });
           }
 
-          // Refresh failed — clear token and redirect to login
           clearAccessToken();
           if (typeof window !== "undefined") {
             window.location.href = "/login";
@@ -157,7 +153,6 @@ export const api = ky.create({
           throw await toApiError(response);
         }
 
-        // All other errors — throw ApiError
         throw await toApiError(response);
       },
     ],
@@ -166,7 +161,6 @@ export const api = ky.create({
 
 // ----------------------------------------------------------
 // Typed request helpers
-// Used by all feature modules. Return typed data directly (unwrap envelope).
 // ----------------------------------------------------------
 
 export async function apiGet<T>(
@@ -188,20 +182,14 @@ export async function apiGet<T>(
   return res.data as T;
 }
 
-export async function apiPost<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const res = await api
     .post(path, { json: body })
     .json<{ success: boolean; data?: T }>();
   return res.data as T;
 }
 
-export async function apiPatch<T>(
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await api
     .patch(path, { json: body })
     .json<{ success: boolean; data?: T }>();

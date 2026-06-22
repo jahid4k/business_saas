@@ -1,18 +1,10 @@
 // lib/auth.ts
-// next-auth v5 configuration.
-//
-// Strategy (ADR-0006):
-//   - Credentials provider calls Go backend POST /auth/login
-//   - On success, Go returns { access_token, user }
-//   - We store access_token in next-auth JWT so middleware can read it
-//   - access_token is also hydrated into the in-memory store on session load
-//   - The httpOnly refresh cookie is set by Go — browser sends it on /auth/refresh automatically
-
-import NextAuth, { type DefaultSession, type NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
+import type { NextAuthConfig, DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 // ----------------------------------------------------------
-// Extend next-auth types to include our custom fields
+// Type extensions — next-auth v5 beta style
 // ----------------------------------------------------------
 
 declare module "next-auth" {
@@ -21,7 +13,7 @@ declare module "next-auth" {
       id: string;
       email: string;
       name: string;
-      accessToken: string; // Go backend JWT
+      accessToken: string;
       activeOrgId: string | null;
       activeOrgSlug: string | null;
       activeRole: string | null;
@@ -40,23 +32,35 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
-  interface JWT {
-    accessToken: string;
-    userId: string;
-    activeOrgId: string | null;
-    activeOrgSlug: string | null;
-    activeRole: string | null;
-    error?: "RefreshFailed";
-  }
+// NOTE: next-auth v5 beta এ "next-auth/jwt" augmentation কাজ করে না reliably।
+// JWT type আমরা internal interface দিয়ে handle করবো।
+
+// ----------------------------------------------------------
+// Internal JWT shape — type augmentation ছাড়া
+// ----------------------------------------------------------
+
+interface AppJWT {
+  accessToken?: string;
+  userId?: string;
+  activeOrgId?: string | null;
+  activeOrgSlug?: string | null;
+  activeRole?: string | null;
+  error?: "RefreshFailed";
+  // next-auth built-in fields
+  sub?: string;
+  name?: string;
+  email?: string;
+  picture?: string;
+  iat?: number;
+  exp?: number;
+  jti?: string;
 }
 
 // ----------------------------------------------------------
 // Auth config
 // ----------------------------------------------------------
 
-const backendUrl =
-  process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
+const backendUrl = process.env.BACKEND_INTERNAL_URL || "http://localhost:8080";
 
 export const authConfig: NextAuthConfig = {
   providers: [
@@ -78,8 +82,6 @@ export const authConfig: NextAuthConfig = {
               email: credentials.email,
               password: credentials.password,
             }),
-            // Note: httpOnly cookie set by Go backend flows through automatically
-            // because this runs server-side and the response sets Set-Cookie
           });
 
           if (!res.ok) return null;
@@ -90,10 +92,13 @@ export const authConfig: NextAuthConfig = {
           if (!data?.access_token || !data?.user) return null;
 
           return {
-            id: data.user.id,
-            email: data.user.email,
-            name: data.user.name ?? data.user.email,
-            accessToken: data.access_token,
+            id: String(data.user.id),
+            email: String(data.user.email),
+            name:
+              (data.user.name ??
+                `${data.user.first_name ?? ""} ${data.user.last_name ?? ""}`.trim()) ||
+              String(data.user.email),
+            accessToken: String(data.access_token),
             activeOrgId: null,
             activeOrgSlug: null,
             activeRole: null,
@@ -113,43 +118,49 @@ export const authConfig: NextAuthConfig = {
 
   session: {
     strategy: "jwt",
-    maxAge: 7 * 24 * 60 * 60, // 7 days (matches refresh token TTL)
+    maxAge: 7 * 24 * 60 * 60,
   },
 
   callbacks: {
+    // token এর type কে AppJWT হিসেবে cast করো
     async jwt({ token, user, trigger, session: updateSession }) {
-      // Initial sign-in — user object is present
+      const t = token as AppJWT;
+
+      // Initial sign-in — user object present
       if (user) {
-        token.userId = user.id;
-        token.accessToken = user.accessToken;
-        token.activeOrgId = user.activeOrgId;
-        token.activeOrgSlug = user.activeOrgSlug;
-        token.activeRole = user.activeRole;
+        t.userId = user.id;
+        t.accessToken = user.accessToken;
+        t.activeOrgId = user.activeOrgId;
+        t.activeOrgSlug = user.activeOrgSlug;
+        t.activeRole = user.activeRole;
       }
 
-      // Session update triggered by useSession().update()
-      // Used when user switches org — we update the org context in the token
+      // Org switch — frontend calls useSession().update(...)
       if (trigger === "update" && updateSession) {
-        if (updateSession.accessToken)
-          token.accessToken = updateSession.accessToken;
-        if (updateSession.activeOrgId !== undefined)
-          token.activeOrgId = updateSession.activeOrgId;
-        if (updateSession.activeOrgSlug !== undefined)
-          token.activeOrgSlug = updateSession.activeOrgSlug;
-        if (updateSession.activeRole !== undefined)
-          token.activeRole = updateSession.activeRole;
+        const upd = updateSession as Partial<AppJWT>;
+        if (upd.accessToken) t.accessToken = upd.accessToken;
+        if (upd.activeOrgId !== undefined) t.activeOrgId = upd.activeOrgId;
+        if (upd.activeOrgSlug !== undefined)
+          t.activeOrgSlug = upd.activeOrgSlug;
+        if (upd.activeRole !== undefined) t.activeRole = upd.activeRole;
       }
 
-      return token;
+      return t as typeof token;
     },
 
     async session({ session, token }) {
-      session.user.id = token.userId;
-      session.user.accessToken = token.accessToken;
-      session.user.activeOrgId = token.activeOrgId;
-      session.user.activeOrgSlug = token.activeOrgSlug;
-      session.user.activeRole = token.activeRole;
-      if (token.error) session.error = token.error;
+      const t = token as AppJWT;
+
+      session.user.id = t.userId ?? "";
+      session.user.accessToken = t.accessToken ?? "";
+      session.user.activeOrgId = t.activeOrgId ?? null;
+      session.user.activeOrgSlug = t.activeOrgSlug ?? null;
+      session.user.activeRole = t.activeRole ?? null;
+
+      if (t.error) {
+        session.error = t.error;
+      }
+
       return session;
     },
   },
@@ -158,4 +169,6 @@ export const authConfig: NextAuthConfig = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
-export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+// next-auth v5 TS2883 fix — separate const then export
+const nextAuth = NextAuth(authConfig);
+export const { handlers, auth, signIn, signOut } = nextAuth;

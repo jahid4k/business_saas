@@ -1,19 +1,21 @@
-import { redirect } from "next/navigation";
+// app/(app)/page.tsx
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
-// /app — redirect to the user's active org dashboard
-// If no active org in session, go to org selection page
 export default async function AppRootPage() {
   const session = await auth();
+
+  console.log("The is from Sesssion: ", session);
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  if (session.user.activeOrgSlug) {
-    redirect(`/app/${session.user.activeOrgSlug}/dashboard`);
+  // User logged in কিন্তু কোনো active org নেই → select-org
+  if (!session.user.activeOrgSlug) {
+    redirect("/app/select-org");
   }
 
-  // No org context yet — go to org selection
-  redirect("/app/select-org");
+  // Active org আছে → সরাসরি dashboard
+  redirect(`/app/${session.user.activeOrgSlug}/dashboard`);
 }
