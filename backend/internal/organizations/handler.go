@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -16,6 +17,7 @@ type Handler struct{ service Service }
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 func (h *Handler) Create(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -34,7 +36,7 @@ func (h *Handler) Create(c fiber.Ctx) error {
 		case errors.Is(err, ErrInvalidName):
 			return response.BadRequest(c, "INVALID_NAME", "Organization name must be between 2 and 100 characters")
 		default:
-			slog.Error("organization: Create error", slog.Any("error", err))
+			log.Error("organization: Create error", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -42,19 +44,21 @@ func (h *Handler) Create(c fiber.Ctx) error {
 }
 
 func (h *Handler) List(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
 	}
 	orgs, err := h.service.ListForUser(c.Context(), userID)
 	if err != nil {
-		slog.Error("organization: List error", slog.Any("error", err))
+		log.Error("organization: List error", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"organizations": orgs}, "OK")
 }
 
 func (h *Handler) Get(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -69,7 +73,7 @@ func (h *Handler) Get(c fiber.Ctx) error {
 		case errors.Is(err, ErrNotFound), errors.Is(err, ErrNotMember):
 			return response.NotFound(c, "ORGANIZATION_NOT_FOUND", "Organization not found")
 		default:
-			slog.Error("organization: Get error", slog.Any("error", err))
+			log.Error("organization: Get error", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -77,6 +81,7 @@ func (h *Handler) Get(c fiber.Ctx) error {
 }
 
 func (h *Handler) Switch(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
 	if !ok || userID == "" {
 		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
@@ -93,7 +98,7 @@ func (h *Handler) Switch(c fiber.Ctx) error {
 		case errors.Is(err, ErrNotMember):
 			return response.Forbidden(c, "NOT_A_MEMBER", "You are not a member of this organization")
 		default:
-			slog.Error("organization: Switch error", slog.Any("error", err))
+			log.Error("organization: Switch error", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}

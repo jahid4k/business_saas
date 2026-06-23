@@ -7,6 +7,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
@@ -24,27 +25,30 @@ func orgID(c fiber.Ctx) string  { return c.Params("orgId") }
 func userID(c fiber.Ctx) string { id, _ := c.Locals("user_id").(string); return id }
 
 func (h *Handler) ListDeals(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	result, err := h.service.ListDeals(c.Context(), orgID(c))
 	if err != nil {
-		slog.Error("deals: ListDeals", slog.Any("error", err))
+		log.Error("deals: ListDeals", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, result, "OK")
 }
 
 func (h *Handler) GetDeal(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	deal, err := h.service.GetDeal(c.Context(), orgID(c), c.Params("dealId"))
 	if err != nil {
 		if errors.Is(err, ErrDealNotFound) {
 			return response.NotFound(c, "DEAL_NOT_FOUND", "Deal not found")
 		}
-		slog.Error("deals: GetDeal", slog.Any("error", err))
+		log.Error("deals: GetDeal", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"deal": deal}, "OK")
 }
 
 func (h *Handler) CreateDeal(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req CreateDealRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -59,7 +63,7 @@ func (h *Handler) CreateDeal(c fiber.Ctx) error {
 		case errors.Is(err, ErrStageRequired):
 			return response.BadRequest(c, "STAGE_REQUIRED", "stage_id is required")
 		default:
-			slog.Error("deals: CreateDeal", slog.Any("error", err))
+			log.Error("deals: CreateDeal", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -67,6 +71,7 @@ func (h *Handler) CreateDeal(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateDeal(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req UpdateDealRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -76,24 +81,26 @@ func (h *Handler) UpdateDeal(c fiber.Ctx) error {
 		if errors.Is(err, ErrDealNotFound) {
 			return response.NotFound(c, "DEAL_NOT_FOUND", "Deal not found")
 		}
-		slog.Error("deals: UpdateDeal", slog.Any("error", err))
+		log.Error("deals: UpdateDeal", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"deal": deal}, "Deal updated")
 }
 
 func (h *Handler) DeleteDeal(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	if err := h.service.DeleteDeal(c.Context(), orgID(c), c.Params("dealId")); err != nil {
 		if errors.Is(err, ErrDealNotFound) {
 			return response.NotFound(c, "DEAL_NOT_FOUND", "Deal not found")
 		}
-		slog.Error("deals: DeleteDeal", slog.Any("error", err))
+		log.Error("deals: DeleteDeal", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.NoContent(c)
 }
 
 func (h *Handler) MoveDealStage(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req MoveDealStageRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -110,7 +117,7 @@ func (h *Handler) MoveDealStage(c fiber.Ctx) error {
 		case errors.Is(err, ErrStageRequired):
 			return response.BadRequest(c, "STAGE_REQUIRED", "stage_id is required")
 		default:
-			slog.Error("deals: MoveDealStage", slog.Any("error", err))
+			log.Error("deals: MoveDealStage", slog.Any("error", err))
 			return response.InternalServerError(c)
 		}
 	}
@@ -118,18 +125,20 @@ func (h *Handler) MoveDealStage(c fiber.Ctx) error {
 }
 
 func (h *Handler) MarkDealWon(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	deal, err := h.service.MarkDealWon(c.Context(), orgID(c), c.Params("dealId"))
 	if err != nil {
 		if errors.Is(err, ErrDealNotFound) {
 			return response.NotFound(c, "DEAL_NOT_FOUND", "Deal not found")
 		}
-		slog.Error("deals: MarkDealWon", slog.Any("error", err))
+		log.Error("deals: MarkDealWon", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"deal": deal}, "Deal marked as won")
 }
 
 func (h *Handler) MarkDealLost(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	var req MarkLostRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
@@ -139,16 +148,17 @@ func (h *Handler) MarkDealLost(c fiber.Ctx) error {
 		if errors.Is(err, ErrDealNotFound) {
 			return response.NotFound(c, "DEAL_NOT_FOUND", "Deal not found")
 		}
-		slog.Error("deals: MarkDealLost", slog.Any("error", err))
+		log.Error("deals: MarkDealLost", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"deal": deal}, "Deal marked as lost")
 }
 
 func (h *Handler) GetPipelineBoard(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
 	board, err := h.service.GetPipelineBoard(c.Context(), orgID(c), c.Params("pipelineId"))
 	if err != nil {
-		slog.Error("deals: GetPipelineBoard", slog.Any("error", err))
+		log.Error("deals: GetPipelineBoard", slog.Any("error", err))
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, fiber.Map{"board": board}, "OK")
