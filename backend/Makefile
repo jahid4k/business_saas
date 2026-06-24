@@ -2,24 +2,23 @@
 # BusinessSAAS Backend — Makefile
 # ============================================================
 
-.PHONY: help dev build run test lint clean \
+.PHONY: help dev build run test lint clean docs docs-install \
         docker-build docker-dev \
         migrate-up migrate-down migrate-status migrate-create \
         db-shell redis-shell
 
-# Default target
 .DEFAULT_GOAL := help
 
-# Binary output
 BINARY_NAME=businesssaas
 BUILD_DIR=./bin
 CMD_PATH=./cmd/server
 
-# Go settings
 GOFLAGS=-trimpath
 LDFLAGS=-s -w
 
-# Colors
+# swag CLI version — pin this so all developers use the same generator
+SWAG_VERSION=v1.16.4
+
 GREEN  := \033[0;32m
 YELLOW := \033[0;33m
 CYAN   := \033[0;36m
@@ -57,6 +56,35 @@ build: ## Build production binary
 	@echo "$(GREEN)✓ Binary built: $(BUILD_DIR)/$(BINARY_NAME)$(RESET)"
 
 ## -------------------------------------------------------
+## API Documentation
+## -------------------------------------------------------
+
+docs-install: ## Install swag CLI (run once per machine)
+	@echo "$(CYAN)Installing swag $(SWAG_VERSION)...$(RESET)"
+	go install github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION)
+	@echo "$(GREEN)✓ swag installed: $$(swag --version)$(RESET)"
+
+docs: ## Regenerate API docs from handler annotations (requires swag)
+	@command -v swag >/dev/null 2>&1 || { \
+		echo "$(YELLOW)swag not found. Run: make docs-install$(RESET)"; exit 1; \
+	}
+	swag init \
+		-g cmd/server/main.go \
+		--output docs/ \
+		--oas3 \
+		--parseDependency \
+		--parseInternal \
+		--exclude internal/tests/
+	@echo "$(GREEN)✓ Swagger docs regenerated → docs/swagger.json$(RESET)"
+	@echo "  Start the server (make dev) and visit: http://localhost:8080/api/v1/docs"
+
+docs-open: ## Open API docs in browser (server must be running)
+	@echo "$(CYAN)Opening API docs...$(RESET)"
+	@open http://localhost:8080/api/v1/docs 2>/dev/null || \
+		xdg-open http://localhost:8080/api/v1/docs 2>/dev/null || \
+		echo "Visit: http://localhost:8080/api/v1/docs"
+
+## -------------------------------------------------------
 ## Code Quality
 ## -------------------------------------------------------
 
@@ -67,7 +95,7 @@ test-unit: ## Run unit tests only
 	go test -v -race -cover ./internal/... ./pkg/...
 
 test-integration: ## Run integration tests only
-	go test -v -race -cover ./tests/integration/...
+	INTEGRATION=1 go test -v -race -cover ./internal/tests/integration/...
 
 lint: ## Run linter (requires golangci-lint)
 	golangci-lint run ./...
@@ -83,7 +111,6 @@ tidy: ## Tidy go modules
 
 ## -------------------------------------------------------
 ## Database Migrations (Goose)
-## Reads DATABASE_URL or individual DATABASE_* env vars
 ## -------------------------------------------------------
 
 GOOSE=goose

@@ -1,4 +1,36 @@
 // backend/cmd/server/main.go
+//
+// BusinessSAAS API — Multi-tenant modular Business Operating System.
+//
+// Swagger/OpenAPI annotations below are consumed by `swag init` to regenerate
+// docs/swagger.json. Run `make docs` to regenerate after changing handler comments.
+//
+// @title           BusinessSAAS API
+// @version         1.0.0
+// @description     Multi-tenant modular Business Operating System (CRM, RBAC, Tasks, and more).
+// @description
+// @description     ### Authentication
+// @description     Protected endpoints require `Authorization: Bearer <access_token>`.
+// @description     Obtain via `POST /auth/login`; renew via `POST /auth/refresh` (httpOnly cookie).
+// @description
+// @description     ### Tenant isolation
+// @description     Every org-scoped endpoint validates `:orgId` against `business_id` in the JWT.
+// @description
+// @description     ### Error envelope
+// @description     `{ "success": false, "error": { "code": "...", "message": "..." }, "request_id": "..." }`
+// @description     Use `code` in frontend switch statements.
+//
+// @contact.name    BusinessSAAS API Support
+// @contact.email   api@businesssaas.dev
+// @license.name    Proprietary
+//
+// @host            localhost:8080
+// @BasePath        /api/v1
+//
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Short-lived JWT. Format: Bearer <access_token>
 package main
 
 import (
@@ -18,6 +50,7 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/redis/go-redis/v9"
 
+	bsaasdocs "github.com/mridha/businesssaas/docs"
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
@@ -37,6 +70,33 @@ import (
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/response"
 )
+
+// scalarHTML is the Scalar API reference UI served in development.
+// Scalar loads from CDN — it requires internet access in dev.
+// For air-gapped setups, replace the CDN script with a local copy.
+const scalarHTML = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>BusinessSAAS API Reference</title>
+  <style>body{margin:0}</style>
+</head>
+<body>
+  <script
+    id="api-reference"
+    data-url="/api/v1/docs/openapi.json"
+    data-configuration='{
+      "theme": "purple",
+      "darkMode": true,
+      "metaData": {"title": "BusinessSAAS API Reference"},
+      "hideModels": false,
+      "showSidebar": true,
+      "defaultOpenAllTags": false
+    }'></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>`
 
 func main() {
 	// 1. Config
@@ -101,15 +161,7 @@ func main() {
 	reportsRepo := crmreports.NewRepository(pgPool)
 
 	// ----------------------------------------------------------------
-	// 7. Services
-	//
-	// Dependency order matters:
-	//   pipelineSvc  — no CRM deps
-	//   dealsSvc     — needs pipelineSvc
-	//   contactsSvc  — no CRM deps
-	//   engagementSvc — no CRM deps
-	//   leadsSvc     — needs contactsSvc (ContactCreator) + dealsSvc (DealCreator)
-	//   reportsSvc   — needs dealsSvc + leadsSvc + engagementSvc
+	// 7. Services (dependency order matters — see comments)
 	// ----------------------------------------------------------------
 	auditSvc := audit.NewService(auditRepo)
 
@@ -127,9 +179,6 @@ func main() {
 	// CRM — wire in dependency order
 	pipelineSvc := crmpipeline.NewService(pipelineRepo)
 	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc)
-	// leadsSvc receives contactsSvc and dealsSvc through narrow interfaces
-	// (ContactCreator and DealCreator) defined in the leads package.
-	// This breaks the import cycle: leads does not import deals or contacts directly.
 	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc)
 	reportsSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
 
@@ -145,7 +194,7 @@ func main() {
 
 	// Platform
 	contactsHandler := contacts.NewHandler(contactsSvc)
-	// engagement handler is bound to "crm" — records are tagged module="crm".
+	// engagement handler is bound to "crm" module tag.
 	// When HRM arrives: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
 
@@ -212,8 +261,7 @@ func main() {
 	security.RegisterRoutes(api, securityHandler, permFn, requireAuth, requireOrgParam)
 	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
 
-	// CRM tenant isolation guard — validates :orgId param against JWT business_id.
-	// All CRM and platform routes share this middleware; it must run after requireAuth.
+	// CRM tenant isolation guard
 	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
 
 	// Platform layer (shared across all future modules)
@@ -274,6 +322,7 @@ func registerSystemRoutes(
 	redisClient *redis.Client,
 	cfg *config.Config,
 ) {
+	// Health check
 	router.Get("/health", func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
@@ -312,6 +361,40 @@ func registerSystemRoutes(
 		return response.OK(c, nil, "Hello from Go backend")
 	})
 
+	// ── API Documentation (development only) ──────────────────────────
+	//
+	//   GET /api/v1/docs              → Scalar interactive UI (purple theme, dark mode)
+	//   GET /api/v1/docs/openapi.json → Raw OpenAPI 3.0 spec (embedded at build time)
+	//
+	//   To regenerate after editing handler annotations:
+	//     make docs
+	//
+	//   The spec is embedded at compile time — no external files needed at runtime.
+	//   Production builds do NOT expose these routes.
+	if cfg.App.IsDevelopment() {
+		router.Get("/docs/openapi.json", func(c fiber.Ctx) error {
+			c.Set("Content-Type", "application/json; charset=utf-8")
+			c.Set("Cache-Control", "public, max-age=3600")
+			return c.Send(bsaasdocs.SwaggerJSON)
+		})
+
+		router.Get("/docs", func(c fiber.Ctx) error {
+			c.Set("Content-Type", "text/html; charset=utf-8")
+			return c.SendString(scalarHTML)
+		})
+
+		// Redirect trailing slash variant
+		router.Get("/docs/", func(c fiber.Ctx) error {
+			return c.Redirect().To("/api/v1/docs")
+		})
+
+		slog.Info("API docs available",
+			slog.String("ui", "http://localhost:"+cfg.App.Port+"/api/v1/docs"),
+			slog.String("spec", "http://localhost:"+cfg.App.Port+"/api/v1/docs/openapi.json"),
+		)
+	}
+
+	// Route explorer — dev only
 	router.Get("/routes", func(c fiber.Ctx) error {
 		if cfg.App.IsProduction() {
 			return response.NotFound(c, "ROUTE_NOT_FOUND", "not found")
@@ -369,7 +452,7 @@ func routeGroup(path string) string {
 	if len(parts) >= 3 {
 		seg := parts[2]
 		switch seg {
-		case "health", "hello", "routes":
+		case "health", "hello", "routes", "docs":
 			return "system"
 		default:
 			return seg
