@@ -21,16 +21,28 @@ type Handler struct {
 }
 
 // NewHandler creates a new auth Handler.
-// cookieCfg is injected so the handler knows the cookie name, path,
-// domain, Secure flag, and SameSite policy without importing config directly.
 func NewHandler(service Service, cookieCfg config.CookieConfig) *Handler {
 	return &Handler{service: service, cookieCfg: cookieCfg}
 }
 
-// -------------------------------------------------------------------
-// Signup — POST /api/v1/auth/signup
-// -------------------------------------------------------------------
-
+// Signup godoc
+//
+//	@Summary		Sign up
+//	@Description	Creates a new user account. Returns the safe user profile on success.
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `VALIDATION_ERROR` — missing or invalid fields
+//	@Description	- `EMAIL_ALREADY_EXISTS` — account with this email already exists
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		SignupRequest	true	"Registration details"
+//	@Success		201		{object}	response.Created{data=SignupResponseData}
+//	@Failure		400		{object}	response.Error	"VALIDATION_ERROR"
+//	@Failure		409		{object}	response.Error	"EMAIL_ALREADY_EXISTS"
+//	@Failure		429		{object}	response.Error	"RATE_LIMITED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/signup [post]
 func (h *Handler) Signup(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	var req SignupRequest
@@ -46,10 +58,8 @@ func (h *Handler) Signup(c fiber.Ctx) error {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrEmailAlreadyExists):
-			// এটা expected — log করার দরকার নেই, 409 দাও
 			return response.Conflict(c, "EMAIL_ALREADY_EXISTS", "An account with this email already exists")
 		default:
-			// এটাই real unexpected error — log করো
 			log.Error("auth: signup failed",
 				slog.String("layer", "handler"),
 				slog.Any("error", err),
@@ -61,15 +71,31 @@ func (h *Handler) Signup(c fiber.Ctx) error {
 	return response.Created(c, fiber.Map{"user": u}, "Account created successfully")
 }
 
-// -------------------------------------------------------------------
-// Login — POST /api/v1/auth/login
+// Login godoc
 //
-// On success:
-//   - Sets the httpOnly refresh token cookie (bsaas_refresh).
-//   - Returns only the access token in the JSON body.
-//     The refresh token is NEVER written to the response body.
-// -------------------------------------------------------------------
-
+//	@Summary		Log in
+//	@Description	Authenticates with email + password.
+//	@Description
+//	@Description	**On success:**
+//	@Description	- Returns `access_token` + `expires_in` in the response body
+//	@Description	- Sets an httpOnly refresh cookie (`bsaas_refresh`, path `/api/v1/auth`)
+//	@Description	- The refresh token is NEVER in the response body
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `INVALID_CREDENTIALS` — wrong email or password (deliberately generic to prevent enumeration)
+//	@Description	- `ACCOUNT_LOCKED` — too many failed attempts; try again later
+//	@Description	- `ACCOUNT_DISABLED` — account suspended by an admin
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		LoginRequest					true	"Login credentials"
+//	@Success		200		{object}	response.OK{data=LoginResponseData}	"Access token issued"
+//	@Failure		400		{object}	response.Error					"INVALID_BODY"
+//	@Failure		401		{object}	response.Error					"INVALID_CREDENTIALS / ACCOUNT_LOCKED / ACCOUNT_DISABLED"
+//	@Failure		423		{object}	response.Error					"ACCOUNT_LOCKED"
+//	@Failure		429		{object}	response.Error					"RATE_LIMITED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/login [post]
 func (h *Handler) Login(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	var req LoginRequest
@@ -99,30 +125,30 @@ func (h *Handler) Login(c fiber.Ctx) error {
 		}
 	}
 
-	// Write the refresh token into the httpOnly cookie.
-	// The browser will automatically include this cookie on all future
-	// requests to /api/v1/auth/* — JavaScript cannot read it.
 	h.setRefreshCookie(c, pair.RefreshToken, pair.ExpiresIn)
-
-	// Return only the access token in the body.
 	return response.OK(c, pair.ToClient(), "Login successful")
 }
 
-// -------------------------------------------------------------------
-// OAuthSync — POST /api/v1/auth/oauth/sync
+// OAuthSync godoc
 //
-// Called by next-auth after a successful Google / Facebook OAuth sign-in.
-// If IssueTokens=true, the handler issues a token pair and sets the
-// refresh token cookie exactly like Login.
-// -------------------------------------------------------------------
-
-// OAuthSync handles POST /api/v1/auth/oauth/sync.
-//
-// Called by next-auth after a successful Google / Facebook OAuth sign-in.
-// If IssueTokens=true the service issues a full TokenPair. The handler:
-//  1. Reads the raw refresh token from result.Tokens (never serialised directly).
-//  2. Sets the httpOnly refresh cookie — same as Login.
-//  3. Sends OAuthSyncClientResponse to the frontend (access_token only, no raw refresh).
+//	@Summary		OAuth sync
+//	@Description	Called by the Next.js auth adapter after a successful OAuth sign-in (Google, GitHub, etc.).
+//	@Description
+//	@Description	If `issueTokens=true` the backend issues a full token pair:
+//	@Description	- Access token in the response body
+//	@Description	- Refresh token set as an httpOnly cookie (same contract as Login)
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `PROVIDER_REQUIRED`, `PROVIDER_ACCOUNT_ID_REQUIRED`, `EMAIL_REQUIRED`, `ACCOUNT_DISABLED`
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		OAuthSyncRequest					true	"OAuth provider data"
+//	@Success		200		{object}	response.OK{data=OAuthSyncClientResponse}	"Account synced"
+//	@Failure		400		{object}	response.Error
+//	@Failure		401		{object}	response.Error	"ACCOUNT_DISABLED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/oauth/sync [post]
 func (h *Handler) OAuthSync(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	var req OAuthSyncRequest
@@ -147,9 +173,6 @@ func (h *Handler) OAuthSync(c fiber.Ctx) error {
 		}
 	}
 
-	// Build the client-safe response. If tokens were issued:
-	//   - set the httpOnly cookie with the raw refresh token
-	//   - send only the access token in the body (ToClient strips RefreshToken)
 	clientResp := &OAuthSyncClientResponse{
 		User:    result.User,
 		Account: result.Account,
@@ -162,27 +185,31 @@ func (h *Handler) OAuthSync(c fiber.Ctx) error {
 	return response.OK(c, clientResp, "OAuth account synced")
 }
 
-// -------------------------------------------------------------------
-// Refresh — POST /api/v1/auth/refresh
+// Refresh godoc
 //
-// Reads the refresh token from the httpOnly cookie (not from the body).
-// On success:
-//   - Rotates the refresh token (old cookie → new cookie).
-//   - Returns a new access token in the response body.
-//
-// Why cookie-only and not body?
-//   If we accepted the token from the body, any XSS script that captured
-//   the token (e.g. from localStorage) could silently refresh it. By
-//   reading only from the httpOnly cookie, the refresh path is only
-//   accessible to the browser itself, not to injected scripts.
-// -------------------------------------------------------------------
-
+//	@Summary		Refresh access token
+//	@Description	Issues a new access token using the httpOnly refresh cookie (`bsaas_refresh`).
+//	@Description
+//	@Description	**The refresh token is read from the cookie — NOT the request body.**
+//	@Description	The cookie is rotated on every successful refresh (old token revoked, new one set).
+//	@Description
+//	@Description	**Why cookie-only?**
+//	@Description	If the token were accepted from the body, an XSS script that captured it from
+//	@Description	localStorage could silently refresh it. The httpOnly cookie is inaccessible to JS.
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `MISSING_TOKEN` — no refresh cookie present
+//	@Description	- `INVALID_TOKEN` — token expired, revoked, or not found
+//	@Tags			Auth
+//	@Produce		json
+//	@Success		200		{object}	response.OK{data=ClientTokenPair}	"New access token"
+//	@Failure		401		{object}	response.Error	"MISSING_TOKEN / INVALID_TOKEN"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/refresh [post]
 func (h *Handler) Refresh(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
-	// Read refresh token exclusively from the httpOnly cookie.
 	rawToken := c.Cookies(h.cookieCfg.Name)
 	if strings.TrimSpace(rawToken) == "" {
-		// Clear any stale / malformed cookie to avoid confusion.
 		h.clearRefreshCookie(c)
 		return response.Unauthorized(c, "MISSING_TOKEN", "Refresh token is required")
 	}
@@ -194,8 +221,6 @@ func (h *Handler) Refresh(c fiber.Ctx) error {
 			errors.Is(err, ErrSessionNotFound),
 			errors.Is(err, ErrSessionRevoked),
 			errors.Is(err, ErrSessionExpired):
-			// Token is invalid or expired — clear the cookie so the
-			// browser does not keep sending a dead token.
 			h.clearRefreshCookie(c)
 			return response.Unauthorized(c, "INVALID_TOKEN", "Invalid or expired refresh token")
 		default:
@@ -204,46 +229,52 @@ func (h *Handler) Refresh(c fiber.Ctx) error {
 		}
 	}
 
-	// Rotate: replace the old cookie with the new refresh token.
 	h.setRefreshCookie(c, pair.RefreshToken, pair.ExpiresIn)
-
 	return response.OK(c, pair.ToClient(), "Token refreshed")
 }
 
-// -------------------------------------------------------------------
-// Logout — POST /api/v1/auth/logout
+// Logout godoc
 //
-// Revokes the refresh session in the database and clears the cookie.
-// Does NOT require a valid access token — an expired access token user
-// should still be able to revoke their refresh token.
-// Always returns 204 regardless of outcome (logout must never fail visibly).
-// -------------------------------------------------------------------
-
+//	@Summary		Log out
+//	@Description	Revokes the current refresh session and clears the httpOnly cookie.
+//	@Description
+//	@Description	**Always returns 204** — even if the token was already invalid or missing.
+//	@Description	Logout must never fail visibly to the user.
+//	@Description
+//	@Description	Does NOT require a valid access token — an expired-token user should still be
+//	@Description	able to revoke their refresh session.
+//	@Tags			Auth
+//	@Produce		json
+//	@Success		204	"Session revoked and cookie cleared"
+//	@Failure		500	{object}	response.Error
+//	@Router			/auth/logout [post]
 func (h *Handler) Logout(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	rawToken := c.Cookies(h.cookieCfg.Name)
 	if strings.TrimSpace(rawToken) != "" {
 		if err := h.service.Logout(c.Context(), rawToken); err != nil {
-			// Log but do not surface — logout must always appear to succeed.
 			log.Error("auth: logout error", slog.Any("error", err))
 		}
 	}
 
-	// Clear the cookie unconditionally — even if the token was already
-	// invalid or missing, we want to ensure the browser removes it.
 	h.clearRefreshCookie(c)
-
 	return response.NoContent(c)
 }
 
-// -------------------------------------------------------------------
-// LogoutAll — POST /api/v1/auth/logout-all
+// LogoutAll godoc
 //
-// Requires a valid access token (requireAuth middleware).
-// Revokes ALL refresh sessions for the authenticated user and
-// clears the current browser's cookie.
-// -------------------------------------------------------------------
-
+//	@Summary		Log out all sessions
+//	@Description	Revokes ALL active refresh sessions for the authenticated user across all devices.
+//	@Description	Also clears the current browser's refresh cookie.
+//	@Description
+//	@Description	Requires a valid access token (`Authorization: Bearer <token>`).
+//	@Tags			Auth
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		204	"All sessions revoked"
+//	@Failure		401	{object}	response.Error	"UNAUTHORIZED"
+//	@Failure		500	{object}	response.Error
+//	@Router			/auth/logout-all [post]
 func (h *Handler) LogoutAll(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
@@ -256,16 +287,22 @@ func (h *Handler) LogoutAll(c fiber.Ctx) error {
 		return response.InternalServerError(c)
 	}
 
-	// Clear the cookie on this browser too.
 	h.clearRefreshCookie(c)
-
 	return response.NoContent(c)
 }
 
-// -------------------------------------------------------------------
-// Me — GET /api/v1/auth/me
-// -------------------------------------------------------------------
-
+// Me godoc
+//
+//	@Summary		Get authenticated user
+//	@Description	Returns the full safe user profile for the currently authenticated user.
+//	@Description	Safe = `password_hash` is never included.
+//	@Tags			Auth
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.OK{data=MeResponseData}	"User profile"
+//	@Failure		401	{object}	response.Error	"UNAUTHORIZED"
+//	@Failure		500	{object}	response.Error
+//	@Router			/auth/me [get]
 func (h *Handler) Me(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)
@@ -282,23 +319,45 @@ func (h *Handler) Me(c fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"user": u}, "OK")
 }
 
-// -------------------------------------------------------------------
-// PasswordResetRequest — POST /api/v1/auth/password-reset/request
-// -------------------------------------------------------------------
-
+// PasswordResetRequest godoc
+//
+//	@Summary		Request password reset
+//	@Description	Initiates a password reset flow for the given email address.
+//	@Description
+//	@Description	**Always returns 200** — even if the email is not registered.
+//	@Description	This prevents email enumeration: an attacker cannot distinguish registered
+//	@Description	from unregistered emails by the response.
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		PasswordResetRequestBody	true	"Email address"
+//	@Success		200		{object}	response.OK					"Reset request processed"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/password-reset/request [post]
 func (h *Handler) PasswordResetRequest(c fiber.Ctx) error {
 	var req PasswordResetRequestBody
-	// Parse but always return the same response — never reveal whether email exists.
 	if err := c.Bind().JSON(&req); err == nil && req.Email != "" {
 		_ = h.service.RequestPasswordReset(c.Context(), req.Email)
 	}
 	return response.OK(c, nil, "If that email is registered, a reset link has been sent")
 }
 
-// -------------------------------------------------------------------
-// PasswordResetConfirm — POST /api/v1/auth/password-reset/confirm
-// -------------------------------------------------------------------
-
+// PasswordResetConfirm godoc
+//
+//	@Summary		Confirm password reset
+//	@Description	Sets a new password using the reset token from the email link.
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `MISSING_FIELDS` — token or new_password is empty
+//	@Description	- `RESET_FAILED` — invalid or expired reset token
+//	@Tags			Auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		PasswordResetConfirmBody	true	"Reset token and new password"
+//	@Success		200		{object}	response.OK					"Password reset successful"
+//	@Failure		400		{object}	response.Error				"MISSING_FIELDS / RESET_FAILED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/password-reset/confirm [post]
 func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
 	var req PasswordResetConfirmBody
 	if err := c.Bind().JSON(&req); err != nil {
@@ -320,11 +379,6 @@ func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
 // Cookie helpers
 // -------------------------------------------------------------------
 
-// setRefreshCookie writes the refresh token into the httpOnly cookie.
-// expiresInSeconds is the access token TTL (used to derive the Max-Age).
-// The cookie Max-Age is derived from the config's RefreshTokenTTL, not
-// from expiresInSeconds — the access token TTL is much shorter and should
-// not limit the cookie lifetime.
 func (h *Handler) setRefreshCookie(c fiber.Ctx, rawToken string, _ int64) {
 	maxAgeSecs := int(h.cookieCfg.MaxAge.Seconds())
 
@@ -342,16 +396,14 @@ func (h *Handler) setRefreshCookie(c fiber.Ctx, rawToken string, _ int64) {
 	c.Cookie(cookie)
 }
 
-// clearRefreshCookie immediately expires the refresh cookie.
-// The browser removes an expired cookie automatically.
 func (h *Handler) clearRefreshCookie(c fiber.Ctx) {
 	cookie := &fiber.Cookie{
 		Name:     h.cookieCfg.Name,
 		Value:    "",
 		Domain:   h.cookieCfg.Domain,
 		Path:     h.cookieCfg.Path,
-		MaxAge:   -1,              // negative MaxAge = delete immediately
-		Expires:  time.Unix(0, 0), // belt-and-suspenders: also set past expiry date
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
 		Secure:   h.cookieCfg.Secure,
 		HTTPOnly: h.cookieCfg.HTTPOnly,
 		SameSite: h.cookieCfg.SameSite,
@@ -381,7 +433,24 @@ func validateSignupRequest(req SignupRequest) error {
 	if len(req.Password) > 72 {
 		return errors.New("password must not exceed 72 characters")
 	}
-	// First/last name are optional — OAuth and SaaS onboarding flows
-	// may initially provide only email + displayName.
 	return nil
+}
+
+// -------------------------------------------------------------------
+// Swagger response wrapper types
+// These types only exist for documentation generation — not used at runtime.
+// They describe the shape of fiber.Map{} responses.
+// -------------------------------------------------------------------
+
+// SignupResponseData is the data field of the signup 201 response.
+type SignupResponseData struct {
+	User any `json:"user" swaggertype:"object"` // SafeUser
+}
+
+// LoginResponseData is the data field of the login 200 response.
+type LoginResponseData = ClientTokenPair
+
+// MeResponseData is the data field of the /me 200 response.
+type MeResponseData struct {
+	User any `json:"user" swaggertype:"object"` // SafeUser
 }
