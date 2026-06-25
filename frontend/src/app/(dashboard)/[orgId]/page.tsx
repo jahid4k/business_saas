@@ -5,104 +5,192 @@ import { use } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
+import {
+  CheckSquare,
+  Users,
+  TrendingUp,
+  BarChart2,
+  ArrowRight,
+} from "lucide-react";
 
 const FONT_SYNE = "var(--font-syne, Syne, sans-serif)";
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
+const PURPLE = "#7c3aed";
 
-export default function OrgRootPage({
+const QUICK_LINKS = [
+  {
+    label: "Tasks",
+    desc: "Manage your to-dos",
+    icon: CheckSquare,
+    href: "tasks",
+    perm: "tasks.view",
+  },
+  {
+    label: "Leads",
+    desc: "Track new prospects",
+    icon: Users,
+    href: "crm/leads",
+    perm: "crm.leads.view",
+  },
+  {
+    label: "Pipeline",
+    desc: "Visualise your deals",
+    icon: TrendingUp,
+    href: "crm/pipeline",
+    perm: "crm.deals.view",
+  },
+  {
+    label: "Reports",
+    desc: "CRM analytics",
+    icon: BarChart2,
+    href: "crm/reports",
+    perm: "crm.reports.view",
+  },
+];
+
+export default function OrgDashboardPage({
   params,
 }: {
   params: Promise<{ orgId: string }>;
 }) {
   const { orgId } = use(params);
   const { currentOrg, user } = useAuthStore();
-  const { permissions } = usePermissionStore();
+  const { hasPermission } = usePermissionStore();
 
-  const orgName = currentOrg?.name ?? "Your Workspace";
-  const initial = orgName[0].toUpperCase();
+  const firstName = user?.firstName ?? user?.displayName ?? "there";
+  const orgName = currentOrg?.name ?? "your workspace";
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: "#0a0a0a" }}
+      style={{ padding: "36px 32px", maxWidth: 800, fontFamily: FONT_INTER }}
     >
-      <div className="text-center max-w-sm">
-        {/* Org avatar */}
-        <div
-          className="w-16 h-16 rounded-2xl mx-auto mb-6 flex items-center justify-center text-xl font-bold text-white"
+      {/* Greeting */}
+      <h1
+        style={{
+          fontFamily: FONT_SYNE,
+          fontSize: "1.6rem",
+          fontWeight: 700,
+          color: "white",
+          letterSpacing: "-0.02em",
+          marginBottom: 6,
+        }}
+      >
+        Good {timeGreeting()}, {firstName} 👋
+      </h1>
+      <p style={{ fontSize: "0.875rem", color: "#666", marginBottom: 36 }}>
+        You're in <span style={{ color: "#aaa" }}>{orgName}</span>. Here's a
+        quick overview.
+      </p>
+
+      {/* Quick access cards */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: 12,
+        }}
+      >
+        {QUICK_LINKS.filter((l) => hasPermission(l.perm)).map((link) => {
+          const Icon = link.icon;
+          return (
+            <Link
+              key={link.href}
+              href={`/${orgId}/${link.href}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                padding: "16px 18px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.07)",
+                background: "#0f0f0f",
+                textDecoration: "none",
+                transition: "border-color 150ms ease, background 150ms ease",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "rgba(124,58,237,0.35)";
+                e.currentTarget.style.background = "rgba(124,58,237,0.06)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+                e.currentTarget.style.background = "#0f0f0f";
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 9,
+                  background: "rgba(124,58,237,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon size={17} style={{ color: PURPLE }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    color: "#e0e0e0",
+                    fontFamily: FONT_INTER,
+                    marginBottom: 2,
+                  }}
+                >
+                  {link.label}
+                </p>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "#555",
+                    fontFamily: FONT_INTER,
+                  }}
+                >
+                  {link.desc}
+                </p>
+              </div>
+              <ArrowRight size={14} style={{ color: "#333", flexShrink: 0 }} />
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Next steps note */}
+      <div
+        style={{
+          marginTop: 28,
+          padding: "14px 16px",
+          borderRadius: 8,
+          border: "1px solid rgba(124,58,237,0.15)",
+          background: "rgba(124,58,237,0.05)",
+        }}
+      >
+        <p
           style={{
-            background: "linear-gradient(135deg, #7c3aed, #a855f7)",
-            fontFamily: FONT_SYNE,
+            fontSize: "0.8rem",
+            color: "#7c3aed",
+            fontWeight: 600,
+            marginBottom: 3,
           }}
         >
-          {initial}
-        </div>
-
-        <h1
-          className="text-2xl font-bold text-white mb-2"
-          style={{ fontFamily: FONT_SYNE, letterSpacing: "-0.02em" }}
-        >
-          {orgName}
-        </h1>
-
-        <p
-          className="text-sm mb-2"
-          style={{ color: "#555", fontFamily: FONT_INTER }}
-        >
-          Signed in as <span style={{ color: "#888" }}>{user?.email}</span>
+          Step 5 complete ✓
         </p>
-
-        <p
-          className="text-xs mb-8"
-          style={{ color: "#333", fontFamily: FONT_INTER }}
-        >
-          {permissions.length} permission{permissions.length !== 1 ? "s" : ""}{" "}
-          loaded · org: {orgId.slice(0, 8)}…
+        <p style={{ fontSize: "0.8rem", color: "#555" }}>
+          Dashboard shell is live. Next: build individual feature pages (Tasks,
+          CRM, etc.)
         </p>
-
-        {/* Step 5 coming */}
-        <div
-          className="rounded-xl p-6 mb-6 text-left"
-          style={{
-            background: "#0f0f0f",
-            border: "1px solid rgba(255,255,255,0.06)",
-          }}
-        >
-          <p
-            className="text-xs font-medium mb-3"
-            style={{
-              color: "#7c3aed",
-              fontFamily: FONT_INTER,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-            }}
-          >
-            Next up
-          </p>
-          <p
-            className="text-sm text-white mb-1"
-            style={{ fontFamily: FONT_SYNE }}
-          >
-            Step 5 — Dashboard Shell
-          </p>
-          <p
-            className="text-xs"
-            style={{ color: "#555", fontFamily: FONT_INTER }}
-          >
-            Sidebar, Topbar, and navigation — coming next
-          </p>
-        </div>
-
-        <Link
-          href="/select-organization"
-          className="text-sm transition-colors"
-          style={{ color: "#444", fontFamily: FONT_INTER }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#888")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#444")}
-        >
-          ← Switch workspace
-        </Link>
       </div>
     </div>
   );
+}
+
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
+  return "evening";
 }
