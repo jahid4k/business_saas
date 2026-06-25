@@ -1,40 +1,80 @@
 @import "tailwindcss";
 
+/* ── Class-based dark mode for next-themes ─────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design tokens — light ─────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-
-  /* Dark (default) */
-  --bg-base: #0a0a0a;
-  --bg-surface: #111111;
-  --bg-elevated: #1a1a1a;
-
-  /* Light */
   --bg-base: #ffffff;
   --bg-surface: #f5f5f5;
   --bg-elevated: #ebebeb;
-
-  /* Accent (same both modes) */
+  --border: rgba(0, 0, 0, 0.08);
+  --text-primary: #0a0a0a;
+  --text-secondary: #555555;
+  --text-muted: #999999;
   --accent: #7c3aed;
   --accent-hover: #a855f7;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Design tokens — dark ──────────────────────── */
+.dark {
+  --bg-base: #0a0a0a;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --border: rgba(255, 255, 255, 0.07);
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #555555;
+  --accent: #7c3aed;
+  --accent-hover: #a855f7;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base ──────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-inter, Inter, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+}
+
+/* ── Thin scrollbar (sidebar nav, etc.) ────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* ── Misc resets ───────────────────────────────── */
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+button {
+  cursor: pointer;
 }
