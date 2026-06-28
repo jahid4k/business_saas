@@ -565,18 +565,6 @@ function buildModules(orgId: string): Module[] {
       status: "live",
       items: [
         {
-          label: "Leads",
-          href: `/${orgId}/crm/leads`,
-          icon: UserPlus,
-          permission: "crm.leads.view",
-        },
-        {
-          label: "Contacts",
-          href: `/${orgId}/crm/contacts`,
-          icon: Users,
-          permission: "crm.contacts.view",
-        },
-        {
           label: "Companies",
           href: `/${orgId}/crm/companies`,
           icon: Building2,
@@ -626,6 +614,21 @@ function buildModules(orgId: string): Module[] {
     },
   ];
 }
+
+const PLATFORM_ITEMS: NavItem[] = [
+  {
+    label: "Contacts",
+    href: "contacts",
+    icon: Users,
+    permission: "crm.contacts.view",
+  },
+  {
+    label: "Companies",
+    href: "companies",
+    icon: Building2,
+    permission: "crm.companies.view",
+  },
+];
 
 const SETTINGS: Omit<NavItem, "permission"> & { permission?: string }[] = [
   {
@@ -1012,6 +1015,24 @@ export default function Sidebar({ orgId }: { orgId: string }) {
           )}
         </div>
 
+        {/* PLATFORM — Contacts, Companies */}
+        <div className="mb-2">
+          {!closed && <SectionLabel>Platform</SectionLabel>}
+          {closed && <div className="h-2" />}
+          {PLATFORM_ITEMS.filter(
+            (s) => !s.permission || hasPermission(s.permission),
+          ).map((s) => (
+            <NavLink
+              key={s.href}
+              href={`/${orgId}/${s.href}`}
+              icon={s.icon}
+              label={s.label}
+              active={isPathActive(`/${orgId}/${s.href}`)}
+              closed={closed}
+            />
+          ))}
+        </div>
+
         {/* MODULES — CRM, HRM, etc. */}
         <div className="mb-2">
           {!closed && <SectionLabel>Modules</SectionLabel>}
@@ -1090,7 +1111,7 @@ export default function Sidebar({ orgId }: { orgId: string }) {
         className={`border-t border-white/5 flex-shrink-0 ${closed ? "p-1.5" : "p-2"}`}
       >
         <Link
-          href="/settings/profile"
+          href={`/${orgId}/settings/profile`}
           className={`
             flex items-center no-underline rounded-md hover:bg-white/[0.05] transition-colors
             ${closed ? "justify-center p-2" : "gap-2.5 px-2 py-1.5"}
