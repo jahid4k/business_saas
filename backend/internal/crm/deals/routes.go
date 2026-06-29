@@ -34,5 +34,5 @@ func RegisterRoutes(
 	deals.Post("/:dealId/move", permFn("crm.deals.move_stage"), handler.MoveDealStage)
 	deals.Post("/:dealId/won", permFn("crm.deals.update"), handler.MarkDealWon)
 	deals.Post("/:dealId/lost", permFn("crm.deals.update"), handler.MarkDealLost)
-	deals.Get("/:dealId/board", permFn("crm.deals.view"), handler.GetPipelineBoard)
+	deals.Get("/:pipelineId/board", permFn("crm.deals.view"), handler.GetPipelineBoard)
 }
