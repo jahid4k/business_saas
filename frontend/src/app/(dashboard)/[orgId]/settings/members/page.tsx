@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/settings/members/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus, MoreHorizontal, Mail, Clock, Loader2 } from "lucide-react";
 import gsap from "gsap";
 import { useAuthStore } from "@/stores/authStore";
@@ -15,10 +16,10 @@ import {
   resendInvitation,
   cancelInvitation,
 } from "@/lib/members";
+import { queryKeys } from "@/lib/queryKeys";
 import InviteForm from "@/components/members/InviteForm";
 import type { Member, MemberRole } from "@/types/rbac";
 
-// ── Config ────────────────────────────────────────────
 const ROLE_STYLE: Record<string, { label: string; cls: string }> = {
   owner: {
     label: "Owner",
@@ -65,7 +66,6 @@ function Avatar({ name, email }: { name: string; email: string }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────
 export default function MembersPage({
   params,
 }: {
@@ -75,13 +75,12 @@ export default function MembersPage({
   const { user } = useAuthStore();
   const { hasPermission } = usePermissionStore();
   const { openDrawer } = useDrawer();
+  const queryClient = useQueryClient();
 
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageErr, setPageErr] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
+  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -90,30 +89,19 @@ export default function MembersPage({
   const canUpdate = hasPermission("members.update");
   const canRemove = hasPermission("members.remove");
 
-  // Active and pending members split
+  // ── Query ─────────────────────────────────────────────────────────────────
+  const membersKey = queryKeys.members.list(orgId);
+  const membersQuery = useQuery({
+    queryKey: membersKey,
+    queryFn: () => listMembers(orgId),
+  });
+  const members = membersQuery.data ?? [];
   const active = members.filter((m) => m.status === "active");
   const pending = members.filter((m) => m.status === "pending");
 
-  // Fetch
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setPageErr(null);
-    try {
-      setMembers(await listMembers(orgId));
-    } catch {
-      setPageErr("Failed to load members. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
-
+  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  // GSAP entrance
-  useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (membersQuery.isPending || !listRef.current) return;
     const rows = listRef.current.querySelectorAll(".member-row");
     if (rows.length) {
       gsap.fromTo(
@@ -122,9 +110,9 @@ export default function MembersPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.035, ease: "power2.out" },
       );
     }
-  }, [loading]);
+  }, [membersQuery.isPending]);
 
-  // Close menu on outside click
+  // ── Close menu on outside click ───────────────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       let inside = false;
@@ -137,7 +125,7 @@ export default function MembersPage({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // Invite
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleInvite = () => {
     openDrawer({
       title: "Invite member",
@@ -146,64 +134,69 @@ export default function MembersPage({
         <InviteForm
           onSave={async (email, role) => {
             await inviteMember(orgId, { email, role });
-            await fetch();
+            // inviteMember returns void; invalidate to get the new pending member
+            await queryClient.invalidateQueries({ queryKey: membersKey });
           }}
         />
       ),
     });
   };
 
-  // Role change (inline)
   const handleRoleChange = async (m: Member, role: MemberRole) => {
     setRoleLoading(m.membershipId);
+    setMutationErr(null);
     try {
       await updateMemberRole(orgId, m.membershipId, role);
-      setMembers((prev) =>
-        prev.map((x) =>
+      queryClient.setQueryData<Member[]>(membersKey, (old) =>
+        (old ?? []).map((x) =>
           x.membershipId === m.membershipId ? { ...x, role } : x,
         ),
       );
     } catch {
-      setPageErr("Failed to update role.");
+      setMutationErr("Failed to update role.");
     } finally {
       setRoleLoading(null);
     }
   };
 
-  // Remove (deactivate)
   const handleRemove = async (membershipId: string) => {
+    setMutationErr(null);
     try {
       await updateMemberStatus(orgId, membershipId, "inactive");
-      setMembers((prev) => prev.filter((m) => m.membershipId !== membershipId));
+      queryClient.setQueryData<Member[]>(membersKey, (old) =>
+        (old ?? []).filter((m) => m.membershipId !== membershipId),
+      );
     } catch {
-      setPageErr("Failed to remove member.");
+      setMutationErr("Failed to remove member.");
     }
     setConfirm(null);
     setOpenMenu(null);
   };
 
-  // Resend / cancel invitation (pending members)
-  // Note: uses membershipId as invitationId — adjust if backend uses different ID
   const handleResend = async (membershipId: string) => {
+    setMutationErr(null);
     try {
       await resendInvitation(orgId, membershipId);
     } catch {
-      setPageErr("Failed to resend invitation.");
+      setMutationErr("Failed to resend invitation.");
     }
   };
 
   const handleCancelInvite = async (membershipId: string) => {
+    setMutationErr(null);
     try {
       await cancelInvitation(orgId, membershipId);
-      setMembers((prev) => prev.filter((m) => m.membershipId !== membershipId));
+      queryClient.setQueryData<Member[]>(membersKey, (old) =>
+        (old ?? []).filter((m) => m.membershipId !== membershipId),
+      );
     } catch {
-      setPageErr("Failed to cancel invitation.");
+      setMutationErr("Failed to cancel invitation.");
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-8 max-w-4xl">
-      {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
@@ -230,20 +223,25 @@ export default function MembersPage({
         )}
       </div>
 
-      {pageErr && (
+      {mutationErr && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {pageErr}
+          {mutationErr}
+        </div>
+      )}
+      {membersQuery.isError && (
+        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
+          Failed to load members. Please refresh.
         </div>
       )}
 
-      {loading ? (
+      {membersQuery.isPending ? (
         <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading members…
         </div>
       ) : (
         <div ref={listRef} className="space-y-6">
-          {/* ── Active members ─────────────────────── */}
+          {/* Active members */}
           <section>
             <p
               className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
@@ -251,7 +249,6 @@ export default function MembersPage({
             >
               Active members ({active.length})
             </p>
-
             <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
               {active.length === 0 ? (
                 <p className="px-5 py-8 text-sm text-center text-[var(--text-muted)]">
@@ -270,7 +267,6 @@ export default function MembersPage({
                       key={m.membershipId}
                       className="member-row group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors"
                     >
-                      {/* Avatar + info */}
                       <Avatar name={m.displayName} email={m.email} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -288,15 +284,14 @@ export default function MembersPage({
                         </p>
                       </div>
 
-                      {/* Role — inline select if can update and not self */}
                       {canUpdate && !isMe && !isOwner ? (
                         <div className="flex items-center gap-1.5">
-                          {roleLoading === m.membershipId ? (
+                          {roleLoading === m.membershipId && (
                             <Loader2
                               size={12}
                               className="animate-spin text-purple-400"
                             />
-                          ) : null}
+                          )}
                           <select
                             value={m.role}
                             onChange={(e) =>
@@ -324,12 +319,10 @@ export default function MembersPage({
                         </span>
                       )}
 
-                      {/* Joined date */}
                       <span className="text-xs text-[var(--text-muted)] flex-shrink-0 hidden sm:block">
                         {formatDate(m.joinedAt)}
                       </span>
 
-                      {/* Action menu */}
                       {confirming ? (
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs text-[var(--text-muted)]">
@@ -388,7 +381,7 @@ export default function MembersPage({
             </div>
           </section>
 
-          {/* ── Pending invitations ────────────────── */}
+          {/* Pending invitations */}
           {pending.length > 0 && (
             <section>
               <p
@@ -397,7 +390,6 @@ export default function MembersPage({
               >
                 Pending invitations ({pending.length})
               </p>
-
               <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
                 {pending.map((m) => {
                   const roleStyle = ROLE_STYLE[m.role];
@@ -406,12 +398,9 @@ export default function MembersPage({
                       key={m.membershipId}
                       className="member-row flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)]"
                     >
-                      {/* Icon */}
                       <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
                         <Mail size={13} className="text-[var(--text-muted)]" />
                       </div>
-
-                      {/* Email */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[var(--text-secondary)] truncate">
                           {m.email}
@@ -426,15 +415,11 @@ export default function MembersPage({
                           </p>
                         </div>
                       </div>
-
-                      {/* Role badge */}
                       <span
                         className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${roleStyle.cls}`}
                       >
                         {roleStyle.label}
                       </span>
-
-                      {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {canInvite && (
                           <button

@@ -19,6 +19,7 @@ import {
   Lock,
   ChevronLeft,
   ChevronRight,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -51,12 +52,6 @@ function buildModules(orgId: string): Module[] {
       icon: TrendingUp,
       status: "live",
       items: [
-        {
-          label: "Companies",
-          href: `/${orgId}/crm/companies`,
-          icon: Building2,
-          permission: "crm.companies.view",
-        },
         {
           label: "Pipeline",
           href: `/${orgId}/crm/pipeline`,
@@ -365,13 +360,23 @@ function ModuleRow({
 export default function Sidebar({ orgId }: { orgId: string }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { sidebarCollapsed, toggleSidebar, setSidebarCollapsed } = useUiStore();
+  const {
+    sidebarCollapsed,
+    toggleSidebar,
+    setSidebarCollapsed,
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  } = useUiStore();
   const { hasPermission } = usePermissionStore();
   const { currentOrg, user } = useAuthStore();
 
   const [openModules, setOpenModules] = useState<Set<string>>(new Set());
 
-  const closed = sidebarCollapsed;
+  // Icon-only collapse is a desktop concept. On mobile the sidebar is an
+  // off-canvas drawer (open/closed driven by mobileMenuOpen) and should
+  // always show full labels when it's open — collapsing it to icons would
+  // defeat the point of a drawer meant for one-handed tap navigation.
+  const closed = sidebarCollapsed && !mobileMenuOpen;
   const modules = buildModules(orgId);
 
   // Auto-expand module that owns the current route
@@ -386,7 +391,11 @@ export default function Sidebar({ orgId }: { orgId: string }) {
   const toggleModule = (id: string) =>
     setOpenModules((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
 
@@ -408,212 +417,243 @@ export default function Sidebar({ orgId }: { orgId: string }) {
   const isModActive = (m: Module) => pathname.startsWith(`/${orgId}/${m.id}`);
 
   return (
-    <aside
-      className={`
-        flex flex-col shrink-0 h-screen overflow-hidden
-        bg-gray-50 dark:bg-[#080808]
-        border-r border-gray-200 dark:border-white/5.5
-        transition-[width,min-width] duration-220 ease-in-out
-        ${closed ? "w-16 min-w-16" : "w-60 min-w-60"}
-      `}
-    >
-      {/* ── Header ──────────────────────────────── */}
-      <div
+    <>
+      {/* Mobile backdrop — tapping it closes the drawer */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        onClick={() => setMobileMenuOpen(false)}
         className={`
+          fixed inset-y-0 left-0 z-40 lg:relative lg:z-auto lg:inset-auto
+          flex flex-col shrink-0 h-screen overflow-hidden
+          bg-gray-50 dark:bg-[#080808]
+          border-r border-gray-200 dark:border-white/5.5
+          transition-transform lg:transition-[width,min-width] duration-220 ease-in-out
+          w-72 ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0
+          ${closed ? "lg:w-16 lg:min-w-16" : "lg:w-60 lg:min-w-60"}
+        `}
+      >
+        {/* ── Header ──────────────────────────────── */}
+        <div
+          className={`
           h-14 flex items-center shrink-0 gap-2
           border-b border-gray-100 dark:border-white/5
           ${closed ? "justify-center px-3" : "justify-between pl-4.5 pr-3"}
         `}
-      >
-        {!closed && (
-          <Link
-            href={`/${orgId}`}
-            className="flex items-center gap-2.5 no-underline min-w-0"
-          >
-            <LogoMark />
-            <span className="font-syne text-sm font-bold tracking-[-0.01em] whitespace-nowrap text-gray-900 dark:text-white">
-              BusinessSAAS
-            </span>
-          </Link>
-        )}
-        <button
-          onClick={toggleSidebar}
-          className="
-            w-6 h-6 shrink-0 flex items-center justify-center rounded-md
+        >
+          {!closed && (
+            <Link
+              href={`/${orgId}`}
+              className="flex items-center gap-2.5 no-underline min-w-0"
+            >
+              <LogoMark />
+              <span className="font-syne text-sm font-bold tracking-[-0.01em] whitespace-nowrap text-gray-900 dark:text-white">
+                BusinessSAAS
+              </span>
+            </Link>
+          )}
+          <button
+            onClick={toggleSidebar}
+            className="
+            hidden lg:flex w-6 h-6 shrink-0 items-center justify-center rounded-md
             border border-gray-200 dark:border-white/10
             text-gray-400 dark:text-[#444]
             hover:bg-gray-100 dark:hover:bg-white/8
             hover:text-gray-700 dark:hover:text-[#bbb]
             transition-colors
           "
-          title={closed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {closed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-        </button>
-      </div>
+            title={closed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {closed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMobileMenuOpen(false);
+            }}
+            className="
+            lg:hidden w-6 h-6 shrink-0 flex items-center justify-center rounded-md
+            border border-gray-200 dark:border-white/10
+            text-gray-400 dark:text-[#444]
+            hover:bg-gray-100 dark:hover:bg-white/8
+            hover:text-gray-700 dark:hover:text-[#bbb]
+            transition-colors
+          "
+            title="Close menu"
+          >
+            <X size={14} />
+          </button>
+        </div>
 
-      {/* ── Org switcher ────────────────────────── */}
-      <Link
-        href="/select-organization"
-        className={`
+        {/* ── Org switcher ────────────────────────── */}
+        <Link
+          href="/select-organization"
+          className={`
           flex items-center shrink-0 no-underline
           border-b border-gray-100 dark:border-white/5
           hover:bg-gray-100 dark:hover:bg-white/4 transition-colors
           ${closed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3.5 py-2.5"}
         `}
-        title={closed ? (currentOrg?.name ?? "Switch workspace") : undefined}
-      >
-        <div className="w-7.5 h-7.5 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
-          {(currentOrg?.name ?? "W")[0].toUpperCase()}
-        </div>
-        {!closed && (
-          <div className="min-w-0">
-            <p className="text-[0.8rem] font-semibold truncate leading-snug text-gray-800 dark:text-[#e0e0e0]">
-              {currentOrg?.name ?? "Workspace"}
-            </p>
-            <p className="text-[0.65rem] text-gray-400 dark:text-[#444]">
-              Switch workspace
-            </p>
-          </div>
-        )}
-      </Link>
-
-      {/* ── Scrollable nav ──────────────────────── */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2 scrollbar-none">
-        {/* COMMON */}
-        <div className="mb-2">
-          {!closed && <SectionLabel>Common</SectionLabel>}
-          {closed && <div className="h-2" />}
-          {hasPermission("tasks.view") && (
-            <NavLink
-              href={`/${orgId}/tasks`}
-              icon={CheckSquare}
-              label="Tasks"
-              active={isPathActive(`/${orgId}/tasks`)}
-              closed={closed}
-            />
-          )}
-        </div>
-
-        {/* PLATFORM */}
-        <div className="mb-2">
-          {!closed && <SectionLabel>Platform</SectionLabel>}
-          {closed && <div className="h-2" />}
-          {PLATFORM_ITEMS.filter(
-            (s) => !s.permission || hasPermission(s.permission),
-          ).map((s) => (
-            <NavLink
-              key={s.href}
-              href={`/${orgId}/${s.href}`}
-              icon={s.icon}
-              label={s.label}
-              active={isPathActive(`/${orgId}/${s.href}`)}
-              closed={closed}
-            />
-          ))}
-        </div>
-
-        {/* MODULES */}
-        <div className="mb-2">
-          {!closed && <SectionLabel>Modules</SectionLabel>}
-          {closed && <div className="h-2" />}
-          {modules.map((m) => {
-            const isOpen = openModules.has(m.id);
-            const isActive = isModActive(m);
-            const visible = (m.items ?? []).filter(
-              (i) => !i.permission || hasPermission(i.permission),
-            );
-            const itemH = 34; // px per sub-item
-
-            return (
-              <div key={m.id}>
-                <ModuleRow
-                  module={m}
-                  isOpen={isOpen}
-                  isActive={isActive}
-                  closed={closed}
-                  onClick={() => handleModuleClick(m)}
-                />
-
-                {/* Accordion — maxHeight must stay inline (computed value) */}
-                {m.status === "live" && !closed && (
-                  <div
-                    className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
-                    style={{
-                      maxHeight: isOpen
-                        ? `${visible.length * itemH + 8}px`
-                        : "0px",
-                    }}
-                  >
-                    <div className="ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5 space-y-0.5">
-                      {visible.map((item) => (
-                        <NavLink
-                          key={item.href}
-                          href={item.href}
-                          icon={item.icon}
-                          label={item.label}
-                          active={isPathActive(item.href)}
-                          closed={false}
-                          compact
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* SETTINGS */}
-        <div>
-          {!closed && <SectionLabel>Settings</SectionLabel>}
-          {closed && <div className="h-2" />}
-          {SETTINGS.filter(
-            (s) => !s.permission || hasPermission(s.permission),
-          ).map((s) => (
-            <NavLink
-              key={s.href}
-              href={`/${orgId}/${s.href}`}
-              icon={s.icon}
-              label={s.label}
-              active={isPathActive(`/${orgId}/${s.href}`)}
-              closed={closed}
-            />
-          ))}
-        </div>
-      </nav>
-
-      {/* ── Footer — user profile ────────────────── */}
-      <div
-        className={`border-t border-gray-100 dark:border-white/5 shrink-0 ${
-          closed ? "p-1.5" : "p-2"
-        }`}
-      >
-        <Link
-          href={`/${orgId}/settings/profile`}
-          className={`
-            flex items-center no-underline rounded-md
-            hover:bg-gray-100 dark:hover:bg-white/5 transition-colors
-            ${closed ? "justify-center p-2" : "gap-2.5 px-2 py-1.5"}
-          `}
-          title={closed ? (user?.displayName ?? "Profile") : undefined}
+          title={closed ? (currentOrg?.name ?? "Switch workspace") : undefined}
         >
-          <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
-            {(user?.firstName ?? user?.displayName ?? "?")[0].toUpperCase()}
+          <div className="w-7.5 h-7.5 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
+            {(currentOrg?.name ?? "W")[0].toUpperCase()}
           </div>
           {!closed && (
             <div className="min-w-0">
-              <p className="text-[0.78rem] font-medium truncate leading-snug text-gray-700 dark:text-[#d0d0d0]">
-                {user?.displayName ?? user?.firstName ?? "User"}
+              <p className="text-[0.8rem] font-semibold truncate leading-snug text-gray-800 dark:text-[#e0e0e0]">
+                {currentOrg?.name ?? "Workspace"}
               </p>
-              <p className="text-[0.65rem] truncate text-gray-400 dark:text-[#444]">
-                {user?.email ?? ""}
+              <p className="text-[0.65rem] text-gray-400 dark:text-[#444]">
+                Switch workspace
               </p>
             </div>
           )}
         </Link>
-      </div>
-    </aside>
+
+        {/* ── Scrollable nav ──────────────────────── */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2 scrollbar-none">
+          {/* COMMON */}
+          <div className="mb-2">
+            {!closed && <SectionLabel>Common</SectionLabel>}
+            {closed && <div className="h-2" />}
+            {hasPermission("tasks.view") && (
+              <NavLink
+                href={`/${orgId}/tasks`}
+                icon={CheckSquare}
+                label="Tasks"
+                active={isPathActive(`/${orgId}/tasks`)}
+                closed={closed}
+              />
+            )}
+          </div>
+
+          {/* PLATFORM */}
+          <div className="mb-2">
+            {!closed && <SectionLabel>Platform</SectionLabel>}
+            {closed && <div className="h-2" />}
+            {PLATFORM_ITEMS.filter(
+              (s) => !s.permission || hasPermission(s.permission),
+            ).map((s) => (
+              <NavLink
+                key={s.href}
+                href={`/${orgId}/${s.href}`}
+                icon={s.icon}
+                label={s.label}
+                active={isPathActive(`/${orgId}/${s.href}`)}
+                closed={closed}
+              />
+            ))}
+          </div>
+
+          {/* MODULES */}
+          <div className="mb-2">
+            {!closed && <SectionLabel>Modules</SectionLabel>}
+            {closed && <div className="h-2" />}
+            {modules.map((m) => {
+              const isOpen = openModules.has(m.id);
+              const isActive = isModActive(m);
+              const visible = (m.items ?? []).filter(
+                (i) => !i.permission || hasPermission(i.permission),
+              );
+              const itemH = 34; // px per sub-item
+
+              return (
+                <div key={m.id}>
+                  <ModuleRow
+                    module={m}
+                    isOpen={isOpen}
+                    isActive={isActive}
+                    closed={closed}
+                    onClick={() => handleModuleClick(m)}
+                  />
+
+                  {/* Accordion — maxHeight must stay inline (computed value) */}
+                  {m.status === "live" && !closed && (
+                    <div
+                      className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
+                      style={{
+                        maxHeight: isOpen
+                          ? `${visible.length * itemH + 8}px`
+                          : "0px",
+                      }}
+                    >
+                      <div className="ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5 space-y-0.5">
+                        {visible.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            href={item.href}
+                            icon={item.icon}
+                            label={item.label}
+                            active={isPathActive(item.href)}
+                            closed={false}
+                            compact
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* SETTINGS */}
+          <div>
+            {!closed && <SectionLabel>Settings</SectionLabel>}
+            {closed && <div className="h-2" />}
+            {SETTINGS.filter(
+              (s) => !s.permission || hasPermission(s.permission),
+            ).map((s) => (
+              <NavLink
+                key={s.href}
+                href={`/${orgId}/${s.href}`}
+                icon={s.icon}
+                label={s.label}
+                active={isPathActive(`/${orgId}/${s.href}`)}
+                closed={closed}
+              />
+            ))}
+          </div>
+        </nav>
+
+        {/* ── Footer — user profile ────────────────── */}
+        <div
+          className={`border-t border-gray-100 dark:border-white/5 shrink-0 ${
+            closed ? "p-1.5" : "p-2"
+          }`}
+        >
+          <Link
+            href={`/${orgId}/settings/profile`}
+            className={`
+            flex items-center no-underline rounded-md
+            hover:bg-gray-100 dark:hover:bg-white/5 transition-colors
+            ${closed ? "justify-center p-2" : "gap-2.5 px-2 py-1.5"}
+          `}
+            title={closed ? (user?.displayName ?? "Profile") : undefined}
+          >
+            <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
+              {(user?.firstName ?? user?.displayName ?? "?")[0].toUpperCase()}
+            </div>
+            {!closed && (
+              <div className="min-w-0">
+                <p className="text-[0.78rem] font-medium truncate leading-snug text-gray-700 dark:text-[#d0d0d0]">
+                  {user?.displayName ?? user?.firstName ?? "User"}
+                </p>
+                <p className="text-[0.65rem] truncate text-gray-400 dark:text-[#444]">
+                  {user?.email ?? ""}
+                </p>
+              </div>
+            )}
+          </Link>
+        </div>
+      </aside>
+    </>
   );
 }

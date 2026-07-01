@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/crm/reports/page.tsx
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   BarChart,
   Bar,
@@ -31,7 +32,8 @@ import {
   getDealsByStage,
   getLeadsBySource,
 } from "@/lib/crm/reports";
-import type { CRMSummary, DealByStage, LeadBySource, Deal } from "@/types/crm";
+import { queryKeys } from "@/lib/queryKeys";
+import type { DealByStage, LeadBySource } from "@/types/crm";
 
 // ── Chart colors ───────────────────────────────────────
 const PURPLE_PALETTE = ["#7c3aed", "#a855f7", "#c084fc", "#d8b4fe", "#ede9fe"];
@@ -164,6 +166,41 @@ function PieTooltip({
   );
 }
 
+// ── Inline state for a single chart card (loading / error / empty) ──
+// Each chart owns its own query now, so each gets its own state here —
+// a slow or broken "leads by source" call no longer blocks the
+// "deals by stage" bar chart from rendering.
+function ChartCardState({
+  loading,
+  error,
+  emptyLabel,
+}: {
+  loading: boolean;
+  error: boolean;
+  emptyLabel: string;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-48 gap-2 text-sm text-[var(--text-muted)]">
+        <Loader2 size={14} className="animate-spin text-purple-500" />
+        Loading…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-48 text-sm text-red-400">
+        Failed to load this chart.
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-center h-48 text-sm text-[var(--text-muted)]">
+      {emptyLabel}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────
 export default function ReportsPage({
   params,
@@ -172,41 +209,44 @@ export default function ReportsPage({
 }) {
   const { orgId } = use(params);
   const { hasPermission } = usePermissionStore();
+  const canView = hasPermission("crm.reports.view");
 
-  const [summary, setSummary] = useState<CRMSummary | null>(null);
-  const [recentDeals, setRecentDeals] = useState<Deal[]>([]);
-  const [dealsByStage, setDealsByStage] = useState<DealByStage[]>([]);
-  const [leadsBySource, setLeadsBySource] = useState<LeadBySource[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // All three queries are declared unconditionally — Rules of Hooks requires
+  // every render to call the same hooks in the same order. `enabled: canView`
+  // is what actually gates the network call for users without permission;
+  // the original version called useEffect only after an early permission
+  // return, which is a latent "Rendered fewer hooks than expected" crash
+  // waiting for the day permissions change while this page is open.
+  const overviewQuery = useQuery({
+    queryKey: queryKeys.crm.reports.overview(orgId),
+    queryFn: () => getOverview(orgId),
+    enabled: canView,
+  });
 
-  if (!hasPermission("crm.reports.view")) {
+  const dealsByStageQuery = useQuery({
+    queryKey: queryKeys.crm.reports.dealsByStage(orgId),
+    queryFn: () => getDealsByStage(orgId),
+    enabled: canView,
+  });
+
+  const leadsBySourceQuery = useQuery({
+    queryKey: queryKeys.crm.reports.leadsBySource(orgId),
+    queryFn: () => getLeadsBySource(orgId),
+    enabled: canView,
+  });
+
+  if (!canView) {
     return (
       <div className="p-8 text-sm text-[var(--text-muted)]">
-        You don't have permission to view reports.
+        You do not have permission to view reports.
       </div>
     );
   }
 
-  useEffect(() => {
-    Promise.all([
-      getOverview(orgId),
-      getDealsByStage(orgId),
-      getLeadsBySource(orgId),
-    ])
-      .then(([overview, byStage, bySource]) => {
-        setSummary(overview.summary);
-        setRecentDeals(overview.recent_deals);
-        setDealsByStage(byStage);
-        setLeadsBySource(bySource);
-      })
-      .catch(() => {
-        setError("Failed to load reports.");
-      })
-      .finally(() => setLoading(false));
-  }, [orgId]);
-
-  if (loading) {
+  // Stat cards, the won/lost row, and the recent-deals list all come from
+  // `overview` — that one query is the only thing the page genuinely can't
+  // render without, so it's the only one still gating the whole page.
+  if (overviewQuery.isPending) {
     return (
       <div className="flex items-center gap-3 p-8 text-sm text-[var(--text-muted)]">
         <Loader2 size={15} className="animate-spin text-purple-500" />
@@ -215,25 +255,28 @@ export default function ReportsPage({
     );
   }
 
-  if (error || !summary) {
+  if (overviewQuery.isError || !overviewQuery.data) {
     return (
-      <div className="p-8 text-sm text-red-400">
-        {error ?? "Failed to load."}
-      </div>
+      <div className="p-8 text-sm text-red-400">Failed to load reports.</div>
     );
   }
 
-  // Prepare chart data
-  const stageChartData = dealsByStage.map((d) => ({
-    name: d.stage_name,
-    value: d.total_value,
-    count: d.count,
-  }));
+  const { summary, recent_deals: recentDeals } = overviewQuery.data;
 
-  const sourceChartData = leadsBySource.map((d) => ({
-    name: d.source,
-    value: d.count,
-  }));
+  const stageChartData = (dealsByStageQuery.data ?? []).map(
+    (d: DealByStage) => ({
+      name: d.stage_name,
+      value: d.total_value,
+      count: d.count,
+    }),
+  );
+
+  const sourceChartData = (leadsBySourceQuery.data ?? []).map(
+    (d: LeadBySource) => ({
+      name: d.source,
+      value: d.count,
+    }),
+  );
 
   return (
     <div className="p-6 md:p-8 max-w-7xl">
@@ -349,10 +392,14 @@ export default function ReportsPage({
             Total value per pipeline stage
           </p>
 
-          {stageChartData.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-sm text-[var(--text-muted)]">
-              No deals data yet
-            </div>
+          {dealsByStageQuery.isPending ||
+          dealsByStageQuery.isError ||
+          stageChartData.length === 0 ? (
+            <ChartCardState
+              loading={dealsByStageQuery.isPending}
+              error={dealsByStageQuery.isError}
+              emptyLabel="No deals data yet"
+            />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={stageChartData} barSize={36}>
@@ -395,10 +442,14 @@ export default function ReportsPage({
             Where your leads come from
           </p>
 
-          {sourceChartData.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-sm text-[var(--text-muted)]">
-              No leads data yet
-            </div>
+          {leadsBySourceQuery.isPending ||
+          leadsBySourceQuery.isError ||
+          sourceChartData.length === 0 ? (
+            <ChartCardState
+              loading={leadsBySourceQuery.isPending}
+              error={leadsBySourceQuery.isError}
+              emptyLabel="No leads data yet"
+            />
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>

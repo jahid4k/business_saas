@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/companies/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -26,6 +27,7 @@ import {
   updateCompany,
   deleteCompany,
 } from "@/lib/crm/companies";
+import { queryKeys } from "@/lib/queryKeys";
 import CompanyForm from "@/components/crm/companies/CompanyForm";
 import type { Company } from "@/types/crm";
 
@@ -57,13 +59,12 @@ export default function CompaniesPage({
   const router = useRouter();
   const { hasPermission } = usePermissionStore();
   const { openDrawer } = useDrawer();
+  const queryClient = useQueryClient();
 
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageErr, setPageErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -71,25 +72,17 @@ export default function CompaniesPage({
   const canUpdate = hasPermission("crm.companies.update");
   const canDelete = hasPermission("crm.companies.delete");
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setPageErr(null);
-    try {
-      const data = await listCompanies(orgId);
-      setCompanies(data.companies);
-    } catch {
-      setPageErr("Failed to load companies. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
+  // ── Query ─────────────────────────────────────────────────────────────────
+  const companiesKey = queryKeys.crm.companies.list(orgId);
+  const companiesQuery = useQuery({
+    queryKey: companiesKey,
+    queryFn: () => listCompanies(orgId).then((r) => r.companies),
+  });
+  const companies = companiesQuery.data ?? [];
 
+  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (companiesQuery.isPending || !listRef.current) return;
     const rows = listRef.current.querySelectorAll(".company-row");
     if (rows.length) {
       gsap.fromTo(
@@ -98,7 +91,7 @@ export default function CompaniesPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" },
       );
     }
-  }, [loading]);
+  }, [companiesQuery.isPending]);
 
   const filtered = companies.filter((c) => {
     if (!search) return true;
@@ -110,6 +103,7 @@ export default function CompaniesPage({
     );
   });
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     openDrawer({
       title: "New company",
@@ -126,7 +120,10 @@ export default function CompaniesPage({
               address: values.address || undefined,
               country: values.country || undefined,
             });
-            setCompanies((prev) => [created, ...prev]);
+            queryClient.setQueryData<Company[]>(companiesKey, (old) => [
+              created,
+              ...(old ?? []),
+            ]);
           }}
         />
       ),
@@ -150,8 +147,8 @@ export default function CompaniesPage({
               address: values.address || undefined,
               country: values.country || undefined,
             });
-            setCompanies((prev) =>
-              prev.map((c) => (c.id === updated.id ? updated : c)),
+            queryClient.setQueryData<Company[]>(companiesKey, (old) =>
+              (old ?? []).map((c) => (c.id === updated.id ? updated : c)),
             );
           }}
         />
@@ -160,19 +157,22 @@ export default function CompaniesPage({
   };
 
   const handleDelete = async (companyId: string) => {
+    setMutationErr(null);
     try {
       await deleteCompany(orgId, companyId);
-      setCompanies((prev) => prev.filter((c) => c.id !== companyId));
+      queryClient.setQueryData<Company[]>(companiesKey, (old) =>
+        (old ?? []).filter((c) => c.id !== companyId),
+      );
       if (expandedId === companyId) setExpandedId(null);
     } catch {
-      setPageErr("Failed to delete company.");
+      setMutationErr("Failed to delete company.");
     }
     setDeleteId(null);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-8 max-w-5xl">
-      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
@@ -199,13 +199,17 @@ export default function CompaniesPage({
         )}
       </div>
 
-      {pageErr && (
+      {mutationErr && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {pageErr}
+          {mutationErr}
+        </div>
+      )}
+      {companiesQuery.isError && (
+        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
+          Failed to load companies. Please refresh.
         </div>
       )}
 
-      {/* Search */}
       <div className="relative mb-5 max-w-xs">
         <Search
           size={14}
@@ -215,16 +219,11 @@ export default function CompaniesPage({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, industry, domain…"
-          className="
-            w-full pl-9 pr-3.5 py-2 rounded-lg text-sm
-            bg-[var(--bg-elevated)] border border-[var(--border)]
-            text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
-            outline-none focus:border-purple-500 transition-all
-          "
+          className="w-full pl-9 pr-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 transition-all"
         />
       </div>
 
-      {loading ? (
+      {companiesQuery.isPending ? (
         <div className="flex items-center gap-3 py-20 text-sm text-[var(--text-muted)]">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading companies…
@@ -249,7 +248,6 @@ export default function CompaniesPage({
         </div>
       ) : (
         <>
-          {/* Table header */}
           <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2 mb-1">
             {["Company", "Industry", "Domain", "Created", ""].map((h) => (
               <span
@@ -269,20 +267,14 @@ export default function CompaniesPage({
 
               return (
                 <div key={company.id} className="company-row">
-                  {/* Main row */}
                   <div
-                    className={`
-                      grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center
-                      px-4 py-3.5 rounded-xl border cursor-pointer transition-all duration-150
-                      ${
-                        expanded
-                          ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
-                          : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
-                      }
-                    `}
+                    className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3.5 rounded-xl border cursor-pointer transition-all duration-150 ${
+                      expanded
+                        ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
+                        : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
+                    }`}
                     onClick={() => setExpandedId(expanded ? null : company.id)}
                   >
-                    {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
                       <CompanyAvatar name={company.name} />
                       <span
@@ -294,23 +286,15 @@ export default function CompaniesPage({
                         {company.name}
                       </span>
                     </div>
-
-                    {/* Industry */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {company.industry ?? "—"}
                     </span>
-
-                    {/* Domain */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {company.domain ?? "—"}
                     </span>
-
-                    {/* Created */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {formatDate(company.created_at)}
                     </span>
-
-                    {/* Chevron */}
                     <div className="flex items-center justify-end">
                       {expanded ? (
                         <ChevronDown
@@ -326,14 +310,12 @@ export default function CompaniesPage({
                     </div>
                   </div>
 
-                  {/* Expanded panel */}
                   {expanded && (
                     <div
                       className="px-5 py-4 bg-[var(--bg-elevated)] border border-purple-500/25 border-t-0 rounded-b-xl"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-start justify-between gap-6">
-                        {/* Detail fields */}
                         <div className="grid grid-cols-3 gap-x-8 gap-y-3 flex-1">
                           {company.website && (
                             <div className="flex items-center gap-2">
@@ -341,7 +323,6 @@ export default function CompaniesPage({
                                 size={12}
                                 className="text-[var(--text-muted)] flex-shrink-0"
                               />
-                              {/* Added the opening "<a" below */}
                               <a
                                 href={company.website}
                                 target="_blank"
@@ -376,8 +357,6 @@ export default function CompaniesPage({
                             </div>
                           )}
                         </div>
-
-                        {/* Actions */}
                         {confirming ? (
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-xs text-[var(--text-muted)]">
@@ -398,7 +377,6 @@ export default function CompaniesPage({
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            {/* View contacts → detail page */}
                             <button
                               onClick={() =>
                                 router.push(`/${orgId}/companies/${company.id}`)
@@ -435,7 +413,6 @@ export default function CompaniesPage({
               );
             })}
           </div>
-
           <p className="mt-4 text-xs text-[var(--text-muted)]">
             Showing {filtered.length} of {companies.length} companies
           </p>

@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/contacts/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Users,
@@ -13,8 +14,6 @@ import {
   ChevronDown,
   Loader2,
   Search,
-  Pencil,
-  Trash2,
 } from "lucide-react";
 import gsap from "gsap";
 import { usePermissionStore } from "@/stores/permissionStore";
@@ -26,8 +25,9 @@ import {
   deleteContact,
 } from "@/lib/crm/contacts";
 import { listCompanies } from "@/lib/crm/companies";
+import { queryKeys } from "@/lib/queryKeys";
 import ContactForm from "@/components/crm/contacts/ContactForm";
-import type { Contact, Company } from "@/types/crm";
+import type { Contact } from "@/types/crm";
 
 const SOURCE_LABELS: Record<string, string> = {
   linkedin: "LinkedIn",
@@ -66,14 +66,12 @@ export default function ContactsPage({
   const { orgId } = use(params);
   const { hasPermission } = usePermissionStore();
   const { openDrawer } = useDrawer();
+  const queryClient = useQueryClient();
 
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageErr, setPageErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -81,29 +79,26 @@ export default function ContactsPage({
   const canUpdate = hasPermission("crm.contacts.update");
   const canDelete = hasPermission("crm.contacts.delete");
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setPageErr(null);
-    try {
-      const [contactsData, companiesData] = await Promise.all([
-        listContacts(orgId),
-        listCompanies(orgId),
-      ]);
-      setContacts(contactsData.contacts);
-      setCompanies(companiesData.companies);
-    } catch {
-      setPageErr("Failed to load contacts. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
+  // ── Queries ───────────────────────────────────────────────────────────────
+  const contactsKey = queryKeys.crm.contacts.list(orgId);
+  const contactsQuery = useQuery({
+    queryKey: contactsKey,
+    queryFn: () => listContacts(orgId).then((r) => r.contacts),
+  });
+  const companiesQuery = useQuery({
+    queryKey: queryKeys.crm.companies.list(orgId),
+    queryFn: () => listCompanies(orgId).then((r) => r.companies),
+  });
 
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  const contacts = contactsQuery.data ?? [];
+  const companyMap = useMemo(
+    () => new Map((companiesQuery.data ?? []).map((c) => [c.id, c])),
+    [companiesQuery.data],
+  );
 
+  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (contactsQuery.isPending || !listRef.current) return;
     const rows = listRef.current.querySelectorAll(".contact-row");
     if (rows.length) {
       gsap.fromTo(
@@ -112,11 +107,9 @@ export default function ContactsPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" },
       );
     }
-  }, [loading]);
+  }, [contactsQuery.isPending]);
 
-  // Map company_id → company name for display
-  const companyMap = new Map(companies.map((c) => [c.id, c]));
-
+  // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = contacts.filter((c) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -128,6 +121,7 @@ export default function ContactsPage({
     );
   });
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     openDrawer({
       title: "New contact",
@@ -145,7 +139,10 @@ export default function ContactsPage({
               company_id: values.company_id || undefined,
               source: values.source || undefined,
             });
-            setContacts((prev) => [created, ...prev]);
+            queryClient.setQueryData<Contact[]>(contactsKey, (old) => [
+              created,
+              ...(old ?? []),
+            ]);
           }}
         />
       ),
@@ -170,8 +167,8 @@ export default function ContactsPage({
               company_id: values.company_id || undefined,
               source: values.source || undefined,
             });
-            setContacts((prev) =>
-              prev.map((c) => (c.id === updated.id ? updated : c)),
+            queryClient.setQueryData<Contact[]>(contactsKey, (old) =>
+              (old ?? []).map((c) => (c.id === updated.id ? updated : c)),
             );
           }}
         />
@@ -180,19 +177,22 @@ export default function ContactsPage({
   };
 
   const handleDelete = async (contactId: string) => {
+    setMutationErr(null);
     try {
       await deleteContact(orgId, contactId);
-      setContacts((prev) => prev.filter((c) => c.id !== contactId));
+      queryClient.setQueryData<Contact[]>(contactsKey, (old) =>
+        (old ?? []).filter((c) => c.id !== contactId),
+      );
       if (expandedId === contactId) setExpandedId(null);
     } catch {
-      setPageErr("Failed to delete contact.");
+      setMutationErr("Failed to delete contact.");
     }
     setDeleteId(null);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-8 max-w-5xl">
-      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
@@ -219,13 +219,17 @@ export default function ContactsPage({
         )}
       </div>
 
-      {pageErr && (
+      {mutationErr && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {pageErr}
+          {mutationErr}
+        </div>
+      )}
+      {contactsQuery.isError && (
+        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
+          Failed to load contacts. Please refresh.
         </div>
       )}
 
-      {/* Search */}
       <div className="relative mb-5 max-w-xs">
         <Search
           size={14}
@@ -235,16 +239,11 @@ export default function ContactsPage({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, email, company…"
-          className="
-            w-full pl-9 pr-3.5 py-2 rounded-lg text-sm
-            bg-[var(--bg-elevated)] border border-[var(--border)]
-            text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
-            outline-none focus:border-purple-500 transition-all
-          "
+          className="w-full pl-9 pr-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 transition-all"
         />
       </div>
 
-      {loading ? (
+      {contactsQuery.isPending ? (
         <div className="flex items-center gap-3 py-20 text-sm text-[var(--text-muted)]">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading contacts…
@@ -269,7 +268,6 @@ export default function ContactsPage({
         </div>
       ) : (
         <div>
-          {/* Table header */}
           <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 px-4 py-2 mb-1">
             {["Contact", "Company", "Source", "Created", ""].map((h) => (
               <span
@@ -293,20 +291,14 @@ export default function ContactsPage({
 
               return (
                 <div key={contact.id} className="contact-row">
-                  {/* Main row */}
                   <div
-                    className={`
-                      grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center
-                      px-4 py-3.5 rounded-xl border cursor-pointer transition-all duration-150
-                      ${
-                        expanded
-                          ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
-                          : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
-                      }
-                    `}
+                    className={`grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3.5 rounded-xl border cursor-pointer transition-all duration-150 ${
+                      expanded
+                        ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
+                        : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
+                    }`}
                     onClick={() => setExpandedId(expanded ? null : contact.id)}
                   >
-                    {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
                       <ContactAvatar name={contact.first_name} />
                       <div className="min-w-0">
@@ -325,25 +317,17 @@ export default function ContactsPage({
                         )}
                       </div>
                     </div>
-
-                    {/* Company */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {company?.name ?? "—"}
                     </span>
-
-                    {/* Source */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {contact.source
                         ? (SOURCE_LABELS[contact.source] ?? contact.source)
                         : "—"}
                     </span>
-
-                    {/* Created */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {formatDate(contact.created_at)}
                     </span>
-
-                    {/* Chevron */}
                     <div className="flex items-center justify-end">
                       {expanded ? (
                         <ChevronDown
@@ -359,14 +343,12 @@ export default function ContactsPage({
                     </div>
                   </div>
 
-                  {/* Expanded panel */}
                   {expanded && (
                     <div
                       className="px-5 py-4 bg-[var(--bg-elevated)] border border-purple-500/25 border-t-0 rounded-b-xl"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-start justify-between gap-6">
-                        {/* Details */}
                         <div className="grid grid-cols-3 gap-x-8 gap-y-3 flex-1">
                           {contact.email && (
                             <div className="flex items-center gap-2">
@@ -413,8 +395,6 @@ export default function ContactsPage({
                             </div>
                           )}
                         </div>
-
-                        {/* Actions */}
                         {confirming ? (
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-xs text-[var(--text-muted)]">
@@ -460,7 +440,6 @@ export default function ContactsPage({
               );
             })}
           </div>
-
           <p className="mt-4 text-xs text-[var(--text-muted)]">
             Showing {filtered.length} of {contacts.length} contacts
           </p>
