@@ -12,8 +12,10 @@ import {
   User,
   Building2,
   ChevronDown,
+  Menu,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -49,14 +51,16 @@ export default function Topbar({ orgId }: { orgId: string }) {
   // `theme` can be undefined during SSR / before hydration.
   // `resolvedTheme` is always the actual applied value after mount.
   const { resolvedTheme, setTheme } = useTheme();
-  const { setUiTheme } = useUiStore();
+  const { setUiTheme, toggleMobileMenu } = useUiStore();
   const { user, reset: resetAuth } = useAuthStore();
   const { reset: resetPerms } = usePermissionStore();
+  const queryClient = useQueryClient();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: standard next-themes pattern to delay theme-dependent rendering until after hydration, avoiding a server/client mismatch on resolvedTheme
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -89,6 +93,7 @@ export default function Topbar({ orgId }: { orgId: string }) {
     setToken(null);
     resetAuth();
     resetPerms();
+    queryClient.clear(); // wipe cached org/CRM data — prevents stale tenant data leaking into the next login in this tab
     router.replace("/login");
   };
 
@@ -131,18 +136,27 @@ export default function Topbar({ orgId }: { orgId: string }) {
           zIndex: 10,
         }}
       >
-        {/* ── Page title ──────────────────── */}
-        <span
-          style={{
-            fontFamily: FONT_INTER,
-            fontSize: "0.875rem",
-            fontWeight: 500,
-            color: "var(--text-secondary)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {pageTitle}
-        </span>
+        {/* ── Hamburger (mobile only) + page title ─ */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <TopbarBtn
+            className="lg:hidden"
+            onClick={toggleMobileMenu}
+            title="Open menu"
+          >
+            <Menu size={18} style={{ color: "var(--text-muted)" }} />
+          </TopbarBtn>
+          <span
+            style={{
+              fontFamily: FONT_INTER,
+              fontSize: "0.875rem",
+              fontWeight: 500,
+              color: "var(--text-secondary)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {pageTitle}
+          </span>
+        </div>
 
         {/* ── Right actions ───────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -333,15 +347,18 @@ function TopbarBtn({
   children,
   onClick,
   title,
+  className,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   title?: string;
+  className?: string;
 }) {
   return (
     <button
       onClick={onClick}
       title={title}
+      className={className}
       style={btnBase}
       onMouseEnter={(e) =>
         (e.currentTarget.style.background = "var(--bg-elevated)")

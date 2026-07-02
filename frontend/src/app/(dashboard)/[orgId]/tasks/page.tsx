@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/tasks/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   MoreHorizontal,
@@ -15,9 +16,10 @@ import gsap from "gsap";
 import type { Task, TaskStatus } from "@/types/task";
 import { listTasks, createTask, updateTask, deleteTask } from "@/lib/tasks";
 import { usePermissionStore } from "@/stores/permissionStore";
-
 import { useDrawer } from "@/contexts/DrawerContext";
-import TaskForm, { type TaskFormValues } from "@/components/tasks/TaskForm";
+import TaskForm from "@/components/tasks/TaskForm";
+import { toast } from "sonner";
+import { queryKeys } from "@/lib/queryKeys";
 
 // ── Status config ─────────────────────────────────────────
 type FilterKey = "all" | TaskStatus;
@@ -84,13 +86,12 @@ export default function TasksPage({
   const { openDrawer } = useDrawer();
   const { orgId } = use(params);
   const { hasPermission } = usePermissionStore();
+  const queryClient = useQueryClient();
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Only used for delete errors — fetch errors are handled by tasksQuery.isError
 
   const listRef = useRef<HTMLDivElement>(null);
   const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -100,27 +101,23 @@ export default function TasksPage({
   const canUpdate = hasPermission("tasks.update");
   const canDelete = hasPermission("tasks.delete");
 
-  // ── Fetch ─────────────────────────────────────────────
-  const fetchTasks = useCallback(async () => {
-    setLoading(true);
-    setPageError(null);
-    try {
-      const data = await listTasks(orgId);
-      setTasks(data.tasks);
-    } catch {
-      setPageError("Failed to load tasks. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
+  // ── Query ─────────────────────────────────────────────
+  // Replaces: tasks useState + loading useState + fetchTasks useCallback +
+  // the fetch useEffect that triggered the ESLint error.
+  const tasksKey = queryKeys.tasks.list(orgId);
+  const tasksQuery = useQuery({
+    queryKey: tasksKey,
+    queryFn: () => listTasks(orgId).then((r) => r.tasks),
+  });
 
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+  const tasks = tasksQuery.data ?? [];
 
   // ── GSAP: animate rows on load / filter change ────────
+  // This useEffect is fine — it only calls gsap (an external system),
+  // never setState. Dependency flips from `loading` to `isPending`
+  // which is the same boolean, just sourced from the query now.
   useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (tasksQuery.isPending || !listRef.current) return;
     const rows = listRef.current.querySelectorAll(".task-row");
     if (rows.length > 0) {
       gsap.fromTo(
@@ -129,7 +126,7 @@ export default function TasksPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" },
       );
     }
-  }, [loading, activeFilter]);
+  }, [tasksQuery.isPending, activeFilter]);
 
   // ── Close action menu on outside click ────────────────
   useEffect(() => {
@@ -166,12 +163,17 @@ export default function TasksPage({
                 : undefined,
             };
             const created = await createTask(orgId, body);
-            setTasks((prev) => [created, ...prev]);
+            queryClient.setQueryData<Task[]>(tasksKey, (old) => [
+              created,
+              ...(old ?? []),
+            ]);
+            toast.success("Task created.");
           }}
         />
       ),
     });
   };
+
   const openEdit = (task: Task) => {
     setOpenMenuId(null);
     openDrawer({
@@ -189,40 +191,26 @@ export default function TasksPage({
                 : undefined,
             };
             const updated = await updateTask(orgId, task.id, body);
-            setTasks((prev) =>
-              prev.map((t) => (t.id === updated.id ? updated : t)),
+            queryClient.setQueryData<Task[]>(tasksKey, (old) =>
+              (old ?? []).map((t) => (t.id === updated.id ? updated : t)),
             );
+            toast.success("Task updated.");
           }}
         />
       ),
     });
   };
 
-  const handleSave = async (values: TaskFormValues) => {
-    const body = {
-      title: values.title,
-      description: values.description || undefined,
-      status: values.status,
-      // Convert YYYY-MM-DD → ISO 8601; undefined if empty
-      dueDate: values.dueDate ? `${values.dueDate}T00:00:00.000Z` : undefined,
-    };
-
-    if (editingTask) {
-      const updated = await updateTask(orgId, editingTask.id, body);
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    } else {
-      const created = await createTask(orgId, body);
-      setTasks((prev) => [created, ...prev]);
-    }
-    setDrawerOpen(false);
-  };
-
   const handleDelete = async (taskId: string) => {
+    toast.error(null);
     try {
       await deleteTask(orgId, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      queryClient.setQueryData<Task[]>(tasksKey, (old) =>
+        (old ?? []).filter((t) => t.id !== taskId),
+      );
+      toast.success("Task deleted.");
     } catch {
-      setPageError("Failed to delete task.");
+      toast.error("Failed to delete task.");
     }
     setDeleteConfirm(null);
     setOpenMenuId(null);
@@ -259,10 +247,12 @@ export default function TasksPage({
           )}
         </div>
 
-        {/* Page-level error */}
-        {pageError && (
+        {/* Delete error */}
+
+        {/* Fetch error */}
+        {tasksQuery.isError && (
           <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-            {pageError}
+            Failed to load tasks. Please refresh.
           </div>
         )}
 
@@ -309,7 +299,7 @@ export default function TasksPage({
         </div>
 
         {/* Loading */}
-        {loading ? (
+        {tasksQuery.isPending ? (
           <div className="flex items-center justify-center py-20">
             <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
               <Loader2 size={16} className="animate-spin text-purple-500" />
@@ -421,7 +411,6 @@ export default function TasksPage({
                           else menuRefs.current.delete(task.id);
                         }}
                       >
-                        {/* 3-dot button — visible on hover */}
                         <button
                           onClick={() =>
                             setOpenMenuId(menuOpen ? null : task.id)
@@ -431,7 +420,6 @@ export default function TasksPage({
                           <MoreHorizontal size={15} />
                         </button>
 
-                        {/* Dropdown menu */}
                         {menuOpen && (
                           <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
                             {canUpdate && (
@@ -467,7 +455,7 @@ export default function TasksPage({
         )}
 
         {/* Footer count */}
-        {!loading && filtered.length > 0 && (
+        {!tasksQuery.isPending && filtered.length > 0 && (
           <p className="mt-5 text-xs text-[var(--text-muted)]">
             Showing {filtered.length} of {tasks.length}{" "}
             {tasks.length === 1 ? "task" : "tasks"}
