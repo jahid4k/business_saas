@@ -294,7 +294,7 @@ function ModuleRow({
           ${closed ? "justify-center py-2.5 px-0" : "gap-2.5 px-2 py-2"}
           ${
             soon
-              ? "opacity-40 cursor-not-allowed"
+              ? "cursor-not-allowed"
               : isActive
                 ? "bg-purple-50 dark:bg-purple-700/10 cursor-pointer"
                 : "hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer"

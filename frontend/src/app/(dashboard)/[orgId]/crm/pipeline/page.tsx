@@ -34,6 +34,7 @@ import {
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { toast } from "sonner";
 import { listPipelines, listStages } from "@/lib/crm/pipelines";
 import {
   listDeals,
@@ -513,13 +514,11 @@ export default function PipelinePage({
   const [selectedPipe, setSelectedPipe] = useState<string>("");
   const [mobileStageId, setMobileStageId] = useState<string>("");
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
-  const [pageErr, setPageErr] = useState<string | null>(null);
-
+  const [cardOrder, setCardOrder] = useState<Map<string, string[]>>(new Map());
   // Within-column card order — client-side only.
   // Persists for this browser session; resets on page refresh.
   // Full persistence needs a `sort_order` column on crm_deals + a backend
   // reorder endpoint, which can be added as a future backend step.
-  const [cardOrder, setCardOrder] = useState<Map<string, string[]>>(new Map());
 
   const canCreate = hasPermission("crm.deals.create");
   const canMoveStage = hasPermission("crm.deals.move_stage");
@@ -689,7 +688,7 @@ export default function PipelinePage({
           return next;
         });
       }
-      setPageErr("Failed to move deal.");
+      toast.error("Failed to move deal.");
     },
 
     onSuccess: (updatedDeal) => {
@@ -706,6 +705,7 @@ export default function PipelinePage({
         ...(old ?? []),
         created,
       ]);
+      toast.success("Deal created.");
     },
   });
 
@@ -721,6 +721,7 @@ export default function PipelinePage({
       queryClient.setQueryData<Deal[]>(dealsKey, (old) =>
         (old ?? []).map((d) => (d.id === updated.id ? updated : d)),
       );
+      toast.success("Deal updated.");
     },
   });
 
@@ -730,8 +731,9 @@ export default function PipelinePage({
       queryClient.setQueryData<Deal[]>(dealsKey, (old) =>
         (old ?? []).map((d) => (d.id === updated.id ? updated : d)),
       );
+      toast.success("Deal won! 🎉");
     },
-    onError: () => setPageErr("Failed to mark deal as won."),
+    onError: () => toast.error("Failed to mark deal as won."),
   });
 
   const lostMutation = useMutation({
@@ -740,8 +742,9 @@ export default function PipelinePage({
       queryClient.setQueryData<Deal[]>(dealsKey, (old) =>
         (old ?? []).map((d) => (d.id === updated.id ? updated : d)),
       );
+      toast.success("Deal marked as lost.");
     },
-    onError: () => setPageErr("Failed to mark deal as lost."),
+    onError: () => toast.error("Failed to mark deal as lost."),
   });
 
   // ── DnD handlers (desktop only) ───────────────────────────────────────────
@@ -861,13 +864,11 @@ export default function PipelinePage({
     pipelinesQuery.isPending ||
     (!!activePipelineId && (stagesQuery.isPending || dealsQuery.isPending));
 
-  const bannerError =
-    pageErr ??
-    (pipelinesQuery.isError
-      ? "Failed to load pipelines."
-      : stagesQuery.isError || dealsQuery.isError
-        ? "Failed to load board."
-        : null);
+  const bannerError = pipelinesQuery.isError
+    ? "Failed to load pipelines."
+    : stagesQuery.isError || dealsQuery.isError
+      ? "Failed to load board."
+      : null;
 
   const totalOpenValue = pipelineDeals
     .filter((d) => d.status === "open")

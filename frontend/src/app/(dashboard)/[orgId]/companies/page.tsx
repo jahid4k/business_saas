@@ -27,6 +27,7 @@ import {
   updateCompany,
   deleteCompany,
 } from "@/lib/crm/companies";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import CompanyForm from "@/components/crm/companies/CompanyForm";
 import type { Company } from "@/types/crm";
@@ -64,7 +65,6 @@ export default function CompaniesPage({
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -124,6 +124,7 @@ export default function CompaniesPage({
               created,
               ...(old ?? []),
             ]);
+            toast.success("Company created.");
           }}
         />
       ),
@@ -150,6 +151,7 @@ export default function CompaniesPage({
             queryClient.setQueryData<Company[]>(companiesKey, (old) =>
               (old ?? []).map((c) => (c.id === updated.id ? updated : c)),
             );
+            toast.success("Company updated.");
           }}
         />
       ),
@@ -157,15 +159,16 @@ export default function CompaniesPage({
   };
 
   const handleDelete = async (companyId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await deleteCompany(orgId, companyId);
       queryClient.setQueryData<Company[]>(companiesKey, (old) =>
         (old ?? []).filter((c) => c.id !== companyId),
       );
       if (expandedId === companyId) setExpandedId(null);
+      toast.success("Company deleted.");
     } catch {
-      setMutationErr("Failed to delete company.");
+      toast.error("Failed to delete company.");
     }
     setDeleteId(null);
   };
@@ -199,11 +202,6 @@ export default function CompaniesPage({
         )}
       </div>
 
-      {mutationErr && (
-        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {mutationErr}
-        </div>
-      )}
       {companiesQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
           Failed to load companies. Please refresh.

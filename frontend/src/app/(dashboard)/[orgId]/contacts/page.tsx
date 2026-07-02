@@ -25,6 +25,7 @@ import {
   deleteContact,
 } from "@/lib/crm/contacts";
 import { listCompanies } from "@/lib/crm/companies";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import ContactForm from "@/components/crm/contacts/ContactForm";
 import type { Contact } from "@/types/crm";
@@ -71,7 +72,6 @@ export default function ContactsPage({
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +143,7 @@ export default function ContactsPage({
               created,
               ...(old ?? []),
             ]);
+            toast.success("Contact created.");
           }}
         />
       ),
@@ -170,6 +171,7 @@ export default function ContactsPage({
             queryClient.setQueryData<Contact[]>(contactsKey, (old) =>
               (old ?? []).map((c) => (c.id === updated.id ? updated : c)),
             );
+            toast.success("Contact updated.");
           }}
         />
       ),
@@ -177,15 +179,16 @@ export default function ContactsPage({
   };
 
   const handleDelete = async (contactId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await deleteContact(orgId, contactId);
       queryClient.setQueryData<Contact[]>(contactsKey, (old) =>
         (old ?? []).filter((c) => c.id !== contactId),
       );
       if (expandedId === contactId) setExpandedId(null);
+      toast.success("Contact deleted.");
     } catch {
-      setMutationErr("Failed to delete contact.");
+      toast.error("Failed to delete contact.");
     }
     setDeleteId(null);
   };
@@ -219,11 +222,6 @@ export default function ContactsPage({
         )}
       </div>
 
-      {mutationErr && (
-        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {mutationErr}
-        </div>
-      )}
       {contactsQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
           Failed to load contacts. Please refresh.

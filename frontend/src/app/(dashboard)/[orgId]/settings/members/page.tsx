@@ -16,6 +16,7 @@ import {
   resendInvitation,
   cancelInvitation,
 } from "@/lib/members";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import InviteForm from "@/components/members/InviteForm";
 import type { Member, MemberRole } from "@/types/rbac";
@@ -80,7 +81,6 @@ export default function MembersPage({
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -136,6 +136,7 @@ export default function MembersPage({
             await inviteMember(orgId, { email, role });
             // inviteMember returns void; invalidate to get the new pending member
             await queryClient.invalidateQueries({ queryKey: membersKey });
+            toast.success("Invitation sent.");
           }}
         />
       ),
@@ -144,7 +145,7 @@ export default function MembersPage({
 
   const handleRoleChange = async (m: Member, role: MemberRole) => {
     setRoleLoading(m.membershipId);
-    setMutationErr(null);
+    toast.error(null);
     try {
       await updateMemberRole(orgId, m.membershipId, role);
       queryClient.setQueryData<Member[]>(membersKey, (old) =>
@@ -152,45 +153,49 @@ export default function MembersPage({
           x.membershipId === m.membershipId ? { ...x, role } : x,
         ),
       );
+      toast.success("Role updated.");
     } catch {
-      setMutationErr("Failed to update role.");
+      toast.error("Failed to update role.");
     } finally {
       setRoleLoading(null);
     }
   };
 
   const handleRemove = async (membershipId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await updateMemberStatus(orgId, membershipId, "inactive");
       queryClient.setQueryData<Member[]>(membersKey, (old) =>
         (old ?? []).filter((m) => m.membershipId !== membershipId),
       );
     } catch {
-      setMutationErr("Failed to remove member.");
+      toast.error("Failed to remove member.");
+      toast.success("Member removed.");
     }
     setConfirm(null);
     setOpenMenu(null);
   };
 
   const handleResend = async (membershipId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await resendInvitation(orgId, membershipId);
+      toast.success("Invitation resent.");
     } catch {
-      setMutationErr("Failed to resend invitation.");
+      toast.error("Failed to resend invitation.");
     }
   };
 
   const handleCancelInvite = async (membershipId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await cancelInvitation(orgId, membershipId);
       queryClient.setQueryData<Member[]>(membersKey, (old) =>
         (old ?? []).filter((m) => m.membershipId !== membershipId),
       );
     } catch {
-      setMutationErr("Failed to cancel invitation.");
+      toast.error("Failed to cancel invitation.");
+      toast.success("Invitation cancelled.");
     }
   };
 
@@ -223,11 +228,6 @@ export default function MembersPage({
         )}
       </div>
 
-      {mutationErr && (
-        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {mutationErr}
-        </div>
-      )}
       {membersQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
           Failed to load members. Please refresh.

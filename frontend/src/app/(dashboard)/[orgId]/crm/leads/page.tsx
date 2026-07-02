@@ -24,6 +24,7 @@ import {
   deleteLead,
   convertLead,
 } from "@/lib/crm/leads";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import LeadForm from "@/components/crm/leads/LeadForm";
 import ConvertForm from "@/components/crm/leads/ConvertForm";
@@ -112,7 +113,6 @@ export default function LeadsPage({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -181,6 +181,7 @@ export default function LeadsPage({
               created,
               ...(old ?? []),
             ]);
+            toast.success("Lead created.");
           }}
         />
       ),
@@ -208,6 +209,7 @@ export default function LeadsPage({
             queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
               (old ?? []).map((l) => (l.id === updated.id ? updated : l)),
             );
+            toast.success("Lead updated.");
           }}
         />
       ),
@@ -229,6 +231,7 @@ export default function LeadsPage({
                 l.id === result.lead.id ? result.lead : l,
               ),
             );
+            toast.success("Lead converted.");
           }}
         />
       ),
@@ -237,15 +240,16 @@ export default function LeadsPage({
 
   const handleDelete = async (leadId: string) => {
     setDeletingId(leadId);
-    setMutationErr(null);
+    toast.error(null);
     try {
       await deleteLead(orgId, leadId);
       queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
         (old ?? []).filter((l) => l.id !== leadId),
       );
       if (expandedId === leadId) setExpandedId(null);
+      toast.success("Lead deleted.");
     } catch {
-      setMutationErr("Failed to delete lead.");
+      toast.error("Failed to delete lead.");
     } finally {
       setDeletingId(null);
       setDeleteId(null);
@@ -281,11 +285,6 @@ export default function LeadsPage({
         )}
       </div>
 
-      {mutationErr && (
-        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {mutationErr}
-        </div>
-      )}
       {leadsQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
           Failed to load leads. Please refresh.

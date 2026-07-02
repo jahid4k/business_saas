@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { listSessions, revokeSession, listLoginEvents } from "@/lib/security";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import type { Session } from "@/lib/security";
 
@@ -158,7 +159,6 @@ export default function SecurityPage({
   type Tab = "sessions" | "events";
   const [activeTab, setActiveTab] = useState<Tab>("sessions");
   const [revokingId, setRevokingId] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const canView = hasPermission("security.sessions.view");
   const canRevoke = hasPermission("security.sessions.revoke");
@@ -188,7 +188,7 @@ export default function SecurityPage({
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleRevoke = async (sessionId: string) => {
     setRevokingId(sessionId);
-    setMutationErr(null);
+    toast.error(null);
     try {
       await revokeSession(orgId, sessionId);
       queryClient.setQueryData<Session[]>(sessionsKey, (old) =>
@@ -198,8 +198,9 @@ export default function SecurityPage({
             : s,
         ),
       );
+      toast.success("Session revoked.");
     } catch {
-      setMutationErr("Failed to revoke session.");
+      toast.error("Failed to revoke session.");
     } finally {
       setRevokingId(null);
     }
@@ -234,11 +235,6 @@ export default function SecurityPage({
         </div>
       ) : (
         <>
-          {mutationErr && (
-            <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-              {mutationErr}
-            </div>
-          )}
           {(sessionsQuery.isError || eventsQuery.isError) && (
             <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
               Failed to load security data.

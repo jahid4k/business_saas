@@ -18,6 +18,7 @@ import { listTasks, createTask, updateTask, deleteTask } from "@/lib/tasks";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import TaskForm from "@/components/tasks/TaskForm";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 
 // ── Status config ─────────────────────────────────────────
@@ -91,7 +92,6 @@ export default function TasksPage({
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   // Only used for delete errors — fetch errors are handled by tasksQuery.isError
-  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
   const menuRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -167,6 +167,7 @@ export default function TasksPage({
               created,
               ...(old ?? []),
             ]);
+            toast.success("Task created.");
           }}
         />
       ),
@@ -193,6 +194,7 @@ export default function TasksPage({
             queryClient.setQueryData<Task[]>(tasksKey, (old) =>
               (old ?? []).map((t) => (t.id === updated.id ? updated : t)),
             );
+            toast.success("Task updated.");
           }}
         />
       ),
@@ -200,14 +202,15 @@ export default function TasksPage({
   };
 
   const handleDelete = async (taskId: string) => {
-    setDeleteErr(null);
+    toast.error(null);
     try {
       await deleteTask(orgId, taskId);
       queryClient.setQueryData<Task[]>(tasksKey, (old) =>
         (old ?? []).filter((t) => t.id !== taskId),
       );
+      toast.success("Task deleted.");
     } catch {
-      setDeleteErr("Failed to delete task.");
+      toast.error("Failed to delete task.");
     }
     setDeleteConfirm(null);
     setOpenMenuId(null);
@@ -245,11 +248,6 @@ export default function TasksPage({
         </div>
 
         {/* Delete error */}
-        {deleteErr && (
-          <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-            {deleteErr}
-          </div>
-        )}
 
         {/* Fetch error */}
         {tasksQuery.isError && (

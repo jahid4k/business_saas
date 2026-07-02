@@ -17,6 +17,7 @@ import {
   deleteRole,
   updateRolePermissions,
 } from "@/lib/roles";
+import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import PermissionForm from "@/components/roles/PermissionForm";
 import type { Role, RoleWithMeta } from "@/types/rbac";
@@ -131,7 +132,6 @@ export default function RolesPage({
   const queryClient = useQueryClient();
 
   const [delConfirm, setDelConfirm] = useState<string | null>(null);
-  const [mutationErr, setMutationErr] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +187,7 @@ export default function RolesPage({
                 r.role.id === updated.id ? { ...r, role: updated } : r,
               ),
             );
+            toast.success("Permissions updated.");
           }}
         />
       ),
@@ -205,6 +206,7 @@ export default function RolesPage({
             // cloneRole returns the new Role, but we need RoleWithMeta for the list.
             // invalidate is the safe choice here.
             await queryClient.invalidateQueries({ queryKey: rolesKey });
+            toast.success("Role cloned.");
           }}
         />
       ),
@@ -212,14 +214,15 @@ export default function RolesPage({
   };
 
   const handleDelete = async (roleId: string) => {
-    setMutationErr(null);
+    toast.error(null);
     try {
       await deleteRole(orgId, roleId);
       queryClient.setQueryData<RoleWithMeta[]>(rolesKey, (old) =>
         (old ?? []).filter((r) => r.role.id !== roleId),
       );
     } catch {
-      setMutationErr("Failed to delete role.");
+      toast.error("Failed to delete role.");
+      toast.success("Role deleted.");
     }
     setDelConfirm(null);
   };
@@ -244,11 +247,6 @@ export default function RolesPage({
         </div>
       </div>
 
-      {mutationErr && (
-        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {mutationErr}
-        </div>
-      )}
       {rolesQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
           Failed to load roles. Please refresh.
