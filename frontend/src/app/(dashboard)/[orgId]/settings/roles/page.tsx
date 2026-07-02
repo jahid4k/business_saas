@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/settings/roles/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Shield, Copy, Trash2, Loader2, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,10 +17,11 @@ import {
   deleteRole,
   updateRolePermissions,
 } from "@/lib/roles";
+import { toast } from "sonner";
+import { queryKeys } from "@/lib/queryKeys";
 import PermissionForm from "@/components/roles/PermissionForm";
-import type { Role, RoleWithMeta, Permission } from "@/types/rbac";
+import type { Role, RoleWithMeta } from "@/types/rbac";
 
-// ── Role display colours ──────────────────────────────
 const ROLE_COLOR: Record<string, string> = {
   owner: "text-purple-400 bg-purple-500/10 border-purple-500/20",
   admin: "text-blue-400   bg-blue-500/10   border-blue-500/20",
@@ -28,7 +30,6 @@ const ROLE_COLOR: Record<string, string> = {
   viewer: "text-zinc-400   bg-zinc-500/10   border-zinc-500/20",
 };
 
-// ── Clone form (inline component) ─────────────────────
 const cloneSchema = z.object({
   name: z.string().min(2, "At least 2 characters").max(64),
 });
@@ -80,13 +81,11 @@ function CloneForm({
             </p>
           </div>
         </div>
-
         {error && (
           <div className="px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">
             {error}
           </div>
         )}
-
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-[var(--text-secondary)]">
             New role name <span className="text-red-400">*</span>
@@ -101,7 +100,6 @@ function CloneForm({
           )}
         </div>
       </form>
-
       <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
         <button
           type="button"
@@ -123,7 +121,6 @@ function CloneForm({
   );
 }
 
-// ── Page ──────────────────────────────────────────────
 export default function RolesPage({
   params,
 }: {
@@ -132,11 +129,8 @@ export default function RolesPage({
   const { orgId } = use(params);
   const { hasPermission } = usePermissionStore();
   const { openDrawer } = useDrawer();
+  const queryClient = useQueryClient();
 
-  const [roles, setRoles] = useState<RoleWithMeta[]>([]);
-  const [allPerms, setAllPerms] = useState<Permission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageErr, setPageErr] = useState<string | null>(null);
   const [delConfirm, setDelConfirm] = useState<string | null>(null);
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -146,31 +140,23 @@ export default function RolesPage({
   const canDelete = hasPermission("roles.delete");
   const canEditPerms = hasPermission("roles.permissions.update");
 
-  // Fetch
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setPageErr(null);
-    try {
-      const [r, p] = await Promise.all([
-        listRoles(orgId),
-        listPermissions(orgId),
-      ]);
-      setRoles(r);
-      setAllPerms(p);
-    } catch {
-      setPageErr("Failed to load roles. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
+  // ── Queries ───────────────────────────────────────────────────────────────
+  const rolesKey = queryKeys.roles.list(orgId);
+  const rolesQuery = useQuery({
+    queryKey: rolesKey,
+    queryFn: () => listRoles(orgId),
+  });
+  const permsQuery = useQuery({
+    queryKey: queryKeys.roles.permissions(orgId),
+    queryFn: () => listPermissions(orgId),
+  });
 
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
+  const roles = rolesQuery.data ?? [];
+  const allPerms = permsQuery.data ?? [];
 
-  // GSAP
+  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (rolesQuery.isPending || !listRef.current) return;
     const cards = listRef.current.querySelectorAll(".role-card");
     if (cards.length) {
       gsap.fromTo(
@@ -179,9 +165,9 @@ export default function RolesPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.05, ease: "power2.out" },
       );
     }
-  }, [loading]);
+  }, [rolesQuery.isPending]);
 
-  // Open permission drawer
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const openPermissions = (rwm: RoleWithMeta) => {
     openDrawer({
       title: `${rwm.role.name.charAt(0).toUpperCase() + rwm.role.name.slice(1)} permissions`,
@@ -196,18 +182,18 @@ export default function RolesPage({
               rwm.role.id,
               keys,
             );
-            setRoles((prev) =>
-              prev.map((r) =>
+            queryClient.setQueryData<RoleWithMeta[]>(rolesKey, (old) =>
+              (old ?? []).map((r) =>
                 r.role.id === updated.id ? { ...r, role: updated } : r,
               ),
             );
+            toast.success("Permissions updated.");
           }}
         />
       ),
     });
   };
 
-  // Open clone drawer
   const openClone = (rwm: RoleWithMeta) => {
     openDrawer({
       title: `Clone ${rwm.role.name}`,
@@ -217,27 +203,33 @@ export default function RolesPage({
           sourceRole={rwm.role}
           onSave={async (name) => {
             await cloneRole(orgId, rwm.role.id, name);
-            await fetch();
+            // cloneRole returns the new Role, but we need RoleWithMeta for the list.
+            // invalidate is the safe choice here.
+            await queryClient.invalidateQueries({ queryKey: rolesKey });
+            toast.success("Role cloned.");
           }}
         />
       ),
     });
   };
 
-  // Delete
   const handleDelete = async (roleId: string) => {
+    toast.error(null);
     try {
       await deleteRole(orgId, roleId);
-      setRoles((prev) => prev.filter((r) => r.role.id !== roleId));
+      queryClient.setQueryData<RoleWithMeta[]>(rolesKey, (old) =>
+        (old ?? []).filter((r) => r.role.id !== roleId),
+      );
     } catch {
-      setPageErr("Failed to delete role.");
+      toast.error("Failed to delete role.");
+      toast.success("Role deleted.");
     }
     setDelConfirm(null);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-8 max-w-4xl">
-      {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
@@ -255,13 +247,13 @@ export default function RolesPage({
         </div>
       </div>
 
-      {pageErr && (
+      {rolesQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {pageErr}
+          Failed to load roles. Please refresh.
         </div>
       )}
 
-      {loading ? (
+      {rolesQuery.isPending ? (
         <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading roles…
@@ -279,12 +271,9 @@ export default function RolesPage({
                 className="role-card rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/20 transition-all duration-150"
               >
                 <div className="flex items-center gap-4 px-5 py-4">
-                  {/* Icon */}
                   <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
                     <Shield size={15} className="text-[var(--text-muted)]" />
                   </div>
-
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 mb-0.5">
                       <span
@@ -305,13 +294,9 @@ export default function RolesPage({
                       {role.description}
                     </p>
                   </div>
-
-                  {/* Permission count */}
                   <span className="text-xs text-[var(--text-muted)] flex-shrink-0 hidden sm:block">
                     {role.permissionKeys.length} permissions
                   </span>
-
-                  {/* Actions */}
                   {confirming ? (
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs text-[var(--text-muted)]">
@@ -332,7 +317,6 @@ export default function RolesPage({
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 flex-shrink-0">
-                      {/* View / Edit permissions */}
                       {(canViewPerms || canEditPerms) && (
                         <button
                           onClick={() => openPermissions(rwm)}
@@ -343,24 +327,20 @@ export default function RolesPage({
                           <ChevronRight size={11} />
                         </button>
                       )}
-
-                      {/* Clone */}
                       {canClone && (
                         <button
                           onClick={() => openClone(rwm)}
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
                           title="Clone role"
+                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
                         >
                           <Copy size={13} />
                         </button>
                       )}
-
-                      {/* Delete — custom roles only */}
                       {canDelete && !role.isSystem && (
                         <button
                           onClick={() => setDelConfirm(role.id)}
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete role"
+                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <Trash2 size={13} />
                         </button>

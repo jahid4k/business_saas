@@ -22,8 +22,6 @@ import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { DrawerProvider } from "@/contexts/DrawerContext";
 
-const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
-
 interface Props {
   orgId: string;
   children: React.ReactNode;
@@ -69,7 +67,7 @@ export default function OrgProvider({ orgId, children }: Props) {
       try {
         const [org, membership] = await Promise.all([
           getOrganization(orgId),
-          getMyMembership(), // uses new token's bid claim
+          getMyMembership(),
         ]);
         if (!cancelled) {
           setOrg(org, membership);
@@ -89,31 +87,19 @@ export default function OrgProvider({ orgId, children }: Props) {
     };
   }, [orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Loading state (shown on page refresh or direct URL visit)
+  // ── Loading state ────────────────────────────────────────────────────────────
   if (!ready) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "#0a0a0a" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0a0a0a]">
+        <div className="flex items-center gap-3">
           <span
-            className="animate-spin block"
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: "50%",
-              border: "2px solid rgba(124,58,237,0.2)",
-              borderTopColor: "#7c3aed",
-            }}
+            className="
+              animate-spin block
+              w-[18px] h-[18px] rounded-full
+              border-2 border-purple-600/20 border-t-purple-600
+            "
           />
-          <span
-            style={{
-              fontSize: "0.875rem",
-              color: "#555",
-              fontFamily: FONT_INTER,
-            }}
-          >
+          <span className="text-sm text-gray-400 dark:text-[#555]">
             Loading workspace…
           </span>
         </div>
@@ -121,29 +107,15 @@ export default function OrgProvider({ orgId, children }: Props) {
     );
   }
 
-  // Dashboard shell
+  // ── Dashboard shell ──────────────────────────────────────────────────────────
   return (
     <DrawerProvider>
-      <div
-        style={{
-          display: "flex",
-          height: "100vh",
-          overflow: "hidden",
-          background: "#0a0a0a",
-        }}
-      >
+      <div className="flex h-screen overflow-hidden bg-white dark:bg-[#0a0a0a]">
         <Sidebar orgId={orgId} />
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            minWidth: 0,
-            minHeight: 0,
-          }}
-        >
+
+        <div className="flex flex-1 flex-col min-w-0 min-h-0">
           <Topbar orgId={orgId} />
-          <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+          <main className="flex-1 overflow-y-auto overflow-x-hidden">
             {children}
           </main>
         </div>
@@ -151,3 +123,8 @@ export default function OrgProvider({ orgId, children }: Props) {
     </DrawerProvider>
   );
 }
+
+// to make the content center
+// <main className="flex-1 overflow-y-auto overflow-x-hidden">
+//   <div className="w-full max-w-[1200px] mx-auto">{children}</div>
+// </main>

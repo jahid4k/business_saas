@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { Syne, Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
+import QueryProvider from "@/components/providers/QueryProvider";
+import { SonnerToaster } from "@/components/providers/SonnerToaster";
 
 const syne = Syne({
   variable: "--font-syne",
@@ -41,7 +43,10 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange={false}
         >
-          {children}
+          <QueryProvider>
+            <SonnerToaster />
+            {children}
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

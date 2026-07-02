@@ -1,7 +1,8 @@
 // src/app/(dashboard)/[orgId]/crm/leads/page.tsx
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   ChevronRight,
@@ -23,11 +24,12 @@ import {
   deleteLead,
   convertLead,
 } from "@/lib/crm/leads";
+import { toast } from "sonner";
+import { queryKeys } from "@/lib/queryKeys";
 import LeadForm from "@/components/crm/leads/LeadForm";
 import ConvertForm from "@/components/crm/leads/ConvertForm";
 import type { Lead, LeadStatus } from "@/types/crm";
 
-// ── Status config ─────────────────────────────────────
 type FilterStatus = "all" | LeadStatus;
 
 const STATUS_TABS: { key: FilterStatus; label: string }[] = [
@@ -72,7 +74,6 @@ const SOURCE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-// Distinct sources from the lead list
 function getSources(leads: Lead[]) {
   return [...new Set(leads.map((l) => l.source).filter(Boolean) as string[])];
 }
@@ -96,7 +97,6 @@ function LeadAvatar({ name }: { name: string }) {
   );
 }
 
-// ── Page ──────────────────────────────────────────────
 export default function LeadsPage({
   params,
 }: {
@@ -105,10 +105,8 @@ export default function LeadsPage({
   const { orgId } = use(params);
   const { hasPermission } = usePermissionStore();
   const { openDrawer } = useDrawer();
+  const queryClient = useQueryClient();
 
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageErr, setPageErr] = useState<string | null>(null);
   const [activeStatus, setActiveStatus] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("");
   const [search, setSearch] = useState("");
@@ -123,27 +121,17 @@ export default function LeadsPage({
   const canDelete = hasPermission("crm.leads.delete");
   const canConvert = hasPermission("crm.leads.convert");
 
-  // Fetch
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setPageErr(null);
-    try {
-      const data = await listLeads(orgId);
-      setLeads(data.leads);
-    } catch {
-      setPageErr("Failed to load leads. Please refresh.");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
+  // ── Query ─────────────────────────────────────────────────────────────────
+  const leadsKey = queryKeys.crm.leads.list(orgId);
+  const leadsQuery = useQuery({
+    queryKey: leadsKey,
+    queryFn: () => listLeads(orgId).then((r) => r.leads),
+  });
+  const leads = leadsQuery.data ?? [];
 
+  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  // GSAP
-  useEffect(() => {
-    if (loading || !listRef.current) return;
+    if (leadsQuery.isPending || !listRef.current) return;
     const rows = listRef.current.querySelectorAll(".lead-row");
     if (rows.length) {
       gsap.fromTo(
@@ -152,18 +140,19 @@ export default function LeadsPage({
         { opacity: 1, y: 0, duration: 0.3, stagger: 0.035, ease: "power2.out" },
       );
     }
-  }, [loading]);
+  }, [leadsQuery.isPending]);
 
-  // Client-side filtering
   const filtered = leads.filter((l) => {
     if (activeStatus !== "all" && l.status !== activeStatus) return false;
     if (sourceFilter && l.source !== sourceFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       const name = `${l.first_name} ${l.last_name ?? ""}`.toLowerCase();
-      const email = (l.email ?? "").toLowerCase();
-      const company = (l.company_name ?? "").toLowerCase();
-      if (!name.includes(q) && !email.includes(q) && !company.includes(q))
+      if (
+        !name.includes(q) &&
+        !(l.email ?? "").toLowerCase().includes(q) &&
+        !(l.company_name ?? "").toLowerCase().includes(q)
+      )
         return false;
     }
     return true;
@@ -171,7 +160,7 @@ export default function LeadsPage({
 
   const sources = getSources(leads);
 
-  // Open create drawer
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     openDrawer({
       title: "New lead",
@@ -188,14 +177,17 @@ export default function LeadsPage({
               title: values.title || undefined,
               source: values.source || undefined,
             });
-            setLeads((prev) => [created, ...prev]);
+            queryClient.setQueryData<Lead[]>(leadsKey, (old) => [
+              created,
+              ...(old ?? []),
+            ]);
+            toast.success("Lead created.");
           }}
         />
       ),
     });
   };
 
-  // Open edit drawer
   const openEdit = (lead: Lead) => {
     openDrawer({
       title: "Edit lead",
@@ -214,19 +206,19 @@ export default function LeadsPage({
               source: values.source || undefined,
               status: values.status || undefined,
             });
-            setLeads((prev) =>
-              prev.map((l) => (l.id === updated.id ? updated : l)),
+            queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
+              (old ?? []).map((l) => (l.id === updated.id ? updated : l)),
             );
+            toast.success("Lead updated.");
           }}
         />
       ),
     });
   };
 
-  // Open convert drawer
   const openConvert = (lead: Lead) => {
     openDrawer({
-      title: `Convert lead`,
+      title: "Convert lead",
       width: "md",
       content: (
         <ConvertForm
@@ -234,34 +226,39 @@ export default function LeadsPage({
           orgId={orgId}
           onSave={async (payload) => {
             const result = await convertLead(orgId, lead.id, payload);
-            // Update lead status to converted
-            setLeads((prev) =>
-              prev.map((l) => (l.id === result.lead.id ? result.lead : l)),
+            queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
+              (old ?? []).map((l) =>
+                l.id === result.lead.id ? result.lead : l,
+              ),
             );
+            toast.success("Lead converted.");
           }}
         />
       ),
     });
   };
 
-  // Delete
   const handleDelete = async (leadId: string) => {
     setDeletingId(leadId);
+    toast.error(null);
     try {
       await deleteLead(orgId, leadId);
-      setLeads((prev) => prev.filter((l) => l.id !== leadId));
+      queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
+        (old ?? []).filter((l) => l.id !== leadId),
+      );
       if (expandedId === leadId) setExpandedId(null);
+      toast.success("Lead deleted.");
     } catch {
-      setPageErr("Failed to delete lead.");
+      toast.error("Failed to delete lead.");
     } finally {
       setDeletingId(null);
       setDeleteId(null);
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 md:p-8 max-w-6xl">
-      {/* Page header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
@@ -288,17 +285,14 @@ export default function LeadsPage({
         )}
       </div>
 
-      {pageErr && (
+      {leadsQuery.isError && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
-          {pageErr}
+          Failed to load leads. Please refresh.
         </div>
       )}
 
-      {/* ── Filter bar ─────────────────────────────── */}
       <div className="space-y-3 mb-5">
-        {/* Search + Source row */}
         <div className="flex items-center gap-3">
-          {/* Search */}
           <div className="relative flex-1 max-w-xs">
             <Search
               size={14}
@@ -308,25 +302,13 @@ export default function LeadsPage({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, email, company…"
-              className="
-                w-full pl-9 pr-3.5 py-2 rounded-lg text-sm
-                bg-[var(--bg-elevated)] border border-[var(--border)]
-                text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
-                outline-none focus:border-purple-500 transition-all
-              "
+              className="w-full pl-9 pr-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 transition-all"
             />
           </div>
-
-          {/* Source */}
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="
-              px-3.5 py-2 rounded-lg text-sm
-              bg-[var(--bg-elevated)] border border-[var(--border)]
-              text-[var(--text-secondary)] outline-none
-              focus:border-purple-500 transition-all
-            "
+            className="px-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-purple-500 transition-all"
           >
             <option value="">All sources</option>
             {sources.map((s) => (
@@ -341,7 +323,6 @@ export default function LeadsPage({
           </select>
         </div>
 
-        {/* Status tabs */}
         <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
           {STATUS_TABS.map((tab) => {
             const count =
@@ -349,31 +330,24 @@ export default function LeadsPage({
                 ? leads.length
                 : leads.filter((l) => l.status === tab.key).length;
             const active = activeStatus === tab.key;
-
             return (
               <button
                 key={tab.key}
                 onClick={() => setActiveStatus(tab.key)}
-                className={`
-                  flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors
-                  ${
-                    active
-                      ? "text-purple-400 border-purple-500"
-                      : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
-                  }
-                `}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
+                  active
+                    ? "text-purple-400 border-purple-500"
+                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                }`}
               >
                 {tab.label}
                 {count > 0 && (
                   <span
-                    className={`
-                    text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center
-                    ${
+                    className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
                       active
                         ? "bg-purple-500/15 text-purple-400"
                         : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
-                    }
-                  `}
+                    }`}
                   >
                     {count}
                   </span>
@@ -384,8 +358,7 @@ export default function LeadsPage({
         </div>
       </div>
 
-      {/* ── Table ────────────────────────────────────── */}
-      {loading ? (
+      {leadsQuery.isPending ? (
         <div className="flex items-center gap-3 py-20 text-sm text-[var(--text-muted)]">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading leads…
@@ -412,7 +385,6 @@ export default function LeadsPage({
         </div>
       ) : (
         <>
-          {/* Table header */}
           <div className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 px-4 py-2 mb-1">
             {["Name", "Company", "Status", "Source", "Created", ""].map((h) => (
               <span
@@ -425,7 +397,6 @@ export default function LeadsPage({
             ))}
           </div>
 
-          {/* Rows */}
           <div ref={listRef} className="space-y-1">
             {filtered.map((lead) => {
               const expanded = expandedId === lead.id;
@@ -439,20 +410,14 @@ export default function LeadsPage({
 
               return (
                 <div key={lead.id} className="lead-row">
-                  {/* Main row */}
                   <div
-                    className={`
-                      grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center
-                      px-4 py-3 rounded-xl border transition-all duration-150 cursor-pointer
-                      ${
-                        expanded
-                          ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
-                          : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
-                      }
-                    `}
+                    className={`grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 rounded-xl border transition-all duration-150 cursor-pointer ${
+                      expanded
+                        ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
+                        : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
+                    }`}
                     onClick={() => setExpandedId(expanded ? null : lead.id)}
                   >
-                    {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
                       <LeadAvatar name={lead.first_name} />
                       <span
@@ -464,32 +429,22 @@ export default function LeadsPage({
                         {fullName}
                       </span>
                     </div>
-
-                    {/* Company */}
                     <span className="text-sm text-[var(--text-muted)] truncate">
                       {lead.company_name ?? "—"}
                     </span>
-
-                    {/* Status */}
                     <span
                       className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${status.cls}`}
                     >
                       {status.label}
                     </span>
-
-                    {/* Source */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {lead.source
                         ? (SOURCE_LABELS[lead.source] ?? lead.source)
                         : "—"}
                     </span>
-
-                    {/* Created */}
                     <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
                       {formatDate(lead.created_at)}
                     </span>
-
-                    {/* Expand chevron */}
                     <div className="flex items-center justify-end">
                       {expanded ? (
                         <ChevronDown
@@ -505,14 +460,12 @@ export default function LeadsPage({
                     </div>
                   </div>
 
-                  {/* Expanded detail panel */}
                   {expanded && (
                     <div
                       className="px-5 py-4 bg-[var(--bg-elevated)] border border-purple-500/25 border-t-0 rounded-b-xl"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex items-start justify-between gap-6">
-                        {/* Detail fields */}
                         <div className="grid grid-cols-3 gap-x-8 gap-y-3 flex-1">
                           {lead.email && (
                             <div className="flex items-center gap-2">
@@ -559,8 +512,6 @@ export default function LeadsPage({
                             </div>
                           )}
                         </div>
-
-                        {/* Action buttons */}
                         {confirming ? (
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-xs text-[var(--text-muted)]">
@@ -615,7 +566,6 @@ export default function LeadsPage({
               );
             })}
           </div>
-
           <p className="mt-4 text-xs text-[var(--text-muted)]">
             Showing {filtered.length} of {leads.length} leads
           </p>

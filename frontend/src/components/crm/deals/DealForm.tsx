@@ -62,7 +62,7 @@ export default function DealForm({
     watch,
     setValue,
     formState: { errors, isSubmitting },
-  } = useForm<DealFormValues>({
+  } = useForm<z.input<typeof schema>, unknown, DealFormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       title: deal?.title ?? "",

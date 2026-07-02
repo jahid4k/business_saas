@@ -44,25 +44,10 @@ export default function AuthProvider({
 
   if (checking) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "#0a0a0a" }}
-      >
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#0a0a0a]">
         <div className="flex items-center gap-3">
-          <span
-            className="w-5 h-5 rounded-full animate-spin block"
-            style={{
-              border: "2px solid rgba(124,58,237,0.2)",
-              borderTopColor: "#7c3aed",
-            }}
-          />
-          <span
-            className="text-sm"
-            style={{
-              color: "#555",
-              fontFamily: "var(--font-inter, Inter, sans-serif)",
-            }}
-          >
+          <span className="w-5 h-5 rounded-full animate-spin block border-2 border-purple-600/20 border-t-purple-600" />
+          <span className="text-sm text-gray-400 dark:text-[#555]">
             Loading workspace…
           </span>
         </div>
