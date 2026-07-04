@@ -9,6 +9,10 @@
 // entities (contacts, companies, engagement).
 
 export const queryKeys = {
+  profile: {
+    me: () => ["profile", "me"] as const,
+  },
+
   tasks: {
     all: (orgId: string) => ["tasks", orgId] as const,
     list: (orgId: string) => ["tasks", orgId, "list"] as const,
