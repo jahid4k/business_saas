@@ -16,4 +16,7 @@ func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Han
 	me.Patch("/settings", handler.UpdateMe)
 	me.Patch("/preferences", handler.UpdateMe)
 	me.Post("/avatar", handler.UpdateAvatar)
+	me.Get("/avatars", handler.ListAvatars)
+	me.Post("/avatars/:avatarId/activate", handler.ActivateAvatar)
+	me.Delete("/avatars/:avatarId", handler.DeleteAvatar)
 }

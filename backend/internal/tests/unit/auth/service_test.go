@@ -75,11 +75,7 @@ func (r *stubUserRepo) UpdateSettings(_ context.Context, _ string, _ user.Update
 	return nil, nil
 }
 
-func (r *stubUserRepo) UpdateAvatar(_ context.Context, _, _ string) (*user.User, error) {
-	return nil, nil
-}
-
-func (r *stubUserRepo) RecordFailedLogin(_ context.Context, _ string) error  { return nil }
+func (r *stubUserRepo) RecordFailedLogin(_ context.Context, _ string) error     { return nil }
 func (r *stubUserRepo) RecordSuccessfulLogin(_ context.Context, _ string) error { return nil }
 
 // ─────────────────────────────────────────────────────────────────────────────

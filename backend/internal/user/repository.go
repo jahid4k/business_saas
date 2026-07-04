@@ -24,7 +24,6 @@ type Repository interface {
 	Create(ctx context.Context, u *User) error
 	Update(ctx context.Context, u *User) error
 	UpdateSettings(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error)
-	UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error)
 	RecordFailedLogin(ctx context.Context, userID string) error
 	RecordSuccessfulLogin(ctx context.Context, userID string) error
 }
@@ -230,25 +229,6 @@ func (r *repoImpl) UpdateSettings(ctx context.Context, userID string, req Update
 	))
 	if err != nil {
 		return nil, fmt.Errorf("user: UpdateSettings: %w", err)
-	}
-	if u == nil {
-		return nil, ErrNotFound
-	}
-	return u, nil
-}
-
-// UpdateAvatar sets the user's photo URL.
-// FIX: returns ErrNotFound (not nil, nil) when user does not exist.
-func (r *repoImpl) UpdateAvatar(ctx context.Context, userID, photoURL string) (*User, error) {
-	const q = `
-		UPDATE users
-		SET photo_url  = NULLIF($1, ''),
-		    updated_at = NOW()
-		WHERE id = $2 AND deleted_at IS NULL
-		RETURNING ` + userSelectColumns
-	u, err := scanUser(r.db.QueryRow(ctx, q, strings.TrimSpace(photoURL), userID))
-	if err != nil {
-		return nil, fmt.Errorf("user: UpdateAvatar: %w", err)
 	}
 	if u == nil {
 		return nil, ErrNotFound
