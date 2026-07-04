@@ -2,12 +2,17 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Camera, Check, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Camera, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { getProfile, updateProfile, uploadAvatar } from "@/lib/profile";
+import { queryKeys } from "@/lib/queryKeys";
+import type { SafeUser } from "@/types/auth";
+import Image from "next/image";
 
 // ── Common timezones ──────────────────────────────────
 const TIMEZONES = [
@@ -51,11 +56,24 @@ type ProfileValues = z.infer<typeof schema>;
 
 const cls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-[var(--bg-elevated)] border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all disabled:opacity-50 disabled:cursor-not-allowed
 `;
+
+// Populates the form + avatar preview from a fetched/updated user record.
+// Shared by the initial query-sync effect and the save/upload handlers so
+// the "what fields does the form pull from a user object" logic lives in
+// exactly one place.
+function formValuesFrom(u: SafeUser): ProfileValues {
+  return {
+    displayName: u.displayName ?? "",
+    firstName: u.firstName ?? "",
+    lastName: u.lastName ?? "",
+    timezone: u.timezone ?? "UTC",
+  };
+}
 
 export default function ProfilePage({
   params,
@@ -65,14 +83,26 @@ export default function ProfilePage({
   use(params); // orgId available but not needed for /me calls
 
   const { user, setUser } = useAuthStore();
+  const queryClient = useQueryClient();
 
-  const [pageLoading, setPageLoading] = useState(true);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [avatarLoading, setAvatarLoading] = useState(false);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  // Holds ONLY a transient local blob URL while an avatar upload is in
+  // flight — never the server's photoURL. Set on file pick, cleared once
+  // the upload settles (success or failure), at which point the derived
+  // `avatarUrl` below falls through to the query/store value instead.
+  // Keeping this state's purpose this narrow means it never needs writing
+  // from the query-sync effect, which is what let that effect drop the
+  // one remaining useState call that ESLint's set-state-in-effect rule
+  // flagged (setUser/reset are external-system updates and are exempt;
+  // a local useState setter is not).
+  const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(
+    null,
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Guards the sync effect below so it only ever populates the form once,
+  // from whichever data arrives first (cache or network) — see note there.
+  const syncedRef = useRef(false);
 
   const {
     register,
@@ -89,37 +119,53 @@ export default function ProfilePage({
     },
   });
 
-  // Fetch fresh profile data on mount
-  useEffect(() => {
-    getProfile()
-      .then((profile) => {
-        setUser(profile);
-        reset({
-          displayName: profile.displayName ?? "",
-          firstName: profile.firstName ?? "",
-          lastName: profile.lastName ?? "",
-          timezone: profile.timezone ?? "UTC",
-        });
-        if (profile.photoURL) setAvatarPreview(profile.photoURL);
-      })
-      .catch(() => {
-        // Fall back to authStore data
-        if (user) {
-          reset({
-            displayName: user.displayName ?? "",
-            firstName: user.firstName ?? "",
-            lastName: user.lastName ?? "",
-            timezone: user.timezone ?? "UTC",
-          });
-          if (user.photoURL) setAvatarPreview(user.photoURL);
-        }
-      })
-      .finally(() => setPageLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // ── Query ─────────────────────────────────────────────────────────────────
+  // GET /api/v1/me is intentionally fetched here even though authStore.user
+  // may already be populated (from login) — this endpoint returns the
+  // freshest profile, matching the original component's comment.
+  //
+  // refetchOnWindowFocus is turned off for this one query: the app-wide
+  // default (see QueryProvider) refetches on tab focus, which is fine for
+  // read-only dashboards but would be actively harmful on a page holding
+  // an unsaved form — a background refetch mid-edit must never overwrite
+  // what the person is typing.
+  const profileQuery = useQuery({
+    queryKey: queryKeys.profile.me(),
+    queryFn: getProfile,
+    refetchOnWindowFocus: false,
+  });
 
+  // Local override (mid-upload) > freshest server copy > last-known store
+  // value. This is what the avatar circle actually renders.
+  const avatarUrl =
+    localAvatarPreview ?? profileQuery.data?.photoURL ?? user?.photoURL ?? null;
+
+  // ── Sync query data → form + authStore (once) ──────────────────────────────
+  // This mirrors the two blessed effect uses from the React docs: it's
+  // reading from an external system (the query cache) and pushing that
+  // into two other external systems (the RHF form instance and the
+  // Zustand authStore) — not deriving local component state from props.
+  // `syncedRef` keeps it a one-time hydration on first load rather than
+  // something that re-fires (and wipes in-progress edits) on every
+  // background refetch.
+  useEffect(() => {
+    if (syncedRef.current) return;
+
+    if (profileQuery.data) {
+      syncedRef.current = true;
+      setUser(profileQuery.data);
+      reset(formValuesFrom(profileQuery.data));
+    } else if (profileQuery.isError && user) {
+      // Network fetch failed — fall back to whatever profile data we
+      // already have from a previous login/org-switch response, same as
+      // the original component's .catch() branch.
+      syncedRef.current = true;
+      reset(formValuesFrom(user));
+    }
+  }, [profileQuery.data, profileQuery.isError, user, reset, setUser]);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const onSubmit = async (values: ProfileValues) => {
-    setSaveError(null);
-    setSaveSuccess(false);
     try {
       const updated = await updateProfile({
         displayName: values.displayName,
@@ -127,44 +173,39 @@ export default function ProfilePage({
         lastName: values.lastName || undefined,
         timezone: values.timezone || undefined,
       });
+      queryClient.setQueryData(queryKeys.profile.me(), updated);
       setUser(updated);
-      reset({
-        displayName: updated.displayName ?? "",
-        firstName: updated.firstName ?? "",
-        lastName: updated.lastName ?? "",
-        timezone: updated.timezone ?? "UTC",
-      });
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      reset(formValuesFrom(updated));
+      toast.success("Profile updated.");
     } catch {
-      setSaveError("Failed to save profile. Please try again.");
+      toast.error("Failed to save profile. Please try again.");
     }
   };
 
-  // Avatar click → open file picker
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
   };
 
-  // File selected → upload
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Preview immediately
-    const url = URL.createObjectURL(file);
-    setAvatarPreview(url);
+    // Preview immediately — a plain event handler, not an effect, so
+    // setting local state here synchronously is the normal, expected thing.
+    const blobUrl = URL.createObjectURL(file);
+    setLocalAvatarPreview(blobUrl);
     setAvatarLoading(true);
 
     try {
       const updated = await uploadAvatar(file);
+      queryClient.setQueryData(queryKeys.profile.me(), updated);
       setUser(updated);
-      if (updated.photoURL) setAvatarPreview(updated.photoURL);
+      toast.success("Avatar updated.");
     } catch {
-      // Revert preview on error
-      setAvatarPreview(user?.photoURL ?? null);
-      setSaveError("Failed to upload avatar.");
+      toast.error("Failed to upload avatar.");
     } finally {
+      URL.revokeObjectURL(blobUrl);
+      setLocalAvatarPreview(null);
       setAvatarLoading(false);
       // Reset file input so the same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -188,7 +229,7 @@ export default function ProfilePage({
       {/* Header */}
       <div className="mb-8">
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+          className="text-2xl font-bold text-(--text-primary) mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -196,36 +237,51 @@ export default function ProfilePage({
         >
           Profile
         </h1>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Manage your personal information
         </p>
       </div>
 
-      {pageLoading ? (
-        <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
+      {profileQuery.isError && (
+        <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20">
+          Could not refresh your profile from the server — showing your last
+          known info.
+        </div>
+      )}
+
+      {profileQuery.isPending ? (
+        <div className="flex items-center gap-3 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading profile…
         </div>
       ) : (
         <div className="space-y-6">
           {/* ── Avatar section ────────────────────── */}
-          <div className="flex items-start gap-6 p-6 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)]">
+          <div className="flex items-start gap-6 p-6 rounded-xl border border-(--border) bg-(--bg-surface)">
             {/* Avatar */}
-            <div className="relative flex-shrink-0">
+            <div className="relative shrink-0">
               <div
                 onClick={handleAvatarClick}
                 className="w-20 h-20 rounded-full cursor-pointer overflow-hidden relative group"
                 style={{
-                  background: avatarPreview
+                  background: avatarUrl
                     ? undefined
                     : "linear-gradient(135deg, #7c3aed, #a855f7)",
                 }}
               >
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
+                {avatarUrl ? (
+                  // <img
+                  //   src={avatarUrl}
+                  //   alt="Avatar"
+                  //   className="w-full h-full object-cover"
+                  // />
+
+                  <Image
+                    src={avatarUrl}
                     alt="Avatar"
-                    className="w-full h-full object-cover"
+                    fill
+                    className="object-cover"
+                    sizes="80px"
                   />
                 ) : (
                   <span
@@ -259,14 +315,12 @@ export default function ProfilePage({
             {/* User summary */}
             <div>
               <p
-                className="text-lg font-bold text-[var(--text-primary)] mb-0.5"
+                className="text-lg font-bold text-(--text-primary) mb-0.5"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 {displayName}
               </p>
-              <p className="text-sm text-[var(--text-muted)] mb-3">
-                {user?.email}
-              </p>
+              <p className="text-sm text-(--text-muted) mb-3">{user?.email}</p>
               <button
                 onClick={handleAvatarClick}
                 disabled={avatarLoading}
@@ -278,10 +332,10 @@ export default function ProfilePage({
           </div>
 
           {/* ── Personal information form ──────────── */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-            <div className="px-6 py-4 border-b border-[var(--border)]">
+          <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
+            <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-[var(--text-primary)]"
+                className="text-sm font-semibold text-(--text-primary)"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Personal information
@@ -289,12 +343,6 @@ export default function ProfilePage({
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
-              {saveError && (
-                <div className="px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">
-                  {saveError}
-                </div>
-              )}
-
               {/* Display name */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-[var(--text-secondary)]">
@@ -340,7 +388,7 @@ export default function ProfilePage({
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-[var(--text-secondary)]">
                   Email
-                  <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+                  <span className="ml-2 text-xs font-normal text-(--text-muted)">
                     read only
                   </span>
                 </label>
@@ -385,22 +433,15 @@ export default function ProfilePage({
                     "Save changes"
                   )}
                 </button>
-
-                {saveSuccess && (
-                  <div className="flex items-center gap-1.5 text-sm text-emerald-400">
-                    <Check size={14} />
-                    Saved!
-                  </div>
-                )}
               </div>
             </form>
           </div>
 
           {/* ── Account information (read only) ─────── */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-            <div className="px-6 py-4 border-b border-[var(--border)]">
+          <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
+            <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-[var(--text-primary)]"
+                className="text-sm font-semibold text-(--text-primary)"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Account information
@@ -418,7 +459,7 @@ export default function ProfilePage({
                   key={row.label}
                   className="flex items-center justify-between px-6 py-3.5"
                 >
-                  <span className="text-sm text-[var(--text-muted)]">
+                  <span className="text-sm text-(--text-muted)">
                     {row.label}
                   </span>
                   <span
