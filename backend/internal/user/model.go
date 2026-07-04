@@ -232,9 +232,3 @@ type UpdateProfileRequest struct {
 	Onboarding       json.RawMessage `json:"onboarding"`
 	FeatureFlags     json.RawMessage `json:"featureFlags"`
 }
-
-// AvatarRequest supports POST /api/v1/me/avatar with either a JSON URL
-// or multipart file upload handled by the HTTP handler.
-type AvatarRequest struct {
-	PhotoURL string `json:"photoURL"`
-}

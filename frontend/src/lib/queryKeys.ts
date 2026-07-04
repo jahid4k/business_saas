@@ -9,8 +9,11 @@
 // entities (contacts, companies, engagement).
 
 export const queryKeys = {
+  // Not org-scoped — /api/v1/me is per-user, independent of which
+  // organization is currently active.
   profile: {
     me: () => ["profile", "me"] as const,
+    avatars: () => ["profile", "avatars"] as const,
   },
 
   tasks: {

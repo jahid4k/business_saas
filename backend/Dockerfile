@@ -27,7 +27,9 @@ RUN apk add --no-cache \
     git \
     ca-certificates \
     wget \
-    tzdata
+    tzdata \
+    build-base \
+    libwebp-dev
 
 WORKDIR /app
 
@@ -69,10 +71,13 @@ FROM base AS builder
 COPY . .
 
 # Build the binary
-# CGO_ENABLED=0 — pure Go, no C dependencies (required for scratch/alpine)
+# CGO_ENABLED=1 — required by github.com/kolesa-team/go-webp (CGo bindings
+# to libwebp). This does mean the binary is no longer a static, dependency-
+# free executable — production must have libwebp's runtime .so available
+# (see the production stage below).
 # -ldflags="-s -w" — strip debug info, reduce binary size
 # -trimpath — remove local file paths from binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
     -trimpath \
     -o /bin/businesssaas \
@@ -88,10 +93,12 @@ RUN addgroup -g 1001 -S appgroup && \
     adduser -u 1001 -S appuser -G appgroup
 
 # Install runtime dependencies
+# libwebp: runtime .so for the CGo-linked avatar encoder (see builder stage)
 RUN apk add --no-cache \
     ca-certificates \
     wget \
-    tzdata
+    tzdata \
+    libwebp
 
 WORKDIR /app
 

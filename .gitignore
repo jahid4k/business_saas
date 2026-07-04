@@ -89,3 +89,9 @@ backend/coverage/
 frontend/coverage/
 *.cover
 *.out*.zip
+
+# ----------------------------------------------------------
+# User-uploaded files (avatars, etc.) — real content lives on
+# disk/volume per environment, never in git
+# ----------------------------------------------------------
+backend/uploads/

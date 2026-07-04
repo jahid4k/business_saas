@@ -2,16 +2,26 @@
 "use client";
 
 import { use, useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera, Loader2, Plus, X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
-import { getProfile, updateProfile, uploadAvatar } from "@/lib/profile";
+import {
+  getProfile,
+  updateProfile,
+  uploadAvatar,
+  listAvatars,
+  activateAvatar,
+  deleteAvatar,
+  apiErrorCode,
+} from "@/lib/profile";
 import { queryKeys } from "@/lib/queryKeys";
-import type { SafeUser } from "@/types/auth";
+import { resolveAssetUrl } from "@/lib/constants";
+import AvatarCropModal from "@/components/settings/AvatarCropModal";
+import type { SafeUser, UserAvatar } from "@/types/auth";
 import Image from "next/image";
 
 // ── Common timezones ──────────────────────────────────
@@ -57,15 +67,11 @@ type ProfileValues = z.infer<typeof schema>;
 const cls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
   bg-[var(--bg-elevated)] border border-(--border)
-  text-(--text-primary) placeholder:text-(--text-muted)
+  text-[var(--text-primary)] placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all disabled:opacity-50 disabled:cursor-not-allowed
 `;
 
-// Populates the form + avatar preview from a fetched/updated user record.
-// Shared by the initial query-sync effect and the save/upload handlers so
-// the "what fields does the form pull from a user object" logic lives in
-// exactly one place.
 function formValuesFrom(u: SafeUser): ProfileValues {
   return {
     displayName: u.displayName ?? "",
@@ -73,6 +79,93 @@ function formValuesFrom(u: SafeUser): ProfileValues {
     lastName: u.lastName ?? "",
     timezone: u.timezone ?? "UTC",
   };
+}
+
+// ── One thumbnail in the avatar gallery ────────────────
+// Inline, page-specific component — same convention as ContactAvatar /
+// CompanyAvatar elsewhere in the app (small presentational pieces live
+// alongside the one page that uses them, not in their own file).
+function AvatarGalleryItem({
+  avatar,
+  onActivate,
+  onDelete,
+  activating,
+  deleting,
+}: {
+  avatar: UserAvatar;
+  onActivate: () => void;
+  onDelete: () => void;
+  activating: boolean;
+  deleting: boolean;
+}) {
+  console.log(avatar);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const url = resolveAssetUrl(avatar.url);
+  const busy = activating || deleting;
+
+  return (
+    <div className="relative group pt-2">
+      <button
+        onClick={avatar.isActive ? undefined : onActivate}
+        disabled={avatar.isActive || busy}
+        className={`relative w-16 h-16 rounded-full overflow-hidden border-2 transition-colors ${
+          avatar.isActive
+            ? "border-purple-500"
+            : "border-transparent hover:border-purple-500/40"
+        } ${avatar.isActive || busy ? "cursor-default" : "cursor-pointer"}`}
+        title={avatar.isActive ? "Currently active" : "Set as active"}
+      >
+        {url && (
+          <Image
+            src={url}
+            alt="Stored avatar"
+            className="w-full h-full object-cover"
+            width={64}
+            height={64}
+            unoptimized
+          />
+        )}
+        {activating && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+            <Loader2 size={16} className="text-white animate-spin" />
+          </div>
+        )}
+      </button>
+
+      {avatar.isActive && (
+        <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[0.55rem] font-semibold text-purple-400 bg-(--bg-surface) px-1.5 py-px rounded-full border border-purple-500/30 whitespace-nowrap">
+          Active
+        </span>
+      )}
+
+      {!confirmDelete ? (
+        <button
+          onClick={() => setConfirmDelete(true)}
+          disabled={deleting}
+          className="absolute top-0 right-0 w-5 h-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-50"
+          title="Delete this avatar"
+        >
+          <X size={11} />
+        </button>
+      ) : (
+        <div className="absolute -top-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border) shadow-lg whitespace-nowrap z-10">
+          <button
+            onClick={onDelete}
+            disabled={deleting}
+            className="text-xs font-semibold text-red-400 disabled:opacity-50"
+          >
+            {deleting ? "…" : "Delete?"}
+          </button>
+          <button
+            onClick={() => setConfirmDelete(false)}
+            className="text-xs text-(--text-muted)"
+          >
+            No
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function ProfilePage({
@@ -85,24 +178,15 @@ export default function ProfilePage({
   const { user, setUser } = useAuthStore();
   const queryClient = useQueryClient();
 
-  const [avatarLoading, setAvatarLoading] = useState(false);
-  // Holds ONLY a transient local blob URL while an avatar upload is in
-  // flight — never the server's photoURL. Set on file pick, cleared once
-  // the upload settles (success or failure), at which point the derived
-  // `avatarUrl` below falls through to the query/store value instead.
-  // Keeping this state's purpose this narrow means it never needs writing
-  // from the query-sync effect, which is what let that effect drop the
-  // one remaining useState call that ESLint's set-state-in-effect rule
-  // flagged (setUser/reset are external-system updates and are exempt;
-  // a local useState setter is not).
-  const [localAvatarPreview, setLocalAvatarPreview] = useState<string | null>(
-    null,
-  );
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Guards the sync effect below so it only ever populates the form once,
-  // from whichever data arrives first (cache or network) — see note there.
   const syncedRef = useRef(false);
+
+  // Object URL of a just-picked file, shown in the crop modal. null = no
+  // crop flow in progress. Created in handleFileSelected, revoked whenever
+  // the flow ends (confirm or cancel) in closeCropModal.
+  const [pendingImageSrc, setPendingImageSrc] = useState<string | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const {
     register,
@@ -119,35 +203,24 @@ export default function ProfilePage({
     },
   });
 
-  // ── Query ─────────────────────────────────────────────────────────────────
-  // GET /api/v1/me is intentionally fetched here even though authStore.user
-  // may already be populated (from login) — this endpoint returns the
-  // freshest profile, matching the original component's comment.
-  //
-  // refetchOnWindowFocus is turned off for this one query: the app-wide
-  // default (see QueryProvider) refetches on tab focus, which is fine for
-  // read-only dashboards but would be actively harmful on a page holding
-  // an unsaved form — a background refetch mid-edit must never overwrite
-  // what the person is typing.
+  // ── Queries ───────────────────────────────────────────────────────────────
   const profileQuery = useQuery({
     queryKey: queryKeys.profile.me(),
     queryFn: getProfile,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false, // never clobber an in-progress edit on tab refocus
   });
 
-  // Local override (mid-upload) > freshest server copy > last-known store
-  // value. This is what the avatar circle actually renders.
-  const avatarUrl =
-    localAvatarPreview ?? profileQuery.data?.photoURL ?? user?.photoURL ?? null;
+  const avatarsQuery = useQuery({
+    queryKey: queryKeys.profile.avatars(),
+    queryFn: listAvatars,
+  });
+
+  const avatarUrl = resolveAssetUrl(user?.photoURL) ?? null;
+  const avatarCount = avatarsQuery.data?.avatars.length ?? 0;
+  const avatarMax = avatarsQuery.data?.max ?? 3;
+  const canAddAvatar = avatarCount < avatarMax;
 
   // ── Sync query data → form + authStore (once) ──────────────────────────────
-  // This mirrors the two blessed effect uses from the React docs: it's
-  // reading from an external system (the query cache) and pushing that
-  // into two other external systems (the RHF form instance and the
-  // Zustand authStore) — not deriving local component state from props.
-  // `syncedRef` keeps it a one-time hydration on first load rather than
-  // something that re-fires (and wipes in-progress edits) on every
-  // background refetch.
   useEffect(() => {
     if (syncedRef.current) return;
 
@@ -156,13 +229,64 @@ export default function ProfilePage({
       setUser(profileQuery.data);
       reset(formValuesFrom(profileQuery.data));
     } else if (profileQuery.isError && user) {
-      // Network fetch failed — fall back to whatever profile data we
-      // already have from a previous login/org-switch response, same as
-      // the original component's .catch() branch.
       syncedRef.current = true;
       reset(formValuesFrom(user));
     }
   }, [profileQuery.data, profileQuery.isError, user, reset, setUser]);
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  // All three share the same shape: the backend always returns the updated
+  // SafeUser, so profile.me() and authStore get patched directly; the small
+  // avatars list (max 3 items, infrequent user-initiated action — not a hot
+  // path) is simply invalidated rather than hand-patched, which is far less
+  // error-prone than replicating the backend's dedup/promotion logic here.
+  const uploadMutation = useMutation({
+    mutationFn: (blob: Blob) => uploadAvatar(blob),
+    onSuccess: ({ user: updated }) => {
+      queryClient.setQueryData(queryKeys.profile.me(), updated);
+      setUser(updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.avatars() });
+      toast.success("Avatar updated.");
+    },
+    onError: (err) => {
+      const code = apiErrorCode(err);
+      if (code === "AVATAR_LIMIT_REACHED") {
+        toast.error(
+          `You can store up to ${avatarMax} avatars — delete one first.`,
+        );
+      } else if (code === "INVALID_AVATAR_TYPE") {
+        toast.error("That file isn't a supported image type.");
+      } else {
+        toast.error("Failed to upload avatar.");
+      }
+    },
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: (avatarId: string) => activateAvatar(avatarId),
+    onMutate: (avatarId) => setActivatingId(avatarId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.profile.me(), updated);
+      setUser(updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.avatars() });
+      toast.success("Avatar switched.");
+    },
+    onError: () => toast.error("Failed to switch avatar."),
+    onSettled: () => setActivatingId(null),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (avatarId: string) => deleteAvatar(avatarId),
+    onMutate: (avatarId) => setDeletingId(avatarId),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(queryKeys.profile.me(), updated);
+      setUser(updated);
+      queryClient.invalidateQueries({ queryKey: queryKeys.profile.avatars() });
+      toast.success("Avatar deleted.");
+    },
+    onError: () => toast.error("Failed to delete avatar."),
+    onSettled: () => setDeletingId(null),
+  });
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const onSubmit = async (values: ProfileValues) => {
@@ -183,32 +307,34 @@ export default function ProfilePage({
   };
 
   const handleAvatarClick = () => {
+    if (!canAddAvatar) {
+      toast.error(
+        `You're at your limit of ${avatarMax} avatars — delete one to add another.`,
+      );
+      return;
+    }
     fileInputRef.current?.click();
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset the input immediately so picking the exact same file again
+    // still fires this handler next time.
+    if (fileInputRef.current) fileInputRef.current.value = "";
     if (!file) return;
+    setPendingImageSrc(URL.createObjectURL(file));
+  };
 
-    // Preview immediately — a plain event handler, not an effect, so
-    // setting local state here synchronously is the normal, expected thing.
-    const blobUrl = URL.createObjectURL(file);
-    setLocalAvatarPreview(blobUrl);
-    setAvatarLoading(true);
+  const closeCropModal = () => {
+    if (pendingImageSrc) URL.revokeObjectURL(pendingImageSrc);
+    setPendingImageSrc(null);
+  };
 
+  const handleCropConfirm = async (blob: Blob) => {
     try {
-      const updated = await uploadAvatar(file);
-      queryClient.setQueryData(queryKeys.profile.me(), updated);
-      setUser(updated);
-      toast.success("Avatar updated.");
-    } catch {
-      toast.error("Failed to upload avatar.");
+      await uploadMutation.mutateAsync(blob);
     } finally {
-      URL.revokeObjectURL(blobUrl);
-      setLocalAvatarPreview(null);
-      setAvatarLoading(false);
-      // Reset file input so the same file can be re-selected
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      closeCropModal();
     }
   };
 
@@ -229,7 +355,7 @@ export default function ProfilePage({
       {/* Header */}
       <div className="mb-8">
         <h1
-          className="text-2xl font-bold text-(--text-primary) mb-1"
+          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -257,77 +383,121 @@ export default function ProfilePage({
       ) : (
         <div className="space-y-6">
           {/* ── Avatar section ────────────────────── */}
-          <div className="flex items-start gap-6 p-6 rounded-xl border border-(--border) bg-(--bg-surface)">
-            {/* Avatar */}
-            <div className="relative shrink-0">
-              <div
-                onClick={handleAvatarClick}
-                className="w-20 h-20 rounded-full cursor-pointer overflow-hidden relative group"
-                style={{
-                  background: avatarUrl
-                    ? undefined
-                    : "linear-gradient(135deg, #7c3aed, #a855f7)",
-                }}
-              >
-                {avatarUrl ? (
-                  // <img
-                  //   src={avatarUrl}
-                  //   alt="Avatar"
-                  //   className="w-full h-full object-cover"
-                  // />
-
-                  <Image
-                    src={avatarUrl}
-                    alt="Avatar"
-                    fill
-                    className="object-cover"
-                    sizes="80px"
-                  />
-                ) : (
-                  <span
-                    className="w-full h-full flex items-center justify-center text-2xl font-bold text-white"
-                    style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
-                  >
-                    {initial}
-                  </span>
-                )}
-
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                  {avatarLoading ? (
-                    <Loader2 size={18} className="text-white animate-spin" />
+          <div className="p-6 rounded-xl border border-(--border) bg-(--bg-surface)">
+            <div className="flex items-start gap-6 mb-6">
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div
+                  onClick={handleAvatarClick}
+                  className="w-20 h-20 rounded-full cursor-pointer overflow-hidden relative group"
+                  style={{
+                    background: avatarUrl
+                      ? undefined
+                      : "linear-gradient(135deg, #7c3aed, #a855f7)",
+                  }}
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <Camera size={18} className="text-white" />
+                    <span
+                      className="w-full h-full flex items-center justify-center text-2xl font-bold text-white"
+                      style={{
+                        fontFamily: "var(--font-syne, Syne, sans-serif)",
+                      }}
+                    >
+                      {initial}
+                    </span>
                   )}
+
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    {uploadMutation.isPending ? (
+                      <Loader2 size={18} className="text-white animate-spin" />
+                    ) : (
+                      <Camera size={18} className="text-white" />
+                    )}
+                  </div>
                 </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFileSelected}
+                />
               </div>
 
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleAvatarChange}
-              />
+              {/* User summary */}
+              <div>
+                <p
+                  className="text-lg font-bold text-[var(--text-primary)] mb-0.5"
+                  style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
+                >
+                  {displayName}
+                </p>
+                <p className="text-sm text-(--text-muted) mb-3">
+                  {user?.email}
+                </p>
+                <button
+                  onClick={handleAvatarClick}
+                  disabled={uploadMutation.isPending}
+                  className="text-xs font-medium text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
+                >
+                  {uploadMutation.isPending ? "Uploading…" : "Change photo"}
+                </button>
+              </div>
             </div>
 
-            {/* User summary */}
-            <div>
-              <p
-                className="text-lg font-bold text-(--text-primary) mb-0.5"
-                style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
-              >
-                {displayName}
-              </p>
-              <p className="text-sm text-(--text-muted) mb-3">{user?.email}</p>
-              <button
-                onClick={handleAvatarClick}
-                disabled={avatarLoading}
-                className="text-xs font-medium text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
-              >
-                {avatarLoading ? "Uploading…" : "Change photo"}
-              </button>
+            {/* ── Avatar gallery / management ──────── */}
+            <div className="pt-5 border-t border-(--border)">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-(--text-muted) uppercase tracking-wider">
+                  Your avatars
+                </p>
+                <span className="text-xs text-(--text-muted)">
+                  {avatarCount} of {avatarMax}
+                </span>
+              </div>
+
+              {avatarsQuery.isPending ? (
+                <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+                  <Loader2 size={12} className="animate-spin" />
+                  Loading…
+                </div>
+              ) : (
+                <div className="flex items-center gap-4 flex-wrap">
+                  {(avatarsQuery.data?.avatars ?? []).map((a) => (
+                    <AvatarGalleryItem
+                      key={a.id}
+                      avatar={a}
+                      onActivate={() => activateMutation.mutate(a.id)}
+                      onDelete={() => deleteMutation.mutate(a.id)}
+                      activating={activatingId === a.id}
+                      deleting={deletingId === a.id}
+                    />
+                  ))}
+
+                  {canAddAvatar ? (
+                    <button
+                      onClick={handleAvatarClick}
+                      className="w-16 h-16 mt-2 rounded-full border-2 border-dashed border-(--border) hover:border-purple-500/40 flex items-center justify-center text-(--text-muted) hover:text-purple-400 transition-colors"
+                      title="Add a new avatar"
+                    >
+                      <Plus size={18} />
+                    </button>
+                  ) : (
+                    avatarCount > 0 && (
+                      <p className="text-xs text-(--text-muted) max-w-[160px] leading-snug">
+                        Delete one above to add a new photo.
+                      </p>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -335,7 +505,7 @@ export default function ProfilePage({
           <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
             <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-(--text-primary)"
+                className="text-sm font-semibold text-[var(--text-primary)]"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Personal information
@@ -343,7 +513,6 @@ export default function ProfilePage({
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
-              {/* Display name */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-[var(--text-secondary)]">
                   Display name <span className="text-red-400">*</span>
@@ -360,7 +529,6 @@ export default function ProfilePage({
                 )}
               </div>
 
-              {/* First + Last name */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="block text-sm font-medium text-[var(--text-secondary)]">
@@ -384,7 +552,6 @@ export default function ProfilePage({
                 </div>
               </div>
 
-              {/* Email — read only */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-[var(--text-secondary)]">
                   Email
@@ -399,7 +566,6 @@ export default function ProfilePage({
                 />
               </div>
 
-              {/* Timezone */}
               <div className="space-y-1.5">
                 <label className="block text-sm font-medium text-[var(--text-secondary)]">
                   Timezone
@@ -417,7 +583,6 @@ export default function ProfilePage({
                 </select>
               </div>
 
-              {/* Submit */}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="submit"
@@ -441,7 +606,7 @@ export default function ProfilePage({
           <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
             <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-(--text-primary)"
+                className="text-sm font-semibold text-[var(--text-primary)]"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Account information
@@ -475,6 +640,14 @@ export default function ProfilePage({
             </div>
           </div>
         </div>
+      )}
+
+      {pendingImageSrc && (
+        <AvatarCropModal
+          imageSrc={pendingImageSrc}
+          onConfirm={handleCropConfirm}
+          onCancel={closeCropModal}
+        />
       )}
     </div>
   );
