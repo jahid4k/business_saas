@@ -72,16 +72,7 @@ func (r *stubUserRepo) UpdateSettings(_ context.Context, id string, req user.Upd
 	return u, nil
 }
 
-func (r *stubUserRepo) UpdateAvatar(_ context.Context, id, photoURL string) (*user.User, error) {
-	u, ok := r.users[id]
-	if !ok {
-		return nil, nil
-	}
-	u.PhotoURL = photoURL
-	return u, nil
-}
-
-func (r *stubUserRepo) RecordFailedLogin(_ context.Context, _ string) error    { return nil }
+func (r *stubUserRepo) RecordFailedLogin(_ context.Context, _ string) error     { return nil }
 func (r *stubUserRepo) RecordSuccessfulLogin(_ context.Context, _ string) error { return nil }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -180,41 +171,6 @@ func TestUpdateProfile_UserNotFound(t *testing.T) {
 	_, err := svc.UpdateProfile(context.Background(), "usr_missing", user.UpdateProfileRequest{})
 	if !errors.Is(err, user.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
-}
-
-// ── UpdateAvatar ──────────────────────────────────────────────────────────────
-
-func TestUpdateAvatar_Success(t *testing.T) {
-	repo := newStubRepo()
-	repo.users["usr_4"] = &user.User{ID: "usr_4", Email: "eve@example.com"}
-	svc := newSvc(repo)
-	updated, err := svc.UpdateAvatar(context.Background(), "usr_4", "https://example.com/avatar.jpg")
-	if err != nil {
-		t.Fatalf("UpdateAvatar() error: %v", err)
-	}
-	if updated.PhotoURL != "https://example.com/avatar.jpg" {
-		t.Errorf("expected photo URL to be set, got %q", updated.PhotoURL)
-	}
-}
-
-func TestUpdateAvatar_EmptyURL_ReturnsError(t *testing.T) {
-	repo := newStubRepo()
-	repo.users["usr_5"] = &user.User{ID: "usr_5", Email: "frank@example.com"}
-	svc := newSvc(repo)
-	_, err := svc.UpdateAvatar(context.Background(), "usr_5", "")
-	if err == nil {
-		t.Fatal("expected error for empty avatar URL, got nil")
-	}
-}
-
-func TestUpdateAvatar_WhitespaceURL_ReturnsError(t *testing.T) {
-	repo := newStubRepo()
-	repo.users["usr_6"] = &user.User{ID: "usr_6", Email: "grace@example.com"}
-	svc := newSvc(repo)
-	_, err := svc.UpdateAvatar(context.Background(), "usr_6", "   ")
-	if err == nil {
-		t.Fatal("expected error for whitespace-only avatar URL, got nil")
 	}
 }
 

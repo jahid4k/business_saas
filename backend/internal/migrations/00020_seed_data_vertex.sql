@@ -434,7 +434,7 @@ BEGIN
 
         (v_org_id,'crm',
          'Hans Vermeer discussed multi-year terminal leasing framework clauses. Rotterdam volume throughput targets are highly dependent on global shipping alliances stability patterns. Keep internal operations team in loop.',
-         'crm.deal',v_deal11_id,v_david_id, v_david_id, NOW()-INTERVAL '18 days',NOW()-INTERVAL '18 days'),
+         'crm.deal',v_deal11_id,v_david_id, NOW()-INTERVAL '18 days',NOW()-INTERVAL '18 days'),
 
         (v_org_id,'crm',
          'Sir Alan was direct regarding tariff margins limits. Horizon Aviation expects fixed pricing security on core transatlantic lanes for 18 months minimum. Legal tracking required on fuel surcharge threshold variables.',
@@ -442,7 +442,7 @@ BEGIN
 
         (v_org_id,'crm',
          'Zenith Parts deal requires deep API mapping alignment validation. Sarah Connor mentioned their inventory setup updates automatically every 15 mins via obsolete legacy structures. Custom middleware engine required.',
-         'crm.deal',v_deal10_id,v_david_id, v_david_id, NOW()-INTERVAL '12 days',NOW()-INTERVAL '12 days'),
+         'crm.deal',v_deal10_id,v_david_id, NOW()-INTERVAL '12 days',NOW()-INTERVAL '12 days'),
 
         (v_org_id,'crm',
          'Dr. Stefan Müller signed off on the Berlin logistics framework review summary report. Validation tests passed compliance standards. This provides strong enterprise leverage credibility for larger upcoming pharma deals.',
@@ -454,7 +454,7 @@ BEGIN
 
         (v_org_id,'crm',
          'Lin Wei is our primary champion inside the Singapore procurement ecosystem. Highly technical on warehouse metric layout analytics tracking requirements.',
-         'platform.contact',v_con5_id,v_david_id, v_david_id, NOW()-INTERVAL '60 days', NOW()-INTERVAL '60 days'),
+         'platform.contact',v_con5_id,v_david_id, NOW()-INTERVAL '60 days', NOW()-INTERVAL '60 days'),
 
         (v_org_id,'crm',
          'Bruce Wayne handles heavy freight routing scheduling. Emphasized rail siding availability rules are the key bottleneck constraints across the Australian network lines.',
@@ -485,7 +485,7 @@ BEGIN
         (v_org_id,'crm','meeting','Rotterdam Operations Sync Session',
          'On-site review session at port office facility. Addressed pipeline payload mapping rules and integration boundaries configuration details.',
          'Agreed on timeline constraints; moving to next assessment phase',
-         'crm.deal',v_deal11_id,NOW()-INTERVAL '12 days',110,v_david_id, v_david_id, NOW()-INTERVAL '12 days',NOW()-INTERVAL '12 days'),
+         'crm.deal',v_deal11_id,NOW()-INTERVAL '12 days',110,v_david_id, NOW()-INTERVAL '12 days',NOW()-INTERVAL '12 days'),
 
         (v_org_id,'crm','call',   'Customs Compliance Scope Review',
          'Detailed walkthrough session with Sir Alan Cross reviewing import declaration bottlenecks on international flight legs.',
@@ -495,7 +495,7 @@ BEGIN
         (v_org_id,'crm','meeting','Detroit JIT Supply Technical Review',
          'Met with Sarah Connor and engineering group to plan middleware setup specifications mapping inventory APIs into database structures.',
          'Architecture layout blueprint draft confirmed approved in principle',
-         'crm.deal',v_deal10_id,NOW()-INTERVAL '8 days',90,v_david_id, v_david_id, NOW()-INTERVAL '8 days',NOW()-INTERVAL '8 days'),
+         'crm.deal',v_deal10_id,NOW()-INTERVAL '8 days',90,v_david_id, NOW()-INTERVAL '8 days',NOW()-INTERVAL '8 days'),
 
         (v_org_id,'crm','call',   'Bulk Allocation Pricing Final Review',
          'Final sync meeting with Lin Wei defining annual freight spending visibility targets across Changi terminal corridors.',
@@ -510,7 +510,7 @@ BEGIN
         (v_org_id,'crm','call',   'Qualification Call — CargoLink Route Prep',
          'Assessed terminal capability profiles with Hans Vermeer to verify multi-modal cargo payload weight constraint profiles compliance.',
          'Lane capabilities verified confirmed compliant; shifting to quote preparation',
-         'crm.deal',v_deal5_id,NOW()-INTERVAL '25 days',30,v_david_id, v_david_id, NOW()-INTERVAL '25 days',NOW()-INTERVAL '25 days'),
+         'crm.deal',v_deal5_id,NOW()-INTERVAL '25 days',30,v_david_id, NOW()-INTERVAL '25 days',NOW()-INTERVAL '25 days'),
 
         (v_org_id,'crm','meeting','Sydney Port Yards Evaluation',
          'Comprehensive facilities mapping walkthrough review defining freight optimization targets for local distribution lines network.',
@@ -525,7 +525,7 @@ BEGIN
         (v_org_id,'crm','email',  'Outbound Outreach — Hans Vermeer Intro',
          'Introduced our global software visibility suite capability profiles to Hans via referral connection pipelines.',
          'Response received within same working day; discovery call confirmed booked',
-         'platform.contact',v_con3_id,NOW()-INTERVAL '50 days',NULL,v_david_id, v_david_id, NOW()-INTERVAL '50 days',NOW()-INTERVAL '50 days'),
+         'platform.contact',v_con3_id,NOW()-INTERVAL '50 days',NULL,v_david_id, NOW()-INTERVAL '50 days',NOW()-INTERVAL '50 days'),
 
         (v_org_id,'crm','meeting','Project Alignment Workshop — Cold Storage',
          'Kickoff meeting finalizing hardware tracking beacons installation timelines inside client fleet trailers.',
@@ -555,13 +555,13 @@ BEGIN
          'Terminal Charter Framework Documentation Package',
          'Hi Hans, wonderful speaking today. Attached is our formal contract proposal layout structure defining operational volume price boundaries for Rotterdam terminal facilities management routing structures.',
          'david@vertexlogistics.io','h.vermeer@cargolink.nl',
-         'outbound','sent','crm.deal',v_deal11_id,NOW()-INTERVAL '10 days',v_david_id, v_david_id, NOW()-INTERVAL '10 days'),
+         'outbound','sent','crm.deal',v_deal11_id,NOW()-INTERVAL '10 days',v_david_id, NOW()-INTERVAL '10 days'),
 
         (v_org_id,'crm',
          'Customs Integration API Spec Documentation Review',
          'Hi Sarah, following our architecture overview workshop sessions, here are the secure endpoint schemas mapping real-time inventory adjustments directly into the container distribution platforms.',
          'david@vertexlogistics.io','s.connor@zenithparts.com',
-         'outbound','sent','crm.deal',v_deal10_id,NOW()-INTERVAL '6 days', v_david_id, v_david_id, NOW()-INTERVAL '6 days'),
+         'outbound','sent','crm.deal',v_deal10_id,NOW()-INTERVAL '6 days', v_david_id, NOW()-INTERVAL '6 days'),
 
         (v_org_id,'crm',
          'Revised Freight Surcharge Threshold Language Update',
@@ -579,13 +579,13 @@ BEGIN
          'Virtual Hub Allocation Framework Draft v1.2',
          'Hi Martha, please find attached the initial master operations draft configuration detailing virtual space provisioning controls for the overflow depot system lines.',
          'ananya@vertexlogistics.io','m.stewart@beaconcold.com',
-         'outbound','sent','crm.deal',v_deal4_id,NOW()-INTERVAL '5 days', v_ananya_id,v_ananya_id,NOW()-INTERVAL '5 days'),
+         'outbound','sent','crm.deal',v_deal4_id,NOW()-INTERVAL '5 days', v_ananya_id,NOW()-INTERVAL '5 days'),
 
         (v_org_id,'crm',
          'Introduction — Vertex Logistics Visibility Software',
          'Hi Hans, reaching out on a direct introduction recommendation from Captain Erik at Atlas. We recently streamlined their freight scheduling operations tracking layouts. Let us schedule 20 minutes.',
          'david@vertexlogistics.io','h.vermeer@cargolink.nl',
-         'outbound','sent','platform.contact',v_con3_id,NOW()-INTERVAL '49 days',v_david_id, v_david_id, NOW()-INTERVAL '49 days');
+         'outbound','sent','platform.contact',v_con3_id,NOW()-INTERVAL '49 days',v_david_id, NOW()-INTERVAL '49 days');
 
     -- ==========================================================
     -- 16. SESSIONS (3)

@@ -49,3 +49,16 @@ export interface SignupRequest {
   last_name: string;
   displayName?: string;
 }
+
+// One stored avatar (see backend/internal/user/avatar.go UserAvatar.ToResponse).
+// `url` is server-relative, same convention as SafeUser.photoURL — resolve it
+// with resolveAssetUrl before rendering in an <img>.
+export interface UserAvatar {
+  id: string;
+  fileSize: number;
+  width: number;
+  height: number;
+  isActive: boolean;
+  createdAt: string;
+  url: string;
+}

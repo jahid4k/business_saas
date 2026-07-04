@@ -1,13 +1,14 @@
 // src/lib/api.ts
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { getToken, setToken } from "./token";
+import { API_BASE_URL } from "./constants";
 
 interface RetryConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
 }
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080",
+  baseURL: API_BASE_URL,
   withCredentials: true, // required: sends httpOnly bsaas_refresh cookie
   headers: { "Content-Type": "application/json" },
 });
