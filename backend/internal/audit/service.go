@@ -31,6 +31,13 @@ const (
 	EventTaskCreated          EventType = "task.created"
 	EventTaskStatusChanged    EventType = "task.status_changed"
 	EventTaskDeleted          EventType = "task.deleted"
+
+	// HRM events
+	EventHRMEmployeeCreated    EventType = "hrm.employee.created"
+	EventHRMEmployeeTerminated EventType = "hrm.employee.terminated"
+	EventHRMLeaveRequested     EventType = "hrm.leave.requested"
+	EventHRMLeaveApproved      EventType = "hrm.leave.approved"
+	EventHRMLeaveRejected      EventType = "hrm.leave.rejected"
 )
 
 // Event represents a single audit log entry.

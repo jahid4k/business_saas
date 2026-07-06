@@ -64,7 +64,9 @@ _This list hasn't been checked against the real codebase in a while — several 
 
 1. **User permission overrides UI** — frontend for the existing per-member override endpoint (Section 5, AUTHZ/RBAC: `rbac/members/:memberId/permissions`). Distinct from full custom-role-from-scratch UI, which stays queued (Section 11).
 2. **Complete CRM** — true up Section 8's CRM statuses against real code, close the known Contacts integration gap (see Section 8, CRM — CONTACTS).
-3. **Complete HRM frontend** — backend already has 31 routes (departments, positions, employees, leave, reports); nothing built on the frontend yet.
+3. **Complete HRM frontend** — Phase 1 backend has 31 routes. Extended architecture
+   (Groups A–E) is fully designed and locked — ready for implementation. Start
+   Phase 1 frontend first, then implement extended backend groups one at a time.
 
 Mobile App is paused, not abandoned — architecture is decided and documented (Section 9/10), implementation just isn't the current priority. See Section 11.
 
@@ -1081,9 +1083,40 @@ Payment provider integration, plan tiers, usage limits, invoices, billing settin
 
 ---
 
-### HRM MODULE [🟡 PARTIAL — backend done, frontend not started]
+### HRM MODULE [🟡 PARTIAL — Phase 1 backend done, extended architecture designed]
 
-Backend complete: departments, positions, employees, leave management, reports — 31 routes. Frontend is the only remaining piece — closer to done than anything else in this queue.
+Phase 1 backend complete: departments, positions, employees, leave management,
+reports — 31 routes across 5 sub-domains. Frontend not started.
+
+Extended HRM architecture fully designed (Groups A–E, 22 additional migrations):
+
+GROUP A — Setup/Config: Salary component engine (expr-lang/expr formula + slab),
+configurable approval chains (sequential, SLA-based), warning type config,
+document templates (Markdown + browser PDF), shifts, holiday calendars, contracts.
+
+GROUP B — Employee Lifecycle: Promotions, transfers (HR/manager-initiated only),
+resignations (notice period from contract), terminations (extends existing endpoint,
+access revocation immediate).
+
+GROUP C — Disciplinary: Warning records (status-gated visibility, lazy expiry),
+complaints (person-against-person, required subject), document operations (bulk
+send, versioning), acknowledgements (polymorphic, declined status).
+
+GROUP D — Time & Compensation: Attendance (multi-punch, 3 sources via webhook +
+API key, regularization via approval chain, nightly absent cron, period lock),
+payslips (payroll runs, formula engine, attendance period must finalize first,
+immutable on finalize, dispute via acknowledgement decline).
+
+GROUP E — Recognition & Communication: Awards (per-type nomination restriction,
+optional monetary), announcements (Markdown, audience targeting, scheduling),
+HR calendar (separate from holiday calendar, simple recurrence, RSVP via
+acknowledgement), employee milestones (nightly cron, configurable rules,
+anniversary year_intervals, auto-draft awards/announcements).
+
+Implementation order: A → B → C → D → E (each group depends on prior).
+Migration range when built: 00021–00042 (22 new migrations, 42 total).
+Background jobs needed: 5 (absent-marker, warning expiry, milestone generator,
+announcement auto-publish, calendar reminders).
 
 ---
 
