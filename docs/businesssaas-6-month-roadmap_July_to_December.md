@@ -27,6 +27,7 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 **Goal: a URL you can show a stranger.**
 
 ### Close the open integration gaps first
+
 - [ ] Contacts module: `main.go` DI wiring + route registration
 - [ ] Contacts: run the pending migration; resolve the `crm.ts` type conflicts
 - [ ] File upload: avatar wiring — `user/service.go`, `user/repository.go`, `user/routes.go`, `main.go`
@@ -34,11 +35,13 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 - [ ] Full pass: `make test`, `npx tsc --noEmit`, ESLint — all green
 
 ### Fix the source-of-truth drift
+
 - [ ] Master Instruction **r3**: HRM = ✅ DONE (31 endpoints), TanStack Query v5 (not Axios/Zustand-only), real migration count, module registry synced against `/api/v1/routes` output
 - [ ] Update repo `README.md` — it still tells the Phase-1 story
 - [ ] Decide and write down: **which document governs** (recommendation: Master Instruction governs intent, `/routes` + ADRs govern reality)
 
 ### Production deployment
+
 - [ ] VPS: real domain, TLS (Caddy or nginx + certbot), production Docker Compose profile
 - [ ] Uncomment and wire `deploy.yml` (SSH + GitHub Secrets)
 - [ ] Security headers middleware (CSP, HSTS, X-Frame-Options, etc.)
@@ -46,6 +49,7 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 - [ ] Environment hardening: prod CORS origins explicit, `/routes` confirmed hidden, secrets never in images
 
 ### Operations baseline
+
 - [ ] Nightly `pg_dump` → offsite storage (Cloudflare R2 or Backblaze B2)
 - [ ] **One timed restore drill.** A backup that has never been restored is not a backup. Write down how long it took.
 - [ ] Sentry: backend + frontend
@@ -77,7 +81,7 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 
 **Goal: ship one complete module surface — and let users pick which.**
 
-- [ ] Decision (from Month 2 feedback, not from the roadmap): **HRM frontend** (backend is ready) *or* **CRM depth**. One. Write a 5-line decision note.
+- [ ] Decision (from Month 2 feedback, not from the roadmap): **HRM frontend** (backend is ready) _or_ **CRM depth**. One. Write a 5-line decision note.
 - [ ] Ship it fully: all pages, empty states, error states, permission gates, reports — no "coming soon"
 - [ ] E2E on its critical path
 - [ ] TanStack Virtual on your heaviest list; record before/after render numbers
@@ -121,10 +125,10 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 
 ## Month 6 — One differentiator + the decision
 
-- [ ] Ship **one** of: real-time chat *or* lead auto-capture (both already designed — pick by user demand, not preference)
+- [ ] Ship **one** of: real-time chat _or_ lead auto-capture (both already designed — pick by user demand, not preference)
 - [ ] Vertical and complete: backend + frontend + E2E + docs
 - [ ] **Public write-up:** the architecture, what broke in Months 1–5, the numbers. This is a career artifact and the single best thinking-sharpener available to you.
-- [ ] **The decision memo (1 page, honest):** is BusinessSAAS a *product* (pursue paying customers seriously) or a *portfolio* (extract learnings, maybe open-source parts)? Both are legitimate wins. Drifting between them for another year is the only losing move.
+- [ ] **The decision memo (1 page, honest):** is BusinessSAAS a _product_ (pursue paying customers seriously) or a _portfolio_ (extract learnings, maybe open-source parts)? Both are legitimate wins. Drifting between them for another year is the only losing move.
 
 **Definition of Done:** feature live for real users · post published · decision written.
 
@@ -134,12 +138,12 @@ Your engineering quality is roughly 12 months ahead of your product maturity, an
 
 ## The mental-model shift
 
-| Level | Optimizes for | Thinks in |
-|---|---|---|
-| Junior | Working code | Functions |
-| Mid | Shipped features | Modules & patterns |
-| **Senior** | **System outcomes** | **Trade-offs, failure modes, cost of change** |
-| Architect | Decision quality over years | Reversible vs irreversible; what the org can operate |
+| Level      | Optimizes for               | Thinks in                                            |
+| ---------- | --------------------------- | ---------------------------------------------------- |
+| Junior     | Working code                | Functions                                            |
+| Mid        | Shipped features            | Modules & patterns                                   |
+| **Senior** | **System outcomes**         | **Trade-offs, failure modes, cost of change**        |
+| Architect  | Decision quality over years | Reversible vs irreversible; what the org can operate |
 
 You currently write code at a solid mid-to-senior level. What separates you from senior is not code — it's **consequences**: nothing you've built has ever failed under real load, been operated for a year, or been constrained by other people. The roadmap above is the cure; the items below accelerate it.
 
@@ -151,11 +155,11 @@ Architecture, concretely, is: (1) knowing failure modes, (2) getting the reversi
 2. **Designing Data-Intensive Applications** (Kleppmann) — 1 chapter/week, with notes. The canonical book. Chapters on indexes, replication, and transactions will directly change how you look at your Postgres usage.
 3. **A Philosophy of Software Design** (Ousterhout) — short; sharpens your instinct for when abstraction earns its cost. You'll recognize your platform/engagement split in it.
 4. **Fundamentals of Software Architecture**, then **Software Architecture: The Hard Parts** (Richards & Ford) — the formal vocabulary of trade-off analysis.
-5. Ongoing drills: **System Design Interview vol 1 & 2** (Alex Xu) — one design per week on paper (rate limiter, notification system, news feed), then compare against what *you* would do with your stack.
+5. Ongoing drills: **System Design Interview vol 1 & 2** (Alex Xu) — one design per week on paper (rate limiter, notification system, news feed), then compare against what _you_ would do with your stack.
 
 ## Habits (these compound more than the books)
 
-- **ADRs, upgraded:** add two sections to your template — *"Failure modes"* and *"What would make this decision wrong?"*
+- **ADRs, upgraded:** add two sections to your template — _"Failure modes"_ and _"What would make this decision wrong?"_
 - **Postmortems** for every production incident, even with an audience of one. Blameless format: timeline → root cause → what changes.
 - **Napkin math, monthly:** at 10 / 100 / 1,000 orgs — how many rows in `crm_deals`? What's the timeline query cost? When does the permission cache stop fitting? Estimation is a core architect muscle and it only grows with reps.
 - **One architecture study per month** from engineering blogs (Figma's multiplayer, Slack's message delivery, Shopify's pods, Discord's database migrations). Write 10 lines: what constraint drove the design, what they traded away.
@@ -182,7 +186,7 @@ Your biggest structural gap is **never experiencing other people's code, constra
 - **Bring artifacts, not abstractions.** "Any advice?" gets platitudes. "Here's my tenant-isolation design — attack it" gets gold.
 - **Ask about failures, not successes.** Success stories are survivorship bias; scar tissue is where judgment lives.
 - **Never ask what Google answers.** Ask what only experience answers.
-- After any answer: *"What would you have done differently, knowing what you know now?"*
+- After any answer: _"What would you have done differently, knowing what you know now?"_
 
 ## Scar tissue (judgment through failure)
 
