@@ -9,6 +9,7 @@ import {
   TrendingUp,
   UsersRound,
   ReceiptText,
+  Funnel,
   FolderKanban,
   ShoppingCart,
   Users,
@@ -52,6 +53,12 @@ function buildModules(orgId: string): Module[] {
       icon: TrendingUp,
       status: "live",
       items: [
+        {
+          label: "Leads",
+          href: `/${orgId}/crm/leads`,
+          icon: Funnel,
+          permission: "crm.leads.view",
+        },
         {
           label: "Pipeline",
           href: `/${orgId}/crm/pipeline`,
