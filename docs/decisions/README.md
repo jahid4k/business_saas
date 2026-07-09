@@ -34,3 +34,9 @@ Copy `0000-template.md`, increment the number, fill in every section. Status mus
 | [0011](0011-data-tables.md) | Data tables: TanStack Table v8 | Accepted | 2025-06-22 |
 | [0012](0012-error-handling-strategy.md) | Error handling: three-layer strategy | Accepted | 2025-06-22 |
 | [0013](0013-dark-mode.md) | Theme: dark/light mode with next-themes | Accepted | 2025-06-22 |
+| [0014](0014-hrm-extended-architecture.md) | HRM extended: config-first group dependency chain | Accepted | 2026-07-07 |
+| [0015](0015-hrm-formula-engine.md) | HRM salary: expr-lang/expr formula engine | Accepted | 2026-07-07 |
+| [0016](0016-hrm-approval-chains.md) | HRM approvals: sequential levels with snapshot isolation | Accepted | 2026-07-07 |
+| [0017](0017-hrm-payslip-engine.md) | HRM payslip: computation engine, attendance-gated, immutable | Accepted | 2026-07-07 |
+| [0018](0018-hrm-attendance-sources.md) | HRM attendance: multi-source via webhook and API key | Accepted | 2026-07-07 |
+| [0019](0019-hrm-document-templates.md) | HRM documents: Markdown templates, browser PDF, in-app ack | Accepted | 2026-07-07 |
