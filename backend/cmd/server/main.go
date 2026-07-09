@@ -7,7 +7,7 @@
 //
 // @title           BusinessSAAS API
 // @version         1.0.0
-// @description     Multi-tenant modular Business Operating System (CRM, RBAC, Tasks, and more).
+// @description     Multi-tenant modular Business Operating System (CRM, HRM, RBAC, Tasks, and more).
 // @description
 // @description     ### Authentication
 // @description     Protected endpoints require `Authorization: Bearer <access_token>`.
@@ -51,25 +51,68 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/redis/go-redis/v9"
 
+	// ── Internal — Bootstrap ──────────────────────────────────────────────────
 	bsaasdocs "github.com/mridha/businesssaas/docs"
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
-	crmdeals "github.com/mridha/businesssaas/internal/crm/deals"
-	crmleads "github.com/mridha/businesssaas/internal/crm/leads"
-	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
-	crmreports "github.com/mridha/businesssaas/internal/crm/reports"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
-	"github.com/mridha/businesssaas/internal/platform/contacts"
-	"github.com/mridha/businesssaas/internal/platform/engagement"
 	"github.com/mridha/businesssaas/internal/security"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/response"
+
+	// ── Internal — Platform (shared across modules) ───────────────────────────
+	"github.com/mridha/businesssaas/internal/platform/contacts"
+	"github.com/mridha/businesssaas/internal/platform/engagement"
+
+	// ── Internal — CRM ────────────────────────────────────────────────────────
+	crmdeals "github.com/mridha/businesssaas/internal/crm/deals"
+	crmleads "github.com/mridha/businesssaas/internal/crm/leads"
+	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
+	crmreports "github.com/mridha/businesssaas/internal/crm/reports"
+
+	// ── Internal — HRM Phase 1 (Core Employee Management) ────────────────────
+	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
+	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
+	hrmpositions "github.com/mridha/businesssaas/internal/hrm/positions"
+	hrmreports "github.com/mridha/businesssaas/internal/hrm/reports"
+
+	// ── Internal — HRM Group A (Config / Setup) ───────────────────────────────
+	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
+	hrmcontracts "github.com/mridha/businesssaas/internal/hrm/contracts"
+	hrmdoctmpls "github.com/mridha/businesssaas/internal/hrm/doctemplates"
+	hrmholidays "github.com/mridha/businesssaas/internal/hrm/holidays"
+	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
+	hrmshifts "github.com/mridha/businesssaas/internal/hrm/shifts"
+	hrmwarntypes "github.com/mridha/businesssaas/internal/hrm/warningtypes"
+
+	// ── Internal — HRM Group B (Core Employee Lifecycle) ─────────────────────
+	hrmpromotions "github.com/mridha/businesssaas/internal/hrm/promotions"
+	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
+	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
+	hrmtransfers "github.com/mridha/businesssaas/internal/hrm/transfers"
+
+	// ── Internal — HRM Group C (Disciplinary and Compliance) ─────────────────
+	hrmacks "github.com/mridha/businesssaas/internal/hrm/acknowledgements"
+	hrmcomplaints "github.com/mridha/businesssaas/internal/hrm/complaints"
+	hrmemployeedocs "github.com/mridha/businesssaas/internal/hrm/employeedocs"
+	hrmwarnings "github.com/mridha/businesssaas/internal/hrm/warnings"
+
+	// ── Internal — HRM Group D (Time and Compensation) ───────────────────────
+	hrmattendance "github.com/mridha/businesssaas/internal/hrm/attendance"
+	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
+
+	// ── Internal — HRM Group E (Recognition and Communication) ───────────────
+	hrmannouncements "github.com/mridha/businesssaas/internal/hrm/announcements"
+	hrmawards "github.com/mridha/businesssaas/internal/hrm/awards"
+	hrmcalendar "github.com/mridha/businesssaas/internal/hrm/calendar"
+	hrmmilestones "github.com/mridha/businesssaas/internal/hrm/milestones"
 )
 
 // scalarHTML is the Scalar API reference UI served in development.
@@ -100,21 +143,21 @@ const scalarHTML = `<!doctype html>
 </html>`
 
 func main() {
-	// 1. Config
+	// ── 1. Config ─────────────────────────────────────────────────────────────
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load configuration", slog.Any("error", err))
 		os.Exit(1)
 	}
 
-	// 2. Logger
+	// ── 2. Logger ─────────────────────────────────────────────────────────────
 	setupLogger(cfg.App.IsDevelopment())
 	slog.Info("starting BusinessSAAS backend",
 		slog.String("env", cfg.App.Env),
 		slog.String("port", cfg.App.Port),
 	)
 
-	// 3. PostgreSQL
+	// ── 3. PostgreSQL ─────────────────────────────────────────────────────────
 	ctx := context.Background()
 	pgPool, err := database.NewPostgresPool(ctx, cfg.Database)
 	if err != nil {
@@ -123,7 +166,7 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	// 4. Redis
+	// ── 4. Redis ──────────────────────────────────────────────────────────────
 	redisClient, err := database.NewRedisClient(ctx, cfg.Redis)
 	if err != nil {
 		slog.Error("failed to connect to Redis", slog.Any("error", err))
@@ -135,14 +178,16 @@ func main() {
 		}
 	}()
 
-	// 5. JWT + core middleware
+	// ── 5. JWT + core middleware ──────────────────────────────────────────────
 	jwtManager := jwtpkg.NewManager(cfg.JWT.Secret, cfg.JWT.AccessTokenTTL)
 	requireAuth := middleware.RequireAuth(jwtManager)
 	authRateLimit := middleware.NewAuthRateLimit(redisClient)
 
-	// ----------------------------------------------------------------
-	// 6. Repositories
-	// ----------------------------------------------------------------
+	// ═════════════════════════════════════════════════════════════════════════
+	// 6. REPOSITORIES
+	// ═════════════════════════════════════════════════════════════════════════
+
+	// ── Core ──────────────────────────────────────────────────────────────────
 	authRepo := auth.NewRepository(pgPool)
 	userRepo := user.NewRepository(pgPool)
 	avatarRepo := user.NewAvatarRepository(pgPool)
@@ -152,21 +197,63 @@ func main() {
 	securityRepo := security.NewRepository(pgPool)
 	taskRepo := task.NewRepository(pgPool)
 
-	// Platform
+	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
 
-	// CRM
+	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineRepo := crmpipeline.NewRepository(pgPool)
 	dealsRepo := crmdeals.NewRepository(pgPool)
 	leadsRepo := crmleads.NewRepository(pgPool)
 	reportsRepo := crmreports.NewRepository(pgPool)
 
-	// ----------------------------------------------------------------
-	// 7. Services (dependency order matters — see comments)
-	// ----------------------------------------------------------------
-	auditSvc := audit.NewService(auditRepo)
+	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
+	// Departments, Positions, Employees, Leave, Reports
+	// NOTE: If any Phase 1 service has additional dependencies (e.g. auditSvc),
+	// adjust the NewService call after confirming the actual signature.
+	hrmDeptsRepo := hrmdepts.NewRepository(pgPool)
+	hrmPosRepo := hrmpositions.NewRepository(pgPool)
+	hrmEmpRepo := hrmemployees.NewRepository(pgPool)
+	hrmLeaveRepo := hrmleave.NewRepository(pgPool)
+	hrmReportsRepo := hrmreports.NewRepository(pgPool)
 
+	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────
+	hrmSalaryRepo := hrmsalary.NewRepository(pgPool)
+	hrmApprovalsRepo := hrmapprovals.NewRepository(pgPool)
+	hrmWarnTypesRepo := hrmwarntypes.NewRepository(pgPool)
+	hrmDocTmplsRepo := hrmdoctmpls.NewRepository(pgPool)
+	hrmShiftsRepo := hrmshifts.NewRepository(pgPool)
+	hrmHolidaysRepo := hrmholidays.NewRepository(pgPool)
+	hrmContractsRepo := hrmcontracts.NewRepository(pgPool)
+
+	// ── HRM Group B — Core Employee Lifecycle (migrations 00029–00033) ────────
+	hrmPromotionsRepo := hrmpromotions.NewRepository(pgPool)
+	hrmTransfersRepo := hrmtransfers.NewRepository(pgPool)
+	hrmResignationsRepo := hrmresignations.NewRepository(pgPool)
+	hrmTerminationsRepo := hrmterminations.NewRepository(pgPool)
+
+	// ── HRM Group C — Disciplinary and Compliance (migrations 00034–00037) ────
+	hrmWarningsRepo := hrmwarnings.NewRepository(pgPool)
+	hrmCplRepo := hrmcomplaints.NewRepository(pgPool)
+	hrmEmpDocsRepo := hrmemployeedocs.NewRepository(pgPool)
+	hrmAcksRepo := hrmacks.NewRepository(pgPool)
+
+	// ── HRM Group D — Time and Compensation (migrations 00038–00040) ──────────
+	hrmAttendanceRepo := hrmattendance.NewRepository(pgPool)
+	hrmPayslipsRepo := hrmpayslips.NewRepository(pgPool)
+
+	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
+	hrmAwardsRepo := hrmawards.NewRepository(pgPool)
+	hrmAnnsRepo := hrmannouncements.NewRepository(pgPool)
+	hrmCalRepo := hrmcalendar.NewRepository(pgPool)
+	hrmMilestonesRepo := hrmmilestones.NewRepository(pgPool)
+
+	// ═════════════════════════════════════════════════════════════════════════
+	// 7. SERVICES   (dependency order: leaf → composite)
+	// ═════════════════════════════════════════════════════════════════════════
+
+	// ── Core ──────────────────────────────────────────────────────────────────
+	auditSvc := audit.NewService(auditRepo)
 	userSvc := user.NewService(userRepo)
 	avatarSvc := user.NewAvatarService(avatarRepo)
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
@@ -175,19 +262,67 @@ func main() {
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
-	// Platform
+	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
 
-	// CRM — wire in dependency order
+	// ── CRM (wire in dependency order) ────────────────────────────────────────
 	pipelineSvc := crmpipeline.NewService(pipelineRepo)
 	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc)
 	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc)
-	reportsSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
+	crmRptSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
 
-	// ----------------------------------------------------------------
-	// 8. Handlers
-	// ----------------------------------------------------------------
+	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
+	// If your Phase 1 services require auditSvc, replace NewService(repo) with
+	// NewService(repo, auditSvc) below.
+	hrmDeptsSvc := hrmdepts.NewService(hrmDeptsRepo)
+	hrmPosSvc := hrmpositions.NewService(hrmPosRepo)
+	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc)
+	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc)
+	hrmPhase1Rpts := hrmreports.NewService(hrmReportsRepo)
+
+	// ── HRM Group A — config-layer services; no cross-module dependencies ──────
+	hrmSalarySvc := hrmsalary.NewService(hrmSalaryRepo)
+	hrmApprovalsSvc := hrmapprovals.NewService(hrmApprovalsRepo)
+	hrmWarnTypesSvc := hrmwarntypes.NewService(hrmWarnTypesRepo)
+	hrmDocTmplsSvc := hrmdoctmpls.NewService(hrmDocTmplsRepo)
+	hrmShiftsSvc := hrmshifts.NewService(hrmShiftsRepo)
+	hrmHolidaysSvc := hrmholidays.NewService(hrmHolidaysRepo)
+	hrmContractsSvc := hrmcontracts.NewService(hrmContractsRepo)
+
+	// ── HRM Group B — lifecycle services; all need pgPool for Apply() txn ─────
+	hrmPromotionsSvc := hrmpromotions.NewService(hrmPromotionsRepo, pgPool)
+	hrmTransfersSvc := hrmtransfers.NewService(hrmTransfersRepo, pgPool)
+	hrmResignationsSvc := hrmresignations.NewService(hrmResignationsRepo, pgPool)
+	hrmTerminationsSvc := hrmterminations.NewService(hrmTerminationsRepo, pgPool)
+
+	// ── HRM Group C — disciplinary; all need pgPool for cross-table writes ─────
+	hrmWarningsSvc := hrmwarnings.NewService(hrmWarningsRepo, pgPool)
+	hrmCplSvc := hrmcomplaints.NewService(hrmCplRepo, pgPool)
+	hrmEmpDocsSvc := hrmemployeedocs.NewService(hrmEmpDocsRepo, pgPool)
+	hrmAcksSvc := hrmacks.NewService(hrmAcksRepo, pgPool)
+
+	// ── HRM Group D — time and compensation ───────────────────────────────────
+	// D1 attendance: pgPool for shift resolution queries
+	// D2 payslips:   pgPool for formula engine (employee+salary+attendance queries)
+	hrmAttendanceSvc := hrmattendance.NewService(hrmAttendanceRepo, pgPool)
+	hrmPayslipsSvc := hrmpayslips.NewService(hrmPayslipsRepo, pgPool)
+
+	// ── HRM Group E — recognition and communication ───────────────────────────
+	// E1 awards:         pgPool for auto-creating E2 announcement on Issue()
+	// E2 announcements:  pgPool for resolving target employees + C4 ack inserts
+	// E3 calendar:       pgPool for RSVP → C4 ack inserts
+	// E4 milestones:     pgPool for A7 contract reads in GenerateUpcoming()
+	hrmAwardsSvc := hrmawards.NewService(hrmAwardsRepo, pgPool)
+	hrmAnnsSvc := hrmannouncements.NewService(hrmAnnsRepo, pgPool)
+	hrmCalSvc := hrmcalendar.NewService(hrmCalRepo, pgPool)
+	hrmMilestonesSvc := hrmmilestones.NewService(hrmMilestonesRepo, pgPool)
+
+	// ═════════════════════════════════════════════════════════════════════════
+	// 8. HANDLERS
+	// ═════════════════════════════════════════════════════════════════════════
+
+	// ── Core ──────────────────────────────────────────────────────────────────
 	authHandler := auth.NewHandler(authSvc, cfg.Cookie)
 	userHandler := user.NewHandler(userSvc, avatarSvc)
 	authzHandler := authz.NewHandler(authzSvc)
@@ -195,21 +330,58 @@ func main() {
 	securityHandler := security.NewHandler(securitySvc)
 	taskHandler := task.NewHandler(taskSvc)
 
-	// Platform
+	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsHandler := contacts.NewHandler(contactsSvc)
-	// engagement handler is bound to "crm" module tag.
-	// When HRM arrives: engagement.NewHandler(engagementSvc, "hrm")
+	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
 
-	// CRM
+	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineHandler := crmpipeline.NewHandler(pipelineSvc)
 	dealsHandler := crmdeals.NewHandler(dealsSvc)
 	leadsHandler := crmleads.NewHandler(leadsSvc)
-	reportsHandler := crmreports.NewHandler(reportsSvc)
+	crmRptHandler := crmreports.NewHandler(crmRptSvc)
 
-	// ----------------------------------------------------------------
-	// 9. Fiber
-	// ----------------------------------------------------------------
+	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
+	hrmDeptsHandler := hrmdepts.NewHandler(hrmDeptsSvc)
+	hrmPosHandler := hrmpositions.NewHandler(hrmPosSvc)
+	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc)
+	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc)
+	hrmRptsHandler := hrmreports.NewHandler(hrmPhase1Rpts)
+
+	// ── HRM Group A ───────────────────────────────────────────────────────────
+	hrmSalaryHandler := hrmsalary.NewHandler(hrmSalarySvc)
+	hrmApprovalsHandler := hrmapprovals.NewHandler(hrmApprovalsSvc)
+	hrmWarnTypesHandler := hrmwarntypes.NewHandler(hrmWarnTypesSvc)
+	hrmDocTmplsHandler := hrmdoctmpls.NewHandler(hrmDocTmplsSvc)
+	hrmShiftsHandler := hrmshifts.NewHandler(hrmShiftsSvc)
+	hrmHolidaysHandler := hrmholidays.NewHandler(hrmHolidaysSvc)
+	hrmContractsHandler := hrmcontracts.NewHandler(hrmContractsSvc)
+
+	// ── HRM Group B ───────────────────────────────────────────────────────────
+	hrmPromotionsHandler := hrmpromotions.NewHandler(hrmPromotionsSvc)
+	hrmTransfersHandler := hrmtransfers.NewHandler(hrmTransfersSvc)
+	hrmResignationsHandler := hrmresignations.NewHandler(hrmResignationsSvc)
+	hrmTerminationsHandler := hrmterminations.NewHandler(hrmTerminationsSvc)
+
+	// ── HRM Group C ───────────────────────────────────────────────────────────
+	hrmWarningsHandler := hrmwarnings.NewHandler(hrmWarningsSvc)
+	hrmCplHandler := hrmcomplaints.NewHandler(hrmCplSvc)
+	hrmEmpDocsHandler := hrmemployeedocs.NewHandler(hrmEmpDocsSvc)
+	hrmAcksHandler := hrmacks.NewHandler(hrmAcksSvc)
+
+	// ── HRM Group D ───────────────────────────────────────────────────────────
+	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc)
+	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc)
+
+	// ── HRM Group E ───────────────────────────────────────────────────────────
+	hrmAwardsHandler := hrmawards.NewHandler(hrmAwardsSvc)
+	hrmAnnsHandler := hrmannouncements.NewHandler(hrmAnnsSvc)
+	hrmCalHandler := hrmcalendar.NewHandler(hrmCalSvc)
+	hrmMilestonesHandler := hrmmilestones.NewHandler(hrmMilestonesSvc)
+
+	// ═════════════════════════════════════════════════════════════════════════
+	// 9. FIBER
+	// ═════════════════════════════════════════════════════════════════════════
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
 		ReadTimeout:  30 * time.Second,
@@ -227,9 +399,7 @@ func main() {
 		CaseSensitive: true,
 	})
 
-	// ----------------------------------------------------------------
-	// 10. Global middleware
-	// ----------------------------------------------------------------
+	// ── 10. Global middleware ─────────────────────────────────────────────────
 	app.Use(middleware.Recover())
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger())
@@ -241,24 +411,28 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           86400,
 	}))
-
 	app.Get("/uploads/*", static.New("./uploads"))
 
-	// ----------------------------------------------------------------
-	// 11. Routes
-	// ----------------------------------------------------------------
+	// ═════════════════════════════════════════════════════════════════════════
+	// 11. ROUTES
+	// Registration order matters in Fiber v3:
+	//   • Static sub-routes must come before parameterised siblings.
+	//   • All module routes are guarded by requireAuth + requireOrgMatch.
+	//   • permFn wraps middleware.RequirePermission for a named permission key.
+	// ═════════════════════════════════════════════════════════════════════════
 	api := app.Group("/api/v1")
 	registerSystemRoutes(api, app, pgPool, redisClient, cfg)
 
+	// ── Core ──────────────────────────────────────────────────────────────────
 	auth.RegisterRoutesWithRateLimit(api, authHandler, requireAuth, authRateLimit)
 	user.RegisterRoutes(api, userHandler, requireAuth)
 	organizations.RegisterRoutes(api, businessHandler, requireAuth)
 
-	// Shared middleware factories
+	// Shared middleware factories used by every org-scoped module below
 	requireBusiness := middleware.RequireBusiness()
 	requireOrgParam := middleware.RequireOrganizationParam("orgId")
+	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
 
-	// permFn builds a permission-checking middleware for a named permission key.
 	permFn := func(perm string) fiber.Handler {
 		return middleware.RequirePermission(authzSvc, perm)
 	}
@@ -267,20 +441,67 @@ func main() {
 	security.RegisterRoutes(api, securityHandler, permFn, requireAuth, requireOrgParam)
 	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
 
-	// CRM tenant isolation guard
-	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
-
-	// Platform layer (shared across all future modules)
+	// ── Platform (shared layer — CRM and future modules) ──────────────────────
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
 
-	// CRM domain routes
+	// ── CRM ───────────────────────────────────────────────────────────────────
 	crmleads.RegisterRoutes(api, leadsHandler, permFn, requireAuth, requireOrgMatch)
 	crmpipeline.RegisterRoutes(api, pipelineHandler, permFn, requireAuth, requireOrgMatch)
 	crmdeals.RegisterRoutes(api, dealsHandler, permFn, requireAuth, requireOrgMatch)
-	crmreports.RegisterRoutes(api, reportsHandler, permFn, requireAuth, requireOrgMatch)
+	crmreports.RegisterRoutes(api, crmRptHandler, permFn, requireAuth, requireOrgMatch)
 
-	// 404 fallback — must be last
+	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
+	// Routes under /organizations/:orgId/hrm/{departments,positions,employees,leave,reports}
+	hrmdepts.RegisterRoutes(api, hrmDeptsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmpositions.RegisterRoutes(api, hrmPosHandler, permFn, requireAuth, requireOrgMatch)
+	hrmemployees.RegisterRoutes(api, hrmEmpHandler, permFn, requireAuth, requireOrgMatch)
+	hrmleave.RegisterRoutes(api, hrmLeaveHandler, permFn, requireAuth, requireOrgMatch)
+	hrmreports.RegisterRoutes(api, hrmRptsHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────
+	// Salary structures, approval templates, warning types, doc templates,
+	// work shifts, holiday calendars, employee contracts
+	hrmsalary.RegisterRoutes(api, hrmSalaryHandler, permFn, requireAuth, requireOrgMatch)
+	hrmapprovals.RegisterRoutes(api, hrmApprovalsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmwarntypes.RegisterRoutes(api, hrmWarnTypesHandler, permFn, requireAuth, requireOrgMatch)
+	hrmdoctmpls.RegisterRoutes(api, hrmDocTmplsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmshifts.RegisterRoutes(api, hrmShiftsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmholidays.RegisterRoutes(api, hrmHolidaysHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcontracts.RegisterRoutes(api, hrmContractsHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Group B — Core Employee Lifecycle (migrations 00029–00033) ────────
+	// Promotions, Transfers, Resignations, Terminations
+	// Apply/Accept actions are transactional (pgxpool.BeginTx pattern).
+	hrmpromotions.RegisterRoutes(api, hrmPromotionsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmtransfers.RegisterRoutes(api, hrmTransfersHandler, permFn, requireAuth, requireOrgMatch)
+	hrmresignations.RegisterRoutes(api, hrmResignationsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmterminations.RegisterRoutes(api, hrmTerminationsHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Group C — Disciplinary and Compliance (migrations 00034–00037) ────
+	// Warnings (C1), Complaints (C2), Employee Documents (C3), Acknowledgements (C4)
+	// C4 is cross-cutting — used by C1, C3, E2, E3.
+	hrmwarnings.RegisterRoutes(api, hrmWarningsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcomplaints.RegisterRoutes(api, hrmCplHandler, permFn, requireAuth, requireOrgMatch)
+	hrmemployeedocs.RegisterRoutes(api, hrmEmpDocsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmacks.RegisterRoutes(api, hrmAcksHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Group D — Time and Compensation (migrations 00038–00040) ──────────
+	// Attendance (D1) → Payslips / Payroll engine (D2)
+	// D2 ComputeRun() checks D1 period is finalized before running formulas.
+	hrmattendance.RegisterRoutes(api, hrmAttendanceHandler, permFn, requireAuth, requireOrgMatch)
+	hrmpayslips.RegisterRoutes(api, hrmPayslipsHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
+	// Awards (E1), Announcements (E2), HR Calendar (E3), Employee Milestones (E4)
+	// E2 publish + E3 RSVP both write C4 acknowledgement rows (ON CONFLICT DO NOTHING).
+	// E4 GenerateUpcoming reads A7 contract dates to auto-create milestone records.
+	hrmawards.RegisterRoutes(api, hrmAwardsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmannouncements.RegisterRoutes(api, hrmAnnsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcalendar.RegisterRoutes(api, hrmCalHandler, permFn, requireAuth, requireOrgMatch)
+	hrmmilestones.RegisterRoutes(api, hrmMilestonesHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── 404 fallback — must be registered last ────────────────────────────────
 	app.Use(func(c fiber.Ctx) error {
 		return response.NotFound(c,
 			"ROUTE_NOT_FOUND",
@@ -290,9 +511,9 @@ func main() {
 
 	slog.Info("all routes registered")
 
-	// ----------------------------------------------------------------
+	// ═════════════════════════════════════════════════════════════════════════
 	// 12. Start + graceful shutdown
-	// ----------------------------------------------------------------
+	// ═════════════════════════════════════════════════════════════════════════
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
@@ -367,16 +588,7 @@ func registerSystemRoutes(
 		return response.OK(c, nil, "Hello from Go backend")
 	})
 
-	// ── API Documentation (development only) ──────────────────────────
-	//
-	//   GET /api/v1/docs              → Scalar interactive UI (purple theme, dark mode)
-	//   GET /api/v1/docs/openapi.json → Raw OpenAPI 3.0 spec (embedded at build time)
-	//
-	//   To regenerate after editing handler annotations:
-	//     make docs
-	//
-	//   The spec is embedded at compile time — no external files needed at runtime.
-	//   Production builds do NOT expose these routes.
+	// ── API Documentation (development only) ──────────────────────────────────
 	if cfg.App.IsDevelopment() {
 		router.Get("/docs/openapi.json", func(c fiber.Ctx) error {
 			c.Set("Content-Type", "application/json; charset=utf-8")
@@ -389,7 +601,6 @@ func registerSystemRoutes(
 			return c.SendString(scalarHTML)
 		})
 
-		// Redirect trailing slash variant
 		router.Get("/docs/", func(c fiber.Ctx) error {
 			return c.Redirect().To("/api/v1/docs")
 		})
