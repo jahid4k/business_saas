@@ -74,7 +74,7 @@ CREATE INDEX idx_hrm_mil_employee_id ON hrm_employee_milestones (employee_id);
 CREATE INDEX idx_hrm_mil_type        ON hrm_employee_milestones (org_id, milestone_type);
 CREATE INDEX idx_hrm_mil_date        ON hrm_employee_milestones (org_id, milestone_date);
 CREATE INDEX idx_hrm_mil_upcoming    ON hrm_employee_milestones (org_id, milestone_date)
-    WHERE milestone_date >= CURRENT_DATE AND is_acknowledged = FALSE;
+    WHERE is_acknowledged = FALSE;
 
 COMMENT ON TABLE  hrm_employee_milestones IS 'Employee lifecycle milestones: anniversaries, birthdays, promotions, etc.';
 COMMENT ON COLUMN hrm_employee_milestones.years_count         IS 'Year number for anniversary types (e.g. 5 for 5-year anniversary)';

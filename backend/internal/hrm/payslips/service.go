@@ -30,42 +30,65 @@ type serviceImpl struct {
 	repo Repository
 	db   *pgxpool.Pool
 }
+
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
 func (s *serviceImpl) ListRuns(ctx context.Context, orgID string) (*RunListResponse, error) {
 	list, err := s.repo.FindRuns(ctx, orgID)
-	if err != nil { return nil, fmt.Errorf("payslips: ListRuns: %w", err) }
-	if list == nil { list = []*PayslipRun{} }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: ListRuns: %w", err)
+	}
+	if list == nil {
+		list = []*PayslipRun{}
+	}
 	return &RunListResponse{Runs: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) GetRun(ctx context.Context, orgID, ref string) (*PayslipRun, error) {
 	r, err := s.repo.FindRunByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: GetRun: %w", err) }
-	if r == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: GetRun: %w", err)
+	}
+	if r == nil {
+		return nil, ErrNotFound
+	}
 	return r, nil
 }
 
 func (s *serviceImpl) CreateRun(ctx context.Context, orgID, createdBy string, req CreateRunRequest) (*PayslipRun, error) {
-	if req.Year == 0 { return nil, ErrYearRequired }
-	if req.Month == 0 { return nil, ErrMonthRequired }
-	if req.Month < 1 || req.Month > 12 { return nil, ErrInvalidMonth }
+	if req.Year == 0 {
+		return nil, ErrYearRequired
+	}
+	if req.Month == 0 {
+		return nil, ErrMonthRequired
+	}
+	if req.Month < 1 || req.Month > 12 {
+		return nil, ErrInvalidMonth
+	}
 
 	existing, err := s.repo.FindRunByPeriod(ctx, orgID, req.Year, req.Month)
-	if err != nil { return nil, fmt.Errorf("payslips: CreateRun: check existing: %w", err) }
-	if existing != nil { return nil, ErrDuplicateRun }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: CreateRun: check existing: %w", err)
+	}
+	if existing != nil {
+		return nil, ErrDuplicateRun
+	}
 
 	currency := "BDT"
-	if req.Currency != nil && strings.TrimSpace(*req.Currency) != "" { currency = *req.Currency }
+	if req.Currency != nil && strings.TrimSpace(*req.Currency) != "" {
+		currency = *req.Currency
+	}
 
 	run := &PayslipRun{
 		OrgID: orgID, PeriodYear: req.Year, PeriodMonth: req.Month,
 		Description: req.Description, Currency: currency,
 		AttendancePeriodID: req.AttendancePeriodID,
-		Status: RunDraft, CreatedBy: createdBy,
+		Status:             RunDraft, CreatedBy: createdBy,
 	}
 	if err := s.repo.CreateRun(ctx, run); err != nil {
-		if strings.Contains(err.Error(), "unique") { return nil, ErrDuplicateRun }
+		if strings.Contains(err.Error(), "unique") {
+			return nil, ErrDuplicateRun
+		}
 		return nil, fmt.Errorf("payslips: CreateRun: %w", err)
 	}
 	return run, nil
@@ -73,17 +96,25 @@ func (s *serviceImpl) CreateRun(ctx context.Context, orgID, createdBy string, re
 
 // ComputeRun is the core payroll engine.
 // For each active employee:
-//   1. Load salary structure + components (ordered by display_order)
-//   2. Get basic_pay from hrm_employee_salary_records
-//   3. Get attendance summary for the period (from D1 if linked)
-//   4. Compute each component using the A1 formula engine
-//   5. Insert payslip + lines
+//  1. Load salary structure + components (ordered by display_order)
+//  2. Get basic_pay from hrm_employee_salary_records
+//  3. Get attendance summary for the period (from D1 if linked)
+//  4. Compute each component using the A1 formula engine
+//  5. Insert payslip + lines
 func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy string) (*PayslipRun, error) {
 	run, err := s.repo.FindRunByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: ComputeRun: %w", err) }
-	if run == nil { return nil, ErrNotFound }
-	if run.Status == RunComputed || run.Status == RunApproved || run.Status == RunPaid { return nil, ErrAlreadyComputed }
-	if run.Status == RunCancelled { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: ComputeRun: %w", err)
+	}
+	if run == nil {
+		return nil, ErrNotFound
+	}
+	if run.Status == RunComputed || run.Status == RunApproved || run.Status == RunPaid {
+		return nil, ErrAlreadyComputed
+	}
+	if run.Status == RunCancelled {
+		return nil, ErrWrongStatus
+	}
 
 	// D1 dependency check: attendance period must be finalized
 	if run.AttendancePeriodID != nil {
@@ -97,15 +128,17 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 
 	// Mark as computing to prevent concurrent runs
 	run.Status = RunComputing
-	if err := s.repo.UpdateRun(ctx, run); err != nil { return nil, fmt.Errorf("payslips: ComputeRun: mark computing: %w", err) }
+	if err := s.repo.UpdateRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("payslips: ComputeRun: mark computing: %w", err)
+	}
 
 	// Load active employees
 	type empRow struct {
-		ID               string
-		HireDate         string
-		StructureID      *string
-		StructureName    *string
-		BasicPay         float64
+		ID            string
+		HireDate      string
+		StructureID   *string
+		StructureName *string
+		BasicPay      float64
 	}
 	rows, err := s.db.Query(ctx,
 		`SELECT e.id::text, COALESCE(to_char(e.hire_date,'YYYY-MM-DD'),''),
@@ -120,7 +153,8 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		WHERE e.org_id=$1 AND e.status IN ('active','resigned')`,
 		orgID, run.PeriodYear, run.PeriodMonth)
 	if err != nil {
-		run.Status = RunDraft; _ = s.repo.UpdateRun(ctx, run)
+		run.Status = RunDraft
+		_ = s.repo.UpdateRun(ctx, run)
 		return nil, fmt.Errorf("payslips: ComputeRun: load employees: %w", err)
 	}
 	defer rows.Close()
@@ -128,7 +162,9 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 	var employees []empRow
 	for rows.Next() {
 		var e empRow
-		if err := rows.Scan(&e.ID, &e.HireDate, &e.StructureID, &e.StructureName, &e.BasicPay); err != nil { continue }
+		if err := rows.Scan(&e.ID, &e.HireDate, &e.StructureID, &e.StructureName, &e.BasicPay); err != nil {
+			continue
+		}
 		employees = append(employees, e)
 	}
 
@@ -209,7 +245,9 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		for _, comp := range components {
 			var amount float64
 			effectiveFixed := comp.FixedValue
-			if comp.OverrideValue != nil { effectiveFixed = *comp.OverrideValue }
+			if comp.OverrideValue != nil {
+				effectiveFixed = *comp.OverrideValue
+			}
 
 			switch comp.CalcMethod {
 			case "fixed":
@@ -229,54 +267,70 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 				amount = 0
 			}
 
-			if amount < 0 { amount = 0 } // safety: no negative line items
+			if amount < 0 {
+				amount = 0
+			} // safety: no negative line items
 
 			var compIDStr *string
-			if comp.CompID != nil { compIDStr = comp.CompID }
+			if comp.CompID != nil {
+				compIDStr = comp.CompID
+			}
 			var formulaUsed *string
-			if comp.Formula != nil { formulaUsed = comp.Formula }
+			if comp.Formula != nil {
+				formulaUsed = comp.Formula
+			}
 
 			lines = append(lines, &PayslipLine{
-				OrgID: orgID,
-				ComponentID:   compIDStr,
-				ComponentName: comp.CompName,
-				ComponentType: comp.CompType,
-				CalcMethod:    comp.CalcMethod,
-				FormulaUsed:   formulaUsed,
+				OrgID:          orgID,
+				ComponentID:    compIDStr,
+				ComponentName:  comp.CompName,
+				ComponentType:  comp.CompType,
+				CalcMethod:     comp.CalcMethod,
+				FormulaUsed:    formulaUsed,
 				ComputedAmount: amount,
-				DisplayOrder:  comp.DisplayOrder,
+				DisplayOrder:   comp.DisplayOrder,
 			})
 
 			switch comp.CompType {
-			case "earning": gross += amount
-			case "deduction": deductions += amount
-		}
+			case "earning":
+				gross += amount
+			case "deduction":
+				deductions += amount
+			}
 		}
 
 		netPay := gross - deductions
-		if netPay < 0 { netPay = 0 }
+		if netPay < 0 {
+			netPay = 0
+		}
 
 		// Create payslip
 		slip := &Payslip{
 			OrgID: orgID, EmployeeID: emp.ID,
 			PayslipRunID: run.ID,
-			PeriodYear: run.PeriodYear, PeriodMonth: run.PeriodMonth,
+			PeriodYear:   run.PeriodYear, PeriodMonth: run.PeriodMonth,
 			SalaryStructureID: emp.StructureID, SalaryStructureName: emp.StructureName,
 			GrossPay: gross, TotalDeductions: deductions, NetPay: netPay,
 			BasicPay: emp.BasicPay,
 			WorkDays: workDays, PresentDays: presentDays, AbsentDays: absentDays,
 			LeaveDays: leaveDays, HolidayDays: holidayDays, OvertimeHours: otHours,
 			Currency: run.Currency,
-			Status: SlipComputed,
+			Status:   SlipComputed,
 		}
-		if err := s.repo.CreatePayslip(ctx, slip); err != nil { continue }
+		if err := s.repo.CreatePayslip(ctx, slip); err != nil {
+			continue
+		}
 
 		// Attach payslip_id to lines and persist
-		for _, l := range lines { l.PayslipID = slip.ID }
-		if len(lines) > 0 { _ = s.repo.CreatePayslipLines(ctx, lines) }
+		for _, l := range lines {
+			l.PayslipID = slip.ID
+		}
+		if len(lines) > 0 {
+			_ = s.repo.CreatePayslipLines(ctx, lines)
+		}
 
 		totalGross += gross
-		deductions += deductions // BUG: should be totalDeductions
+		totalDeductions += deductions
 		totalNet += netPay
 	}
 
@@ -284,73 +338,115 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 	run.Status = RunComputed
 	run.TotalEmployees = len(employees)
 	run.TotalGrossPay = totalGross
-	run.TotalDeductions = totalGross - totalNet
+	run.TotalDeductions = totalDeductions
 	run.TotalNetPay = totalNet
 	run.ComputedAt = &now
 	run.ComputedBy = &computedBy
-	if err := s.repo.UpdateRun(ctx, run); err != nil { return nil, fmt.Errorf("payslips: ComputeRun: finalize run: %w", err) }
+	if err := s.repo.UpdateRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("payslips: ComputeRun: finalize run: %w", err)
+	}
 	return run, nil
 }
 
 // evalFormula evaluates an expr-lang expression in the given environment.
 func (s *serviceImpl) evalFormula(expression string, env map[string]interface{}) (float64, error) {
 	program, err := expr.Compile(expression, expr.Env(env), expr.AsFloat64())
-	if err != nil { return 0, fmt.Errorf("compile: %w", err) }
+	if err != nil {
+		return 0, fmt.Errorf("compile: %w", err)
+	}
 	result, err := expr.Run(program, env)
-	if err != nil { return 0, fmt.Errorf("eval: %w", err) }
-	if v, ok := result.(float64); ok { return v, nil }
+	if err != nil {
+		return 0, fmt.Errorf("eval: %w", err)
+	}
+	if v, ok := result.(float64); ok {
+		return v, nil
+	}
 	return 0, fmt.Errorf("formula did not return a number")
 }
 
 func (s *serviceImpl) ApproveRun(ctx context.Context, orgID, ref, approvedBy string) (*PayslipRun, error) {
 	run, err := s.repo.FindRunByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: ApproveRun: %w", err) }
-	if run == nil { return nil, ErrNotFound }
-	if run.Status != RunComputed { return nil, ErrNotComputed }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: ApproveRun: %w", err)
+	}
+	if run == nil {
+		return nil, ErrNotFound
+	}
+	if run.Status != RunComputed {
+		return nil, ErrNotComputed
+	}
 	now := time.Now()
 	run.Status = RunApproved
 	run.ApprovedAt = &now
 	run.ApprovedBy = &approvedBy
-	if err := s.repo.UpdateRun(ctx, run); err != nil { return nil, fmt.Errorf("payslips: ApproveRun: %w", err) }
+	if err := s.repo.UpdateRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("payslips: ApproveRun: %w", err)
+	}
 	return run, nil
 }
 
 func (s *serviceImpl) MarkPaid(ctx context.Context, orgID, ref, paidBy string) (*PayslipRun, error) {
 	run, err := s.repo.FindRunByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: MarkPaid: %w", err) }
-	if run == nil { return nil, ErrNotFound }
-	if run.Status != RunApproved { return nil, ErrNotApproved }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: MarkPaid: %w", err)
+	}
+	if run == nil {
+		return nil, ErrNotFound
+	}
+	if run.Status != RunApproved {
+		return nil, ErrNotApproved
+	}
 	now := time.Now()
 	run.Status = RunPaid
 	run.PaidAt = &now
 	run.PaidBy = &paidBy
-	if err := s.repo.UpdateRun(ctx, run); err != nil { return nil, fmt.Errorf("payslips: MarkPaid: %w", err) }
+	if err := s.repo.UpdateRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("payslips: MarkPaid: %w", err)
+	}
 	return run, nil
 }
 
 func (s *serviceImpl) CancelRun(ctx context.Context, orgID, ref string) (*PayslipRun, error) {
 	run, err := s.repo.FindRunByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: CancelRun: %w", err) }
-	if run == nil { return nil, ErrNotFound }
-	if run.Status == RunPaid || run.Status == RunCancelled { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: CancelRun: %w", err)
+	}
+	if run == nil {
+		return nil, ErrNotFound
+	}
+	if run.Status == RunPaid || run.Status == RunCancelled {
+		return nil, ErrWrongStatus
+	}
 	run.Status = RunCancelled
-	if err := s.repo.UpdateRun(ctx, run); err != nil { return nil, fmt.Errorf("payslips: CancelRun: %w", err) }
+	if err := s.repo.UpdateRun(ctx, run); err != nil {
+		return nil, fmt.Errorf("payslips: CancelRun: %w", err)
+	}
 	return run, nil
 }
 
 func (s *serviceImpl) ListPayslips(ctx context.Context, orgID, runID, employeeID string) (*SlipListResponse, error) {
 	list, err := s.repo.FindPayslips(ctx, orgID, runID, employeeID)
-	if err != nil { return nil, fmt.Errorf("payslips: ListPayslips: %w", err) }
-	if list == nil { list = []*Payslip{} }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: ListPayslips: %w", err)
+	}
+	if list == nil {
+		list = []*Payslip{}
+	}
 	return &SlipListResponse{Payslips: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) GetPayslip(ctx context.Context, orgID, ref string) (*Payslip, error) {
 	p, err := s.repo.FindPayslipByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("payslips: GetPayslip: %w", err) }
-	if p == nil { return nil, ErrPayslipNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: GetPayslip: %w", err)
+	}
+	if p == nil {
+		return nil, ErrPayslipNotFound
+	}
 	// Load lines
 	lines, err := s.repo.LoadPayslipLines(ctx, p.ID)
-	if err == nil { p.Lines = lines }
+	if err == nil {
+		p.Lines = lines
+	}
 	return p, nil
 }
