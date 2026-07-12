@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+// EntityCallback is invoked when an approval instance reaches a terminal
+// state (approved or rejected), so the source record (termination, promotion,
+// warning, etc.) can react — e.g. flip its own status out of pending_approval.
+// entityID is the internal (non-public) ID that was passed as EntityID when
+// the instance was created. Callback errors are logged by the caller but do
+// NOT roll back the approval decision itself — the decision is the source of
+// truth; a failed callback means the source record is out of sync and needs
+// manual reconciliation, not that the approval never happened.
+type EntityCallback func(ctx context.Context, orgID, entityID string, approved bool) error
+
 // Service defines business logic for the approval engine.
 // It is also used as a shared dependency by other HRM services (leave, promotion, etc.)
 type Service interface {
@@ -26,11 +36,26 @@ type Service interface {
 
 	// Convenience: find default template for action type
 	FindDefault(ctx context.Context, orgID string, actionType ActionType) (*ApprovalTemplate, error)
+
+	// RegisterCallback wires a source module (termination, promotion, ...) so that
+	// when one of its instances completes, the module can update its own record.
+	// entityType must match the EntityType used in CreateInstanceRequest (e.g. "termination").
+	// Called once per module during app wiring (main.go), after all services exist.
+	RegisterCallback(entityType string, fn EntityCallback)
 }
 
-type serviceImpl struct{ repo Repository }
+type serviceImpl struct {
+	repo      Repository
+	callbacks map[string]EntityCallback
+}
 
-func NewService(repo Repository) Service { return &serviceImpl{repo: repo} }
+func NewService(repo Repository) Service {
+	return &serviceImpl{repo: repo, callbacks: make(map[string]EntityCallback)}
+}
+
+func (s *serviceImpl) RegisterCallback(entityType string, fn EntityCallback) {
+	s.callbacks[entityType] = fn
+}
 
 func (s *serviceImpl) ListTemplates(ctx context.Context, orgID, actionType string) (*TemplateListResponse, error) {
 	list, err := s.repo.FindAllTemplates(ctx, orgID, actionType)
@@ -167,6 +192,19 @@ func (s *serviceImpl) Decide(ctx context.Context, orgID, instanceRef, approverID
 	}
 	if err := s.repo.UpdateInstance(ctx, inst); err != nil {
 		return nil, fmt.Errorf("approvals: Decide update: %w", err)
+	}
+
+	// Notify the source module once the instance reaches a terminal state.
+	// "cancelled" is intentionally excluded — cancellation is initiated by the
+	// source module itself (via CancelInstance), so there is nothing to call back.
+	if inst.OverallStatus == InstanceStatusApproved || inst.OverallStatus == InstanceStatusRejected {
+		if cb, ok := s.callbacks[inst.EntityType]; ok {
+			approved := inst.OverallStatus == InstanceStatusApproved
+			if cbErr := cb(ctx, orgID, inst.EntityID, approved); cbErr != nil {
+				return inst, fmt.Errorf("approvals: Decide: entity callback for %q failed (approval instance %s is saved as %s, source record may be out of sync): %w",
+					inst.EntityType, inst.ID, inst.OverallStatus, cbErr)
+			}
+		}
 	}
 	return inst, nil
 }

@@ -184,9 +184,11 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Failure		500			{object}	response.Error
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/promotions/{promotionId}/submit [post]
 func (h *Handler) Submit(c fiber.Ctx) error {
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	p, err := h.service.Submit(c.Context(), orgID, c.Params("employeeId"), c.Params("promotionId"))
+	p, err := h.service.Submit(c.Context(), orgID, c.Params("employeeId"), c.Params("promotionId"), userID)
 	if err != nil { return h.err(c, err) }
 	return response.OK(c, fiber.Map{"promotion": p}, "Promotion submitted")
 }

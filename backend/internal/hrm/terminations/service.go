@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
 )
 
 const dateLayout = "2006-01-02"
@@ -19,19 +21,26 @@ type Service interface {
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Termination, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTerminationRequest) (*Termination, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTerminationRequest) (*Termination, error)
-	Submit(ctx context.Context, orgID, employeeID, ref string) (*Termination, error)
+	// Submit moves draft → pending_approval (if an approval chain is configured
+	// for "termination") or straight to approved (fallback, unchanged behavior).
+	Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Termination, error)
 	Cancel(ctx context.Context, orgID, employeeID, ref string) (*Termination, error)
 	// Apply is a transactional operation: marks applied AND sets employee.status=terminated.
 	Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Termination, error)
+	// HandleApprovalDecision is called back by the approvals service when a
+	// termination's approval instance reaches a terminal state. Not meant to
+	// be called directly by handlers — registered in main.go via RegisterCallback.
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
 }
 
 type serviceImpl struct {
-	repo Repository
-	db   *pgxpool.Pool // for cross-table Apply transaction
+	repo         Repository
+	db           *pgxpool.Pool // for cross-table Apply transaction
+	approvalsSvc approvals.Service
 }
 
-func NewService(repo Repository, db *pgxpool.Pool) Service {
-	return &serviceImpl{repo: repo, db: db}
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*TerminationListResponse, error) {
@@ -111,17 +120,48 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string,
 	return t, nil
 }
 
-func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref string) (*Termination, error) {
+func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Termination, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
 	if err != nil { return nil, fmt.Errorf("terminations: Submit: %w", err) }
 	if t == nil { return nil, ErrNotFound }
 	if t.Status != StatusDraft { return nil, ErrWrongStatus }
-	// Default path: no approval template → move directly to approved
+
+	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeTermination)
+	if tErr == nil && tmpl != nil {
+		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+			TemplateID: tmpl.ID, EntityType: "termination", EntityID: t.ID, RequestedBy: submittedBy,
+		})
+		if iErr != nil { return nil, fmt.Errorf("terminations: Submit: creating approval instance: %w", iErr) }
+		if err := s.repo.SetApprovalInstance(ctx, t.ID, inst.ID, StatusPendingApproval); err != nil {
+			return nil, fmt.Errorf("terminations: Submit: %w", err)
+		}
+		t.ApprovalInstanceID = &inst.ID
+		t.Status = StatusPendingApproval
+		return t, nil
+	}
+
+	// No approval template configured — unchanged fallback behavior
 	if err := s.repo.UpdateStatus(ctx, t.ID, StatusApproved); err != nil {
 		return nil, fmt.Errorf("terminations: Submit: %w", err)
 	}
 	t.Status = StatusApproved
 	return t, nil
+}
+
+// HandleApprovalDecision reacts to the termination's approval instance completing.
+// Approved  → status becomes 'approved' (same state Submit would have set directly).
+// Rejected  → status becomes 'rejected', a terminal state; HR must create a new record.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	t, err := s.repo.FindByRef(ctx, orgID, "", entityID)
+	if err != nil { return fmt.Errorf("terminations: HandleApprovalDecision: %w", err) }
+	if t == nil { return ErrNotFound }
+	if t.Status != StatusPendingApproval { return nil } // already moved on (e.g. cancelled) — nothing to do
+	status := StatusApproved
+	if !approved { status = StatusRejected }
+	if err := s.repo.UpdateStatus(ctx, t.ID, status); err != nil {
+		return fmt.Errorf("terminations: HandleApprovalDecision: %w", err)
+	}
+	return nil
 }
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Termination, error) {

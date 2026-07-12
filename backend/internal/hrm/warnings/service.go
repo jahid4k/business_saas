@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
 )
 
 const dateLayout = "2006-01-02"
@@ -18,8 +20,10 @@ type Service interface {
 	Get(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateWarningRequest) (*EmployeeWarning, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateWarningRequest) (*EmployeeWarning, error)
-	// Issue formally sends the warning to the employee.
-	// Snapshots warning type config, sets response deadline, checks escalation rules.
+	// Issue formally sends the warning to the employee — or, if the warning
+	// type has requires_hr_approval=true and a resolvable approval template,
+	// routes it to pending_approval instead. Snapshots warning type config,
+	// sets response deadline, checks escalation rules (once actually issued).
 	Issue(ctx context.Context, orgID, employeeID, ref, issuedBy string, req IssueRequest) (*EmployeeWarning, error)
 	// Acknowledge is the employee confirming receipt.
 	Acknowledge(ctx context.Context, orgID, employeeID, ref string, req AcknowledgeRequest) (*EmployeeWarning, error)
@@ -28,15 +32,21 @@ type Service interface {
 	// Close is HR closing an issued/acknowledged/appealed warning.
 	Close(ctx context.Context, orgID, employeeID, ref string, req CloseRequest) (*EmployeeWarning, error)
 	Cancel(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error)
+	// HandleApprovalDecision is called back by the approvals service when a
+	// warning's approval instance reaches a terminal state. Approved → issued
+	// (same path Issue() takes). Rejected → cancelled (warnings have no
+	// "rejected" status; a rejected warning simply never reaches the employee).
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
 }
 
 type serviceImpl struct {
-	repo Repository
-	db   *pgxpool.Pool
+	repo         Repository
+	db           *pgxpool.Pool
+	approvalsSvc approvals.Service
 }
 
-func NewService(repo Repository, db *pgxpool.Pool) Service {
-	return &serviceImpl{repo: repo, db: db}
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string, activeOnly bool) (*WarningListResponse, error) {
@@ -109,12 +119,42 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string,
 
 // Issue formally issues a draft warning. Sets is_active=TRUE, issued_at=NOW(),
 // computes response_deadline, and checks escalation rules.
+//
+// If the warning's type has requires_hr_approval=true, issuing a *draft*
+// warning instead creates an approval instance and moves it to
+// pending_approval — the actual issuance happens later via
+// HandleApprovalDecision once the chain completes. Warnings already in
+// pending_approval (i.e. this method being called back after approval)
+// skip the gate and issue directly.
 func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedBy string, req IssueRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
 	if err != nil { return nil, fmt.Errorf("warnings: Issue: %w", err) }
 	if w == nil { return nil, ErrNotFound }
 	if w.Status == StatusIssued || w.Status == StatusAcknowledged { return nil, ErrAlreadyIssued }
 	if w.Status != StatusDraft && w.Status != StatusPendingApproval { return nil, ErrWrongStatus }
+
+	if w.Status == StatusDraft {
+		requiresApproval, approvalTemplateID := s.warningTypeApprovalConfig(ctx, orgID, w.WarningTypeID)
+		if requiresApproval {
+			tmpl, tErr := s.resolveWarningApprovalTemplate(ctx, orgID, approvalTemplateID)
+			if tErr == nil && tmpl != nil {
+				inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+					TemplateID: tmpl.ID, EntityType: "warning", EntityID: w.ID, RequestedBy: issuedBy,
+				})
+				if iErr != nil { return nil, fmt.Errorf("warnings: Issue: creating approval instance: %w", iErr) }
+				if err := s.repo.SetApprovalInstance(ctx, w.ID, inst.ID, StatusPendingApproval); err != nil {
+					return nil, fmt.Errorf("warnings: Issue: %w", err)
+				}
+				w.ApprovalInstanceID = &inst.ID
+				w.Status = StatusPendingApproval
+				return w, nil
+			}
+			// requires_hr_approval=true but no template resolves — neither the
+			// warning type's own approval_template_id nor an org-wide default
+			// for "warning" exists. Falls through to issue immediately rather
+			// than block the warning with no approver path to unblock it.
+		}
+	}
 
 	now := time.Now()
 	w.IssuedAt = &now
@@ -143,6 +183,51 @@ func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedB
 	s.checkEscalation(ctx, orgID, employeeID, w.WarningTypeID)
 
 	return w, nil
+}
+
+// warningTypeApprovalConfig looks up the requires_hr_approval flag and optional
+// approval_template_id from the warning type. Neither of these is snapshotted
+// onto the warning at creation time (unlike warning_type_name, severity_level,
+// can_employee_respond, response_window_days) — this is a live lookup on every
+// Issue() call, by design, so a later config change is picked up immediately.
+func (s *serviceImpl) warningTypeApprovalConfig(ctx context.Context, orgID, warningTypeID string) (requiresApproval bool, approvalTemplateID *string) {
+	_ = s.db.QueryRow(ctx,
+		`SELECT requires_hr_approval, approval_template_id FROM hrm_warning_types WHERE id=$1::uuid AND org_id=$2::uuid`,
+		warningTypeID, orgID,
+	).Scan(&requiresApproval, &approvalTemplateID)
+	return
+}
+
+// resolveWarningApprovalTemplate prefers the warning type's own configured
+// template (approval_template_id) if set, otherwise falls back to the org's
+// default template for the "warning" action type.
+func (s *serviceImpl) resolveWarningApprovalTemplate(ctx context.Context, orgID string, approvalTemplateID *string) (*approvals.ApprovalTemplate, error) {
+	if approvalTemplateID != nil && strings.TrimSpace(*approvalTemplateID) != "" {
+		tmpl, err := s.approvalsSvc.GetTemplate(ctx, orgID, *approvalTemplateID)
+		if err == nil && tmpl != nil {
+			return tmpl, nil
+		}
+		// Configured template not found/deleted — fall back to default rather than error out.
+	}
+	return s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeWarning)
+}
+
+// HandleApprovalDecision reacts to the warning's approval instance completing.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	w, err := s.repo.FindByRef(ctx, orgID, "", entityID)
+	if err != nil { return fmt.Errorf("warnings: HandleApprovalDecision: %w", err) }
+	if w == nil { return ErrNotFound }
+	if w.Status != StatusPendingApproval { return nil }
+	if !approved {
+		if err := s.repo.UpdateStatus(ctx, w.ID, StatusCancelled); err != nil {
+			return fmt.Errorf("warnings: HandleApprovalDecision: %w", err)
+		}
+		return nil
+	}
+	if _, err := s.Issue(ctx, orgID, w.EmployeeID, w.ID, w.IssuedBy, IssueRequest{DocumentID: w.DocumentID}); err != nil {
+		return fmt.Errorf("warnings: HandleApprovalDecision: issue: %w", err)
+	}
+	return nil
 }
 
 // checkEscalation evaluates A3 escalation rules. Logs a warning but takes no hard action.
