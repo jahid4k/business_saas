@@ -94,4 +94,149 @@ export const queryKeys = {
         ["crm", orgId, "reports", "leads-by-source"] as const,
     },
   },
+
+  hrm: {
+    departments: {
+      all: (orgId: string) => ["hrm", orgId, "departments"] as const,
+      list: (orgId: string) => ["hrm", orgId, "departments", "list"] as const,
+      detail: (orgId: string, deptId: string) =>
+        ["hrm", orgId, "departments", deptId] as const,
+    },
+    positions: {
+      all: (orgId: string) => ["hrm", orgId, "positions"] as const,
+      list: (orgId: string) => ["hrm", orgId, "positions", "list"] as const,
+      detail: (orgId: string, posId: string) =>
+        ["hrm", orgId, "positions", posId] as const,
+    },
+    employees: {
+      all: (orgId: string) => ["hrm", orgId, "employees"] as const,
+      list: (orgId: string) => ["hrm", orgId, "employees", "list"] as const,
+      detail: (orgId: string, empId: string) =>
+        ["hrm", orgId, "employees", empId] as const,
+    },
+    leaveTypes: {
+      all: (orgId: string) => ["hrm", orgId, "leave-types"] as const,
+      list: (orgId: string) => ["hrm", orgId, "leave-types", "list"] as const,
+      detail: (orgId: string, typeId: string) =>
+        ["hrm", orgId, "leave-types", typeId] as const,
+    },
+    leaveRequests: {
+      all: (orgId: string) => ["hrm", orgId, "leave-requests"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "leave-requests", "list"] as const,
+      detail: (orgId: string, reqId: string) =>
+        ["hrm", orgId, "leave-requests", reqId] as const,
+    },
+    promotions: {
+      all: (orgId: string) => ["hrm", orgId, "promotions"] as const,
+      list: (orgId: string) => ["hrm", orgId, "promotions", "list"] as const,
+    },
+    transfers: {
+      all: (orgId: string) => ["hrm", orgId, "transfers"] as const,
+      list: (orgId: string) => ["hrm", orgId, "transfers", "list"] as const,
+    },
+    resignations: {
+      all: (orgId: string) => ["hrm", orgId, "resignations"] as const,
+      list: (orgId: string) => ["hrm", orgId, "resignations", "list"] as const,
+    },
+    terminations: {
+      all: (orgId: string) => ["hrm", orgId, "terminations"] as const,
+      list: (orgId: string) => ["hrm", orgId, "terminations", "list"] as const,
+    },
+    attendance: {
+      records: (orgId: string, year: number, month: number) =>
+        ["hrm", orgId, "attendance", "records", year, month] as const,
+      periods: (orgId: string) =>
+        ["hrm", orgId, "attendance", "periods"] as const,
+    },
+    complaints: {
+      all: (orgId: string) => ["hrm", orgId, "complaints"] as const,
+      list: (orgId: string) => ["hrm", orgId, "complaints", "list"] as const,
+    },
+    documents: {
+      all: (orgId: string) => ["hrm", orgId, "documents"] as const,
+      list: (orgId: string) => ["hrm", orgId, "documents", "list"] as const,
+    },
+    acknowledgements: {
+      all: (orgId: string) => ["hrm", orgId, "acknowledgements"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "acknowledgements", "list"] as const,
+    },
+    awards: {
+      all: (orgId: string) => ["hrm", orgId, "awards"] as const,
+      list: (orgId: string) => ["hrm", orgId, "awards", "list"] as const,
+    },
+    announcements: {
+      all: (orgId: string) => ["hrm", orgId, "announcements"] as const,
+      list: (orgId: string) => ["hrm", orgId, "announcements", "list"] as const,
+    },
+    calendar: {
+      all: (orgId: string) => ["hrm", orgId, "calendar"] as const,
+      list: (orgId: string) => ["hrm", orgId, "calendar", "list"] as const,
+    },
+    milestones: {
+      all: (orgId: string) => ["hrm", orgId, "milestones"] as const,
+      list: (orgId: string) => ["hrm", orgId, "milestones", "list"] as const,
+    },
+    salaryComponents: {
+      all: (orgId: string) => ["hrm", orgId, "salary-components"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "salary-components", "list"] as const,
+    },
+    salaryStructures: {
+      all: (orgId: string) => ["hrm", orgId, "salary-structures"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "salary-structures", "list"] as const,
+      detail: (orgId: string, structId: string) =>
+        ["hrm", orgId, "salary-structures", structId] as const,
+    },
+    payrollRuns: {
+      all: (orgId: string) => ["hrm", orgId, "payroll-runs"] as const,
+      list: (orgId: string) => ["hrm", orgId, "payroll-runs", "list"] as const,
+    },
+    payslips: {
+      all: (orgId: string) => ["hrm", orgId, "payslips"] as const,
+      list: (orgId: string, runId?: string) =>
+        ["hrm", orgId, "payslips", "list", runId ?? "all"] as const,
+    },
+    warningTypes: {
+      all: (orgId: string) => ["hrm", orgId, "warning-types"] as const,
+      list: (orgId: string) => ["hrm", orgId, "warning-types", "list"] as const,
+    },
+    escalationRules: {
+      all: (orgId: string) => ["hrm", orgId, "escalation-rules"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "escalation-rules", "list"] as const,
+    },
+    warnings: {
+      all: (orgId: string) => ["hrm", orgId, "warnings"] as const,
+      list: (orgId: string) => ["hrm", orgId, "warnings", "list"] as const,
+    },
+    shifts: {
+      all: (orgId: string) => ["hrm", orgId, "shifts"] as const,
+      list: (orgId: string) => ["hrm", orgId, "shifts", "list"] as const,
+    },
+    shiftAssignments: {
+      all: (orgId: string) => ["hrm", orgId, "shift-assignments"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "shift-assignments", "list"] as const,
+    },
+    holidayCalendars: {
+      all: (orgId: string) => ["hrm", orgId, "holiday-calendars"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "holiday-calendars", "list"] as const,
+      detail: (orgId: string, calId: string) =>
+        ["hrm", orgId, "holiday-calendars", calId] as const,
+    },
+    documentTemplates: {
+      all: (orgId: string) => ["hrm", orgId, "document-templates"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "document-templates", "list"] as const,
+    },
+    approvalTemplates: {
+      all: (orgId: string) => ["hrm", orgId, "approval-templates"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "approval-templates", "list"] as const,
+    },
+  },
 } as const;

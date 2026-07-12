@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 
 -- ============================================================
--- Migration: 00018_create_hrm_tables
+-- Migration: 00021_create_hrm_tables
 --
 -- Human Resource Management tables:
 --   hrm_departments     — department hierarchy
