@@ -286,6 +286,7 @@ export interface Promotion {
   effective_date: string;
   reason?: string;
   notes?: string;
+  approval_instance_id?: string;
   status: PromotionStatus;
   applied_at?: string;
   applied_by?: string;
@@ -333,6 +334,7 @@ export interface Transfer {
   effective_date: string;
   reason?: string;
   notes?: string;
+  approval_instance_id?: string;
   status: TransferStatus;
   applied_at?: string;
   applied_by?: string;
@@ -435,6 +437,7 @@ export interface Termination {
   severance_currency: string;
   is_rehire_eligible: boolean;
   exit_clearance_completed: boolean;
+  approval_instance_id?: string;
   status: TerminationStatus;
   applied_at?: string;
   applied_by?: string;
@@ -756,6 +759,7 @@ export interface Award {
   issued_by: string;
   certificate_document_id?: string;
   announcement_id?: string;
+  approval_instance_id?: string;
   status: AwardStatus;
   issued_at?: string;
   created_by: string;
@@ -1308,6 +1312,7 @@ export interface EmployeeWarning {
   expires_at?: string;
   is_active: boolean;
   issued_at?: string;
+  approval_instance_id?: string;
   status: WarningStatus;
   created_by: string;
   created_at: string;
@@ -1642,4 +1647,32 @@ export interface ApprovalInstance {
 
 export interface DecisionPayload {
   note?: string;
+}
+
+// ── Reports ────────────────────────────────────────────────
+export interface HRMSummary {
+  total_employees: number;
+  active_employees: number;
+  on_leave_employees: number;
+  terminated_employees: number;
+  total_departments: number;
+  total_positions: number;
+  pending_leave_requests: number;
+  approved_leave_today: number;
+}
+
+export interface HeadcountByDepartment {
+  department_id: string;
+  department_name: string;
+  headcount: number;
+}
+
+export interface LeaveSummaryByType {
+  leave_type_id: string;
+  leave_type_name: string;
+  total_requests: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  total_days: number;
 }

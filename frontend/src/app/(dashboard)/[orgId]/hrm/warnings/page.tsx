@@ -27,6 +27,7 @@ import { useDrawer } from "@/contexts/DrawerContext";
 import WarningForm from "@/components/hrm/warnings/WarningForm";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
+import ApprovalInstanceView from "@/components/hrm/approvals/ApprovalInstanceView";
 
 const STATUS_TONE: Record<WarningStatus, string> = {
   draft: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
@@ -364,7 +365,8 @@ export default function WarningsPage({
               (canAcknowledge && w.status === "issued") ||
               (canClose &&
                 (w.status === "issued" || w.status === "appealed")) ||
-              (canManage && (w.status === "draft" || w.status === "issued"));
+              (canManage && (w.status === "draft" || w.status === "issued")) ||
+              !!w.approval_instance_id;
 
             return (
               <div
@@ -415,6 +417,25 @@ export default function WarningsPage({
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        {w.approval_instance_id && (
+                          <button
+                            onClick={() => {
+                              openDrawer({
+                                title: "Approval status",
+                                content: (
+                                  <ApprovalInstanceView
+                                    orgId={orgId}
+                                    instanceId={w.approval_instance_id!}
+                                  />
+                                ),
+                              });
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                          >
+                            View approval
+                          </button>
+                        )}
                         {canIssue &&
                           (w.status === "draft" ||
                             w.status === "pending_approval") && (

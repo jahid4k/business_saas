@@ -55,6 +55,7 @@ import ResignationForm from "@/components/hrm/lifecycle/ResignationForm";
 import TerminationForm from "@/components/hrm/lifecycle/TerminationForm";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
+import ApprovalInstanceView from "@/components/hrm/approvals/ApprovalInstanceView";
 
 type TabKey = "promotions" | "transfers" | "resignations" | "terminations";
 
@@ -438,7 +439,8 @@ function PromotionsView({
                 ["draft", "pending_approval", "approved"].includes(
                   item.status,
                 )) ||
-              (canApply && item.status === "approved");
+              (canApply && item.status === "approved") ||
+              !!item.approval_instance_id;
 
             return (
               <div
@@ -485,6 +487,24 @@ function PromotionsView({
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        {item.approval_instance_id && (
+                          <MenuItem
+                            onClick={() => {
+                              openDrawer({
+                                title: "Approval status",
+                                content: (
+                                  <ApprovalInstanceView
+                                    orgId={orgId}
+                                    instanceId={item.approval_instance_id!}
+                                  />
+                                ),
+                              });
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            View approval
+                          </MenuItem>
+                        )}
                         {canManage && item.status === "draft" && (
                           <MenuItem onClick={() => runAction(item, "submit")}>
                             Submit
@@ -675,7 +695,8 @@ function TransfersView({
                 ["draft", "pending_approval", "approved"].includes(
                   item.status,
                 )) ||
-              (canApply && item.status === "approved");
+              (canApply && item.status === "approved") ||
+              !!item.approval_instance_id;
             const toLabel = [deptName(item.to_department_id), item.to_location]
               .filter(Boolean)
               .join(" · ");
@@ -722,6 +743,24 @@ function TransfersView({
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        {item.approval_instance_id && (
+                          <MenuItem
+                            onClick={() => {
+                              openDrawer({
+                                title: "Approval status",
+                                content: (
+                                  <ApprovalInstanceView
+                                    orgId={orgId}
+                                    instanceId={item.approval_instance_id!}
+                                  />
+                                ),
+                              });
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            View approval
+                          </MenuItem>
+                        )}
                         {canManage && item.status === "draft" && (
                           <MenuItem onClick={() => runAction(item, "submit")}>
                             Submit
@@ -940,7 +979,7 @@ function ResignationsView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(item.id, el);
                       else menuRefs.current.delete(item.id);
@@ -948,7 +987,7 @@ function ResignationsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : item.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
@@ -1137,7 +1176,8 @@ function TerminationsView({
                 ["draft", "pending_approval", "approved"].includes(
                   item.status,
                 )) ||
-              (canApply && item.status === "approved");
+              (canApply && item.status === "approved") ||
+              !!item.approval_instance_id;
 
             return (
               <div
@@ -1184,6 +1224,24 @@ function TerminationsView({
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        {item.approval_instance_id && (
+                          <MenuItem
+                            onClick={() => {
+                              openDrawer({
+                                title: "Approval status",
+                                content: (
+                                  <ApprovalInstanceView
+                                    orgId={orgId}
+                                    instanceId={item.approval_instance_id!}
+                                  />
+                                ),
+                              });
+                              setOpenMenuId(null);
+                            }}
+                          >
+                            View approval
+                          </MenuItem>
+                        )}
                         {canManage && item.status === "draft" && (
                           <MenuItem onClick={() => runAction(item, "submit")}>
                             Submit
