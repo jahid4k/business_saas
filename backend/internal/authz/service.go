@@ -13,6 +13,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/mridha/businesssaas/internal/audit"
+	"github.com/mridha/businesssaas/pkg/password"
 	"github.com/mridha/businesssaas/pkg/token"
 )
 
@@ -46,15 +48,25 @@ type Service interface {
 	UpdateMemberPermissions(ctx context.Context, organizationID, memberRef string, req UpdateMemberPermissionsRequest) (*MemberPermissionsResponse, error)
 	CheckMember(ctx context.Context, organizationID string, req CheckMemberPermissionRequest) (*CheckMemberPermissionResponse, error)
 	PermissionMatrix(ctx context.Context, organizationID string) (*PermissionMatrixResponse, error)
+	ResetMemberPassword(ctx context.Context, callerID, organizationID, memberRef string, req ResetMemberPasswordRequest) error
+}
+
+// SessionRevoker is the minimal slice of auth.Repository this package needs.
+// auth.Repository already implements RevokeAllUserSessions, so main.go can pass
+// the existing authRepo straight in — no new dependency on the auth package itself.
+type SessionRevoker interface {
+	RevokeAllUserSessions(ctx context.Context, userID string) error
 }
 
 type serviceImpl struct {
-	repo  Repository
-	redis *redis.Client
+	repo     Repository
+	redis    *redis.Client
+	audit    audit.Service
+	sessions SessionRevoker
 }
 
-func NewService(repo Repository, redisClient *redis.Client) Service {
-	return &serviceImpl{repo: repo, redis: redisClient}
+func NewService(repo Repository, redisClient *redis.Client, auditSvc audit.Service, sessions SessionRevoker) Service {
+	return &serviceImpl{repo: repo, redis: redisClient, audit: auditSvc, sessions: sessions}
 }
 
 // Can checks whether the user holds the given resource.action permission in the organization.
@@ -225,10 +237,71 @@ func (s *serviceImpl) UpdateMember(ctx context.Context, callerID, organizationID
 	return updated, nil
 }
 
+// ResetMemberPassword lets an owner/admin set a new password for another member
+// directly. Not token-based — the caller chooses the password and communicates it
+// out of band. Revokes the target's existing sessions and writes an audit event.
+func (s *serviceImpl) ResetMemberPassword(ctx context.Context, callerID, organizationID, memberRef string, req ResetMemberPasswordRequest) error {
+	member, err := s.repo.GetMemberByRef(ctx, organizationID, memberRef)
+	if err != nil {
+		return fmt.Errorf("authz: ResetMemberPassword: get member: %w", err)
+	}
+	if member == nil {
+		return ErrMemberNotFound
+	}
+	if callerID == member.UserID {
+		return ErrCannotResetOwnPassword
+	}
+	if member.RoleKey == RoleOwner {
+		return ErrCannotModifyOwner
+	}
+	newPassword := strings.TrimSpace(req.NewPassword)
+	if len(newPassword) < 8 {
+		return ErrPasswordTooShort
+	}
+	hash, err := password.Hash(newPassword)
+	if err != nil {
+		return fmt.Errorf("authz: ResetMemberPassword: hash: %w", err)
+	}
+	if err := s.repo.SetUserPasswordHash(ctx, member.UserID, hash); err != nil {
+		return fmt.Errorf("authz: ResetMemberPassword: %w", err)
+	}
+	if err := s.sessions.RevokeAllUserSessions(ctx, member.UserID); err != nil {
+		// Non-fatal: password is already changed, which is the security-critical part.
+		slog.Warn("authz: ResetMemberPassword: session revoke failed", slog.Any("error", err))
+	}
+	s.audit.Log(ctx, audit.EventMemberPasswordReset, member.UserID, organizationID, "", "", map[string]string{
+		"reset_by": callerID,
+	})
+	return nil
+}
+
+// checkSeatLimit returns ErrSeatLimitReached if the organization has a max_seats
+// cap set and is already at or above it. nil max_seats means unlimited.
+func (s *serviceImpl) checkSeatLimit(ctx context.Context, organizationID string) error {
+	maxSeats, err := s.repo.GetOrganizationMaxSeats(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("authz: checkSeatLimit: %w", err)
+	}
+	if maxSeats == nil {
+		return nil
+	}
+	count, err := s.repo.CountActiveMembers(ctx, organizationID)
+	if err != nil {
+		return fmt.Errorf("authz: checkSeatLimit: %w", err)
+	}
+	if count >= *maxSeats {
+		return ErrSeatLimitReached
+	}
+	return nil
+}
+
 func (s *serviceImpl) InviteMember(ctx context.Context, callerID, organizationID string, req InviteMemberRequest) (*InviteMemberResponse, error) {
 	email := normaliseEmail(req.Email)
 	if email == "" {
 		return nil, ErrInvalidInvitationEmail
+	}
+	if err := s.checkSeatLimit(ctx, organizationID); err != nil {
+		return nil, err
 	}
 	role, err := s.resolveRole(ctx, organizationID, req.RoleID, req.Role)
 	if err != nil {
@@ -692,4 +765,7 @@ var (
 	ErrInvitationNotPending    = errors.New("invitation is not pending")
 	ErrInvitationExpired       = errors.New("invitation has expired")
 	ErrInvitationEmailMismatch = errors.New("invitation email does not match authenticated user")
+	ErrCannotResetOwnPassword  = errors.New("use account settings to change your own password")
+	ErrPasswordTooShort        = errors.New("password must be at least 8 characters")
+	ErrSeatLimitReached        = errors.New("organization has reached its member seat limit")
 )

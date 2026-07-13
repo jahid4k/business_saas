@@ -38,6 +38,7 @@ const (
 	EventHRMLeaveRequested     EventType = "hrm.leave.requested"
 	EventHRMLeaveApproved      EventType = "hrm.leave.approved"
 	EventHRMLeaveRejected      EventType = "hrm.leave.rejected"
+	EventMemberPasswordReset   EventType = "authz.member_password_reset"
 )
 
 // Event represents a single audit log entry.

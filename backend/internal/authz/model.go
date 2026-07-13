@@ -103,6 +103,14 @@ type UpdateMemberRequest struct {
 	DeniedPermissions []string `json:"deniedPermissions"`
 }
 
+// ResetMemberPasswordRequest is the body for
+// POST /api/v1/organizations/:orgId/members/:memberId/reset-password.
+// The caller (an owner/admin) chooses the new password directly —
+// there's no reset-token/email step here, this is a direct admin action.
+type ResetMemberPasswordRequest struct {
+	NewPassword string `json:"newPassword"`
+}
+
 type CreateRoleRequest struct {
 	Name           string   `json:"name"`
 	Description    string   `json:"description"`
