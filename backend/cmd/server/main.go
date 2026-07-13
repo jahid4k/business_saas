@@ -257,7 +257,7 @@ func main() {
 	userSvc := user.NewService(userRepo)
 	avatarSvc := user.NewAvatarService(avatarRepo)
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
-	authzSvc := authz.NewService(authzRepo, redisClient)
+	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)

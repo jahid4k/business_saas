@@ -15,10 +15,12 @@ import {
   updateMemberStatus,
   resendInvitation,
   cancelInvitation,
+  resetMemberPassword,
 } from "@/lib/members";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import InviteForm from "@/components/members/InviteForm";
+import ResetPasswordForm from "@/components/members/ResetPasswordForm";
 import type { Member, MemberRole } from "@/types/rbac";
 
 const ROLE_STYLE: Record<string, { label: string; cls: string }> = {
@@ -88,6 +90,7 @@ export default function MembersPage({
   const canInvite = hasPermission("members.invite");
   const canUpdate = hasPermission("members.update");
   const canRemove = hasPermission("members.remove");
+  const canResetPassword = hasPermission("members.password_reset");
 
   // ── Query ─────────────────────────────────────────────────────────────────
   const membersKey = queryKeys.members.list(orgId);
@@ -137,6 +140,23 @@ export default function MembersPage({
             // inviteMember returns void; invalidate to get the new pending member
             await queryClient.invalidateQueries({ queryKey: membersKey });
             toast.success("Invitation sent.");
+          }}
+        />
+      ),
+    });
+  };
+
+  const handleResetPassword = (m: Member) => {
+    setOpenMenu(null);
+    openDrawer({
+      title: `Reset password — ${m.displayName}`,
+      width: "md",
+      content: (
+        <ResetPasswordForm
+          memberName={m.displayName}
+          onSave={async (newPassword) => {
+            await resetMemberPassword(orgId, m.membershipId, newPassword);
+            toast.success(`Password reset for ${m.displayName}.`);
           }}
         />
       ),
@@ -341,7 +361,9 @@ export default function MembersPage({
                             No
                           </button>
                         </div>
-                      ) : canRemove && !isMe && !isOwner ? (
+                      ) : (canRemove || canResetPassword) &&
+                        !isMe &&
+                        !isOwner ? (
                         <div
                           className="relative flex-shrink-0"
                           ref={(el) => {
@@ -358,16 +380,26 @@ export default function MembersPage({
                             <MoreHorizontal size={15} />
                           </button>
                           {menuOpen && (
-                            <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
-                              <button
-                                onClick={() => {
-                                  setConfirm(m.membershipId);
-                                  setOpenMenu(null);
-                                }}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
-                              >
-                                Remove member
-                              </button>
+                            <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                              {canResetPassword && (
+                                <button
+                                  onClick={() => handleResetPassword(m)}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors text-left"
+                                >
+                                  Reset password
+                                </button>
+                              )}
+                              {canRemove && (
+                                <button
+                                  onClick={() => {
+                                    setConfirm(m.membershipId);
+                                    setOpenMenu(null);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors text-left"
+                                >
+                                  Remove member
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

@@ -63,3 +63,17 @@ export async function cancelInvitation(
     `/api/v1/organizations/${orgId}/invitations/${invitationId}`,
   );
 }
+
+// POST /organizations/:orgId/members/:membershipId/reset-password
+// Admin-initiated — sets the password directly, no token/email step.
+// Revokes the member's sessions server-side; nothing to do here for that.
+export async function resetMemberPassword(
+  orgId: string,
+  membershipId: string,
+  newPassword: string,
+): Promise<void> {
+  await api.post(
+    `/api/v1/organizations/${orgId}/members/${membershipId}/reset-password`,
+    { newPassword },
+  );
+}
