@@ -19,6 +19,7 @@ type Repository interface {
 	Create(ctx context.Context, t *Termination) error
 	Update(ctx context.Context, t *Termination) error
 	UpdateStatus(ctx context.Context, id string, status TerminationStatus) error
+	SetApprovalInstance(ctx context.Context, id, instanceID string, status TerminationStatus) error
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
@@ -112,5 +113,13 @@ func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status Terminati
 	_, err := r.db.Exec(ctx,
 		`UPDATE hrm_terminations SET status=$1, updated_at=NOW() WHERE id=$2`,
 		status, id)
+	return err
+}
+
+func (r *repoImpl) SetApprovalInstance(ctx context.Context, id, instanceID string, status TerminationStatus) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE hrm_terminations SET approval_instance_id=$1, status=$2, updated_at=NOW() WHERE id=$3`,
+		instanceID, status, id,
+	)
 	return err
 }

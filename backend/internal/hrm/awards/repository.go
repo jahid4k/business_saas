@@ -16,6 +16,7 @@ type Repository interface {
 	Create(ctx context.Context, a *Award) error
 	Update(ctx context.Context, a *Award) error
 	UpdateStatus(ctx context.Context, id string, status AwardStatus) error
+	SetApprovalInstance(ctx context.Context, id, instanceID string, status AwardStatus) error
 	SetAnnouncementID(ctx context.Context, id, announcementID string) error
 }
 
@@ -87,6 +88,14 @@ func (r *repoImpl) Update(ctx context.Context, a *Award) error {
 
 func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status AwardStatus) error {
 	_, err := r.db.Exec(ctx, `UPDATE hrm_awards SET status=$1, updated_at=NOW() WHERE id=$2`, status, id)
+	return err
+}
+
+func (r *repoImpl) SetApprovalInstance(ctx context.Context, id, instanceID string, status AwardStatus) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE hrm_awards SET approval_instance_id=$1, status=$2, updated_at=NOW() WHERE id=$3`,
+		instanceID, status, id,
+	)
 	return err
 }
 

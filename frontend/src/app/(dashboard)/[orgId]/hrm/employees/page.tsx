@@ -401,6 +401,7 @@ export default function EmployeesPage({
               const confirmingTerminate = terminateConfirm === emp.id;
               const menuOpen = openMenuId === emp.id;
               const s = STATUS_STYLE[emp.status];
+              console.log("emp", emp);
               const fullName =
                 `${emp.first_name} ${emp.last_name ?? ""}`.trim();
 

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
 )
 
 const dateLayout = "2006-01-02"
@@ -17,17 +19,25 @@ type Service interface {
 	Get(ctx context.Context, orgID, ref string) (*Award, error)
 	Create(ctx context.Context, orgID, createdBy string, req CreateAwardRequest) (*Award, error)
 	Update(ctx context.Context, orgID, ref string, req UpdateAwardRequest) (*Award, error)
-	Submit(ctx context.Context, orgID, ref string) (*Award, error)
+	// Submit moves draft → pending_approval (if an approval chain is configured
+	// for "award") or straight to approved (fallback, unchanged behavior).
+	Submit(ctx context.Context, orgID, ref, submittedBy string) (*Award, error)
 	// Issue formally awards the employee. Optionally creates an E2 announcement.
 	Issue(ctx context.Context, orgID, ref, issuedBy string, req IssueRequest) (*Award, error)
 	Cancel(ctx context.Context, orgID, ref string) (*Award, error)
+	// HandleApprovalDecision is called back by the approvals service when an
+	// award's approval instance reaches a terminal state.
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
 }
 
 type serviceImpl struct {
-	repo Repository
-	db   *pgxpool.Pool
+	repo         Repository
+	db           *pgxpool.Pool
+	approvalsSvc approvals.Service
 }
-func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
+}
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*AwardListResponse, error) {
 	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
@@ -89,14 +99,44 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, ref string, req UpdateA
 	return a, nil
 }
 
-func (s *serviceImpl) Submit(ctx context.Context, orgID, ref string) (*Award, error) {
+func (s *serviceImpl) Submit(ctx context.Context, orgID, ref, submittedBy string) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
 	if err != nil { return nil, fmt.Errorf("awards: Submit: %w", err) }
 	if a == nil { return nil, ErrNotFound }
 	if a.Status != StatusDraft { return nil, ErrWrongStatus }
+
+	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeAward)
+	if tErr == nil && tmpl != nil {
+		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+			TemplateID: tmpl.ID, EntityType: "award", EntityID: a.ID, RequestedBy: submittedBy,
+		})
+		if iErr != nil { return nil, fmt.Errorf("awards: Submit: creating approval instance: %w", iErr) }
+		if err := s.repo.SetApprovalInstance(ctx, a.ID, inst.ID, StatusPendingApproval); err != nil {
+			return nil, fmt.Errorf("awards: Submit: %w", err)
+		}
+		a.ApprovalInstanceID = &inst.ID
+		a.Status = StatusPendingApproval
+		return a, nil
+	}
+
 	if err := s.repo.UpdateStatus(ctx, a.ID, StatusApproved); err != nil { return nil, fmt.Errorf("awards: Submit: %w", err) }
 	a.Status = StatusApproved
 	return a, nil
+}
+
+// HandleApprovalDecision reacts to the award's approval instance completing.
+// Awards have no "rejected" status — a rejected award is cancelled.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	a, err := s.repo.FindByRef(ctx, orgID, entityID)
+	if err != nil { return fmt.Errorf("awards: HandleApprovalDecision: %w", err) }
+	if a == nil { return ErrNotFound }
+	if a.Status != StatusPendingApproval { return nil }
+	status := StatusApproved
+	if !approved { status = StatusCancelled }
+	if err := s.repo.UpdateStatus(ctx, a.ID, status); err != nil {
+		return fmt.Errorf("awards: HandleApprovalDecision: %w", err)
+	}
+	return nil
 }
 
 // Issue formally issues the award. When req.CreateAnnouncement=true,

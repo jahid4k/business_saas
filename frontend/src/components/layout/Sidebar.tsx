@@ -171,6 +171,12 @@ function buildModules(orgId: string): Module[] {
           permission: "hrm.doc_templates.view",
         },
         {
+          label: "Reports",
+          href: `/${orgId}/hrm/reports`,
+          icon: BarChart2,
+          permission: "hrm.reports.view",
+        },
+        {
           label: "Approval Chains",
           href: `/${orgId}/hrm/setup/approvals`,
           icon: Workflow,

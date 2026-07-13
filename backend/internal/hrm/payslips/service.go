@@ -3,12 +3,16 @@ package payslips
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
 )
 
 // Service defines business logic for the payroll engine.
@@ -208,13 +212,14 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 			FixedValue    float64
 			OverrideValue *float64
 			Formula       *string
+			SlabConfigRaw []byte
 			DisplayOrder  int
 		}
 		var components []compRow
 		if emp.StructureID != nil {
 			cRows, err := s.db.Query(ctx,
 				`SELECT c.id::text, c.name, c.component_type, c.calc_method, c.fixed_value,
-				sc.override_value, c.formula_expression, sc.display_order
+				sc.override_value, c.formula_expression, c.slab_config, sc.display_order
 				FROM hrm_salary_structure_components sc
 				JOIN hrm_salary_components c ON c.id=sc.component_id
 				WHERE sc.structure_id=$1::uuid
@@ -224,7 +229,7 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 				defer cRows.Close()
 				for cRows.Next() {
 					var cr compRow
-					_ = cRows.Scan(&cr.CompID, &cr.CompName, &cr.CompType, &cr.CalcMethod, &cr.FixedValue, &cr.OverrideValue, &cr.Formula, &cr.DisplayOrder)
+					_ = cRows.Scan(&cr.CompID, &cr.CompName, &cr.CompType, &cr.CalcMethod, &cr.FixedValue, &cr.OverrideValue, &cr.Formula, &cr.SlabConfigRaw, &cr.DisplayOrder)
 					components = append(components, cr)
 				}
 			}
@@ -263,7 +268,17 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 						amount = result
 					}
 				}
-			default: // manual, slab — default 0; HR enters manually
+			case "slab":
+				if comp.SlabConfigRaw != nil {
+					env["GROSS"] = gross
+					var cfg hrmsalary.SlabConfig
+					if err := json.Unmarshal(comp.SlabConfigRaw, &cfg); err == nil {
+						if base, ok := env[cfg.BaseVariable].(float64); ok {
+							amount = ComputeSlab(base, &cfg)
+						}
+					}
+				}
+			default: // manual — default 0; HR enters manually
 				amount = 0
 			}
 
@@ -346,6 +361,54 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		return nil, fmt.Errorf("payslips: ComputeRun: finalize run: %w", err)
 	}
 	return run, nil
+}
+
+// ComputeSlab evaluates a progressive (marginal) bracket calculation against
+// base — the same model as progressive income tax, where each slab's rate
+// applies only to the portion of base that falls within that bracket, not to
+// the whole amount. This matches the design intent documented on
+// hrm_salary_components.slab_config (migration 00023) and on
+// salary.SlabConfig: "progressive bracket calculation (e.g. income tax)".
+//
+// Slabs are sorted ascending by UpTo before evaluation (nil sorts last, since
+// it means "no upper bound") — slab validation at the Setup layer only
+// guarantees exactly one nil UpTo as the final entry, not that the input
+// slice itself is already in order.
+//
+// Exported (rather than a package-private helper) specifically so it can be
+// unit tested directly — ComputeRun as a whole talks straight to *pgxpool.Pool
+// and isn't unit-testable without a live database.
+func ComputeSlab(base float64, cfg *hrmsalary.SlabConfig) float64 {
+	if cfg == nil || len(cfg.Slabs) == 0 || base <= 0 {
+		return 0
+	}
+
+	slabs := make([]hrmsalary.Slab, len(cfg.Slabs))
+	copy(slabs, cfg.Slabs)
+	sort.Slice(slabs, func(i, j int) bool {
+		if slabs[i].UpTo == nil { return false } // no-upper-bound slab always sorts last
+		if slabs[j].UpTo == nil { return true }
+		return *slabs[i].UpTo < *slabs[j].UpTo
+	})
+
+	total, lower := 0.0, 0.0
+	for _, sl := range slabs {
+		upper := base // uncapped (UpTo == nil) slab absorbs whatever remains
+		if sl.UpTo != nil {
+			upper = *sl.UpTo
+		}
+		if upper > base {
+			upper = base
+		}
+		if upper > lower {
+			total += (upper - lower) * sl.Rate
+		}
+		if sl.UpTo == nil || upper >= base {
+			break
+		}
+		lower = upper
+	}
+	return total
 }
 
 // evalFormula evaluates an expr-lang expression in the given environment.

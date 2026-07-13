@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
 )
 
 const dateLayout = "2006-01-02"
@@ -17,16 +19,24 @@ type Service interface {
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTransferRequest) (*Transfer, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTransferRequest) (*Transfer, error)
-	Submit(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
+	// Submit moves draft → pending_approval (if an approval chain is configured
+	// for "transfer") or straight to approved (fallback, unchanged behavior).
+	Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Transfer, error)
 	Cancel(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
 	Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Transfer, error)
+	// HandleApprovalDecision is called back by the approvals service when a
+	// transfer's approval instance reaches a terminal state.
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
 }
 
 type serviceImpl struct {
-	repo Repository
-	db   *pgxpool.Pool
+	repo         Repository
+	db           *pgxpool.Pool
+	approvalsSvc approvals.Service
 }
-func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
+}
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*TransferListResponse, error) {
 	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
@@ -84,14 +94,43 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string,
 	return t, nil
 }
 
-func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
+func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
 	if err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
 	if t == nil { return nil, ErrNotFound }
 	if t.Status != StatusDraft { return nil, ErrWrongStatus }
+
+	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeTransfer)
+	if tErr == nil && tmpl != nil {
+		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+			TemplateID: tmpl.ID, EntityType: "transfer", EntityID: t.ID, RequestedBy: submittedBy,
+		})
+		if iErr != nil { return nil, fmt.Errorf("transfers: Submit: creating approval instance: %w", iErr) }
+		if err := s.repo.SetApprovalInstance(ctx, t.ID, inst.ID, StatusPendingApproval); err != nil {
+			return nil, fmt.Errorf("transfers: Submit: %w", err)
+		}
+		t.ApprovalInstanceID = &inst.ID
+		t.Status = StatusPendingApproval
+		return t, nil
+	}
+
 	if err := s.repo.UpdateStatus(ctx, t.ID, StatusApproved); err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
 	t.Status = StatusApproved
 	return t, nil
+}
+
+// HandleApprovalDecision reacts to the transfer's approval instance completing.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	t, err := s.repo.FindByRef(ctx, orgID, "", entityID)
+	if err != nil { return fmt.Errorf("transfers: HandleApprovalDecision: %w", err) }
+	if t == nil { return ErrNotFound }
+	if t.Status != StatusPendingApproval { return nil }
+	status := StatusApproved
+	if !approved { status = StatusRejected }
+	if err := s.repo.UpdateStatus(ctx, t.ID, status); err != nil {
+		return fmt.Errorf("transfers: HandleApprovalDecision: %w", err)
+	}
+	return nil
 }
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {

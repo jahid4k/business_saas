@@ -291,13 +291,17 @@ func main() {
 	hrmContractsSvc := hrmcontracts.NewService(hrmContractsRepo)
 
 	// ── HRM Group B — lifecycle services; all need pgPool for Apply() txn ─────
-	hrmPromotionsSvc := hrmpromotions.NewService(hrmPromotionsRepo, pgPool)
-	hrmTransfersSvc := hrmtransfers.NewService(hrmTransfersRepo, pgPool)
+	// promotions/transfers/terminations also take hrmApprovalsSvc (Group A, wired
+	// above) so Submit() can route into an approval chain when one is configured.
+	hrmPromotionsSvc := hrmpromotions.NewService(hrmPromotionsRepo, pgPool, hrmApprovalsSvc)
+	hrmTransfersSvc := hrmtransfers.NewService(hrmTransfersRepo, pgPool, hrmApprovalsSvc)
 	hrmResignationsSvc := hrmresignations.NewService(hrmResignationsRepo, pgPool)
-	hrmTerminationsSvc := hrmterminations.NewService(hrmTerminationsRepo, pgPool)
+	hrmTerminationsSvc := hrmterminations.NewService(hrmTerminationsRepo, pgPool, hrmApprovalsSvc)
 
 	// ── HRM Group C — disciplinary; all need pgPool for cross-table writes ─────
-	hrmWarningsSvc := hrmwarnings.NewService(hrmWarningsRepo, pgPool)
+	// warnings also takes hrmApprovalsSvc so Issue() can route into an approval
+	// chain when the warning type has requires_hr_approval=true.
+	hrmWarningsSvc := hrmwarnings.NewService(hrmWarningsRepo, pgPool, hrmApprovalsSvc)
 	hrmCplSvc := hrmcomplaints.NewService(hrmCplRepo, pgPool)
 	hrmEmpDocsSvc := hrmemployeedocs.NewService(hrmEmpDocsRepo, pgPool)
 	hrmAcksSvc := hrmacks.NewService(hrmAcksRepo, pgPool)
@@ -313,10 +317,21 @@ func main() {
 	// E2 announcements:  pgPool for resolving target employees + C4 ack inserts
 	// E3 calendar:       pgPool for RSVP → C4 ack inserts
 	// E4 milestones:     pgPool for A7 contract reads in GenerateUpcoming()
-	hrmAwardsSvc := hrmawards.NewService(hrmAwardsRepo, pgPool)
+	// awards also takes hrmApprovalsSvc so Submit() can route into an approval chain.
+	hrmAwardsSvc := hrmawards.NewService(hrmAwardsRepo, pgPool, hrmApprovalsSvc)
 	hrmAnnsSvc := hrmannouncements.NewService(hrmAnnsRepo, pgPool)
 	hrmCalSvc := hrmcalendar.NewService(hrmCalRepo, pgPool)
 	hrmMilestonesSvc := hrmmilestones.NewService(hrmMilestonesRepo, pgPool)
+
+	// Wire approval-instance completion back into each of the five workflow
+	// modules. Must run after all five services above exist. entityType here
+	// must match the EntityType string each Submit()/Issue() uses when calling
+	// approvalsSvc.CreateInstance — see each module's service.go.
+	hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("transfer", hrmTransfersSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS

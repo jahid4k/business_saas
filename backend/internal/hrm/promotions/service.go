@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
 )
 
 const dateLayout = "2006-01-02"
@@ -18,19 +20,25 @@ type Service interface {
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreatePromotionRequest) (*Promotion, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdatePromotionRequest) (*Promotion, error)
-	Submit(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error)
+	// Submit moves draft → pending_approval (if an approval chain is configured
+	// for "promotion") or straight to approved (fallback, unchanged behavior).
+	Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Promotion, error)
 	Cancel(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error)
 	// Apply executes a transactional update: marks applied AND updates employee record + creates salary record.
 	Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Promotion, error)
+	// HandleApprovalDecision is called back by the approvals service when a
+	// promotion's approval instance reaches a terminal state.
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
 }
 
 type serviceImpl struct {
-	repo Repository
-	db   *pgxpool.Pool // for cross-table Apply transaction
+	repo         Repository
+	db           *pgxpool.Pool // for cross-table Apply transaction
+	approvalsSvc approvals.Service
 }
 
-func NewService(repo Repository, db *pgxpool.Pool) Service {
-	return &serviceImpl{repo: repo, db: db}
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*PromotionListResponse, error) {
@@ -96,17 +104,46 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string,
 	return p, nil
 }
 
-func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {
+func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
 	if err != nil { return nil, fmt.Errorf("promotions: Submit: %w", err) }
 	if p == nil { return nil, ErrNotFound }
 	if p.Status != StatusDraft { return nil, ErrWrongStatus }
-	// Default: no approval template → move directly to approved
+
+	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypePromotion)
+	if tErr == nil && tmpl != nil {
+		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+			TemplateID: tmpl.ID, EntityType: "promotion", EntityID: p.ID, RequestedBy: submittedBy,
+		})
+		if iErr != nil { return nil, fmt.Errorf("promotions: Submit: creating approval instance: %w", iErr) }
+		if err := s.repo.SetApprovalInstance(ctx, p.ID, inst.ID, StatusPendingApproval); err != nil {
+			return nil, fmt.Errorf("promotions: Submit: %w", err)
+		}
+		p.ApprovalInstanceID = &inst.ID
+		p.Status = StatusPendingApproval
+		return p, nil
+	}
+
+	// No approval template configured — unchanged fallback behavior
 	if err := s.repo.UpdateStatus(ctx, p.ID, StatusApproved); err != nil {
 		return nil, fmt.Errorf("promotions: Submit: %w", err)
 	}
 	p.Status = StatusApproved
 	return p, nil
+}
+
+// HandleApprovalDecision reacts to the promotion's approval instance completing.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	p, err := s.repo.FindByRef(ctx, orgID, "", entityID)
+	if err != nil { return fmt.Errorf("promotions: HandleApprovalDecision: %w", err) }
+	if p == nil { return ErrNotFound }
+	if p.Status != StatusPendingApproval { return nil }
+	status := StatusApproved
+	if !approved { status = StatusRejected }
+	if err := s.repo.UpdateStatus(ctx, p.ID, status); err != nil {
+		return fmt.Errorf("promotions: HandleApprovalDecision: %w", err)
+	}
+	return nil
 }
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {

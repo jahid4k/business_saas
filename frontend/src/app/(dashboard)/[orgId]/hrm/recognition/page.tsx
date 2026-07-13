@@ -52,6 +52,7 @@ import CalendarEventForm from "@/components/hrm/recognition/CalendarEventForm";
 import MilestoneForm from "@/components/hrm/recognition/MilestoneForm";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
+import ApprovalInstanceView from "@/components/hrm/approvals/ApprovalInstanceView";
 
 type TabKey = "awards" | "announcements" | "calendar" | "milestones";
 
@@ -333,7 +334,8 @@ function AwardsView({
             const showMenu =
               (canManage && a.status === "draft") ||
               (canApprove && a.status === "draft") ||
-              (canIssue && (a.status === "draft" || a.status === "approved"));
+              (canIssue && (a.status === "draft" || a.status === "approved")) ||
+              !!a.approval_instance_id;
 
             return (
               <div
@@ -381,6 +383,25 @@ function AwardsView({
                     </button>
                     {menuOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        {a.approval_instance_id && (
+                          <button
+                            onClick={() => {
+                              openDrawer({
+                                title: "Approval status",
+                                content: (
+                                  <ApprovalInstanceView
+                                    orgId={orgId}
+                                    instanceId={a.approval_instance_id!}
+                                  />
+                                ),
+                              });
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                          >
+                            View approval
+                          </button>
+                        )}
                         {canApprove && a.status === "draft" && (
                           <button
                             onClick={() => handleSubmit(a)}
