@@ -285,7 +285,9 @@ export default function MembersPage({
                   return (
                     <div
                       key={m.membershipId}
-                      className="member-row group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors"
+                      className={`member-row relative group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors first:rounded-t-xl last:rounded-b-xl ${
+                        menuOpen ? "z-50" : "z-0"
+                      }`}
                     >
                       <Avatar name={m.displayName} email={m.email} />
                       <div className="flex-1 min-w-0">
@@ -422,7 +424,7 @@ export default function MembersPage({
               >
                 Pending invitations ({pending.length})
               </p>
-              <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
+              <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
                 {pending.map((m) => {
                   const roleStyle = ROLE_STYLE[m.role];
                   return (

@@ -3,7 +3,14 @@
 
 import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Shield, Copy, Trash2, Loader2, ChevronRight } from "lucide-react";
+import {
+  Shield,
+  Copy,
+  Trash2,
+  Loader2,
+  ChevronRight,
+  Plus,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,6 +23,7 @@ import {
   cloneRole,
   deleteRole,
   updateRolePermissions,
+  createRole,
 } from "@/lib/roles";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
@@ -136,6 +144,7 @@ export default function RolesPage({
   const listRef = useRef<HTMLDivElement>(null);
 
   const canViewPerms = hasPermission("roles.view");
+  const canCreate = hasPermission("roles.create");
   const canClone = hasPermission("roles.clone");
   const canDelete = hasPermission("roles.delete");
   const canEditPerms = hasPermission("roles.permissions.update");
@@ -168,6 +177,25 @@ export default function RolesPage({
   }, [rolesQuery.isPending]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleCreateRole = () => {
+    openDrawer({
+      title: "New role",
+      width: "lg",
+      content: (
+        <PermissionForm
+          allPerms={allPerms}
+          onCreate={async ({ name, description, permissionKeys }) => {
+            await createRole(orgId, { name, description, permissionKeys });
+            // createRole returns Role, but the list needs RoleWithMeta —
+            // same situation as openClone below, invalidate is the safe choice.
+            await queryClient.invalidateQueries({ queryKey: rolesKey });
+            toast.success("Role created.");
+          }}
+        />
+      ),
+    });
+  };
+
   const openPermissions = (rwm: RoleWithMeta) => {
     openDrawer({
       title: `${rwm.role.name.charAt(0).toUpperCase() + rwm.role.name.slice(1)} permissions`,
@@ -245,6 +273,15 @@ export default function RolesPage({
             {roles.length} roles · Click a role to view its permissions
           </p>
         </div>
+        {canCreate && (
+          <button
+            onClick={handleCreateRole}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors"
+          >
+            <Plus size={15} />
+            New role
+          </button>
+        )}
       </div>
 
       {rolesQuery.isError && (

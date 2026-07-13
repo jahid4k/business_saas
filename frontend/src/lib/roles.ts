@@ -51,3 +51,15 @@ export async function cloneRole(
 export async function deleteRole(orgId: string, roleId: string): Promise<void> {
   await api.delete(`/api/v1/organizations/${orgId}/rbac/roles/${roleId}`);
 }
+
+// POST /organizations/:orgId/rbac/roles
+export async function createRole(
+  orgId: string,
+  body: { name: string; description: string; permissionKeys: string[] },
+): Promise<Role> {
+  const res = await api.post<{ success: boolean; data: { role: Role } }>(
+    `/api/v1/organizations/${orgId}/rbac/roles`,
+    body,
+  );
+  return res.data.data.role;
+}
