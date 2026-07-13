@@ -17,7 +17,10 @@ require (
 	golang.org/x/crypto v0.51.0
 )
 
-require golang.org/x/image v0.43.0
+require (
+	github.com/expr-lang/expr v1.17.8
+	golang.org/x/image v0.43.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect

@@ -31,13 +31,13 @@ This documentation describes the current Phase 1 SaaS foundation schema: identit
 
 ## Current table domains
 
-| Domain | Tables |
-| --- | --- |
-| Core Identity | `users`, `auth_accounts`, `sessions`, `verification_tokens` |
-| Tenant / Workspace | `organizations`, `organization_members` |
-| Authorization / RBAC | `permissions`, `roles` |
-| Billing / SaaS | `subscriptions`, `organization_usage` |
-| Security / Compliance | `audit_logs` |
+| Domain                | Tables                                                      |
+| --------------------- | ----------------------------------------------------------- |
+| Core Identity         | `users`, `auth_accounts`, `sessions`, `verification_tokens` |
+| Tenant / Workspace    | `organizations`, `organization_members`                     |
+| Authorization / RBAC  | `permissions`, `roles`                                      |
+| Billing / SaaS        | `subscriptions`, `organization_usage`                       |
+| Security / Compliance | `audit_logs`                                                |
 
 ## SaaS-grade documentation rule
 

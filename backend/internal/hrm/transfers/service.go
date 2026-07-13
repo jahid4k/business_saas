@@ -1,0 +1,182 @@
+// backend/internal/hrm/transfers/service.go
+package transfers
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/hrm/approvals"
+)
+
+const dateLayout = "2006-01-02"
+
+type Service interface {
+	List(ctx context.Context, orgID, employeeID, status string) (*TransferListResponse, error)
+	Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
+	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTransferRequest) (*Transfer, error)
+	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTransferRequest) (*Transfer, error)
+	// Submit moves draft → pending_approval (if an approval chain is configured
+	// for "transfer") or straight to approved (fallback, unchanged behavior).
+	Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Transfer, error)
+	Cancel(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
+	Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Transfer, error)
+	// HandleApprovalDecision is called back by the approvals service when a
+	// transfer's approval instance reaches a terminal state.
+	HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error
+}
+
+type serviceImpl struct {
+	repo         Repository
+	db           *pgxpool.Pool
+	approvalsSvc approvals.Service
+}
+func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
+	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
+}
+
+func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*TransferListResponse, error) {
+	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
+	if err != nil { return nil, fmt.Errorf("transfers: List: %w", err) }
+	if list == nil { list = []*Transfer{} }
+	return &TransferListResponse{Transfers: list, Total: len(list)}, nil
+}
+
+func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
+	if err != nil { return nil, fmt.Errorf("transfers: Get: %w", err) }
+	if t == nil { return nil, ErrNotFound }
+	return t, nil
+}
+
+func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTransferRequest) (*Transfer, error) {
+	if !req.TransferType.IsValid() { return nil, ErrInvalidTransferType }
+	if strings.TrimSpace(req.EffectiveDate) == "" { return nil, ErrEffectiveDateReq }
+	if _, err := time.Parse(dateLayout, req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+
+	var fromDeptID, fromMgrEmpID *string
+	_ = s.db.QueryRow(ctx,
+		`SELECT department_id::text, manager_id::text FROM hrm_employees WHERE id=$1::uuid AND org_id=$2::uuid`,
+		employeeID, orgID).Scan(&fromDeptID, &fromMgrEmpID)
+
+	t := &Transfer{
+		OrgID: orgID, EmployeeID: employeeID, TransferType: req.TransferType,
+		FromDepartmentID: fromDeptID, FromManagerEmployeeID: fromMgrEmpID,
+		ToDepartmentID: req.ToDepartmentID,
+		ToManagerEmployeeID: req.ToManagerEmployeeID,
+		ToLocation: req.ToLocation,
+		EffectiveDate: req.EffectiveDate, Reason: req.Reason, Notes: req.Notes,
+		Status: StatusDraft, CreatedBy: createdBy,
+	}
+	if err := s.repo.Create(ctx, t); err != nil { return nil, fmt.Errorf("transfers: Create: %w", err) }
+	return t, nil
+}
+
+func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTransferRequest) (*Transfer, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
+	if err != nil { return nil, fmt.Errorf("transfers: Update: %w", err) }
+	if t == nil { return nil, ErrNotFound }
+	if t.Status != StatusDraft { return nil, ErrWrongStatus }
+	if req.ToDepartmentID != nil { t.ToDepartmentID = req.ToDepartmentID }
+	if req.ToManagerEmployeeID != nil { t.ToManagerEmployeeID = req.ToManagerEmployeeID }
+	if req.ToLocation != nil { t.ToLocation = req.ToLocation }
+	if req.EffectiveDate != nil {
+		if _, err := time.Parse(dateLayout, *req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+		t.EffectiveDate = *req.EffectiveDate
+	}
+	if req.Reason != nil { t.Reason = req.Reason }
+	if req.Notes != nil { t.Notes = req.Notes }
+	if req.DocumentID != nil { t.DocumentID = req.DocumentID }
+	if err := s.repo.Update(ctx, t); err != nil { return nil, fmt.Errorf("transfers: Update: %w", err) }
+	return t, nil
+}
+
+func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Transfer, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
+	if err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
+	if t == nil { return nil, ErrNotFound }
+	if t.Status != StatusDraft { return nil, ErrWrongStatus }
+
+	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeTransfer)
+	if tErr == nil && tmpl != nil {
+		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
+			TemplateID: tmpl.ID, EntityType: "transfer", EntityID: t.ID, RequestedBy: submittedBy,
+		})
+		if iErr != nil { return nil, fmt.Errorf("transfers: Submit: creating approval instance: %w", iErr) }
+		if err := s.repo.SetApprovalInstance(ctx, t.ID, inst.ID, StatusPendingApproval); err != nil {
+			return nil, fmt.Errorf("transfers: Submit: %w", err)
+		}
+		t.ApprovalInstanceID = &inst.ID
+		t.Status = StatusPendingApproval
+		return t, nil
+	}
+
+	if err := s.repo.UpdateStatus(ctx, t.ID, StatusApproved); err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
+	t.Status = StatusApproved
+	return t, nil
+}
+
+// HandleApprovalDecision reacts to the transfer's approval instance completing.
+func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
+	t, err := s.repo.FindByRef(ctx, orgID, "", entityID)
+	if err != nil { return fmt.Errorf("transfers: HandleApprovalDecision: %w", err) }
+	if t == nil { return ErrNotFound }
+	if t.Status != StatusPendingApproval { return nil }
+	status := StatusApproved
+	if !approved { status = StatusRejected }
+	if err := s.repo.UpdateStatus(ctx, t.ID, status); err != nil {
+		return fmt.Errorf("transfers: HandleApprovalDecision: %w", err)
+	}
+	return nil
+}
+
+func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
+	if err != nil { return nil, fmt.Errorf("transfers: Cancel: %w", err) }
+	if t == nil { return nil, ErrNotFound }
+	if t.Status == StatusApplied { return nil, ErrAlreadyApplied }
+	if t.Status == StatusCancelled { return nil, ErrWrongStatus }
+	if err := s.repo.UpdateStatus(ctx, t.ID, StatusCancelled); err != nil { return nil, fmt.Errorf("transfers: Cancel: %w", err) }
+	t.Status = StatusCancelled
+	return t, nil
+}
+
+// Apply updates employee.department_id and/or employee.manager_id in one transaction.
+func (s *serviceImpl) Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Transfer, error) {
+	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
+	if err != nil { return nil, fmt.Errorf("transfers: Apply: %w", err) }
+	if t == nil { return nil, ErrNotFound }
+	if t.Status == StatusApplied { return nil, ErrAlreadyApplied }
+	if t.Status != StatusApproved { return nil, ErrNotApproved }
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil { return nil, fmt.Errorf("transfers: Apply: begin tx: %w", err) }
+	defer tx.Rollback(ctx)
+
+	if _, err = tx.Exec(ctx,
+		`UPDATE hrm_transfers SET status='applied', applied_at=NOW(), applied_by=$1::uuid, updated_at=NOW() WHERE id=$2::uuid`,
+		appliedBy, t.ID); err != nil {
+		return nil, fmt.Errorf("transfers: Apply: update transfer: %w", err)
+	}
+
+	if _, err = tx.Exec(ctx,
+		`UPDATE hrm_employees SET
+		 department_id = COALESCE($1::uuid, department_id),
+		 manager_id    = COALESCE($2::uuid, manager_id),
+		 updated_at    = NOW()
+		WHERE id=$3::uuid AND org_id=$4::uuid`,
+		t.ToDepartmentID, t.ToManagerEmployeeID, t.EmployeeID, t.OrgID); err != nil {
+		return nil, fmt.Errorf("transfers: Apply: update employee: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil { return nil, fmt.Errorf("transfers: Apply: commit: %w", err) }
+
+	now := time.Now()
+	t.Status = StatusApplied
+	t.AppliedAt = &now
+	t.AppliedBy = &appliedBy
+	return t, nil
+}
