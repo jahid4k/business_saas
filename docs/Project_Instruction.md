@@ -1,6 +1,6 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-07 (r8 — audit pass: fixed two dangling "Section 9" references left over from the r5 renumbering that should've said Section 11, and split the reused 🟡 emoji so PAUSED and PARTIAL aren't the same symbol)
+> Last updated: 2026-07-13 (r9 — HRM module verified complete against the actual codebase and marked ✅ DONE: backend is 50 migrations / 201 routes / 40 tables across 25 sub-modules, not the 20 migrations / 31 routes / 30 tables earlier drafts of this doc showed; frontend is all 8 areas built, not "not started." CRM Contacts known gap closed. AUTH mobile extension corrected from 🔵 ACTIVE to ⚪ QUEUED — no mobile code exists in the repo. Section 6 migration count, table list, and table-to-group mapping corrected (in two passes — first pass undercounted at 30 tables and misfiled `hrm_calendar_assignments` under the wrong group; both fixed). "How to Update This Document" gained triggers for modified-route drift, assumption resolution, schema changes, and periodic audits. Production deployment confirmed NOT started by Mridha — earlier "in progress" status was wrong, corrected to ⚪ QUEUED. Current Focus reset: "Full RBAC User Management" — merging the previously-separate per-member-override and custom-role-builder entries into one workstream — is next, followed by a CRM functionality pass, then an HRM functionality pass; Production Deployment confirmed deliberately last. `docs/modules/hrm.md` and HRM entries in the database docs written from scratch (see those files' own headers for what changed).)
 > This document is both a Claude system instruction and a personal project reference.
 > Update the STATUS blocks and MODULE REGISTRY whenever the project state changes.
 
@@ -56,17 +56,23 @@ Active work:
 - RBAC management (roles, permissions, members, invitations)
 - Task module UI (CRUD, permission-gated actions)
 - CRM module UI (leads, contacts, companies, pipeline board, deals, reports)
+- HRM module UI (departments, positions, employees, leave, attendance, payroll, lifecycle, warnings, complaints, documents, recognition, calendar, reports, setup) — ✅ all 8 phases complete, verified against source (r9)
 - Profile and settings pages
 
 _This list hasn't been checked against the real codebase in a while — several of these are probably done. Don't trust it blindly; "Current Focus" below is what's actually being worked on right now._
 
-### Current Focus (r6)
+### Current Focus (r9)
 
-1. **User permission overrides UI** — frontend for the existing per-member override endpoint (Section 5, AUTHZ/RBAC: `rbac/members/:memberId/permissions`). Distinct from full custom-role-from-scratch UI, which stays queued (Section 11).
-2. **Complete CRM** — true up Section 8's CRM statuses against real code, close the known Contacts integration gap (see Section 8, CRM — CONTACTS).
-3. **Complete HRM frontend** — Phase 1 backend has 31 routes. Extended architecture
-   (Groups A–E) is fully designed and locked — ready for implementation. Start
-   Phase 1 frontend first, then implement extended backend groups one at a time.
+1. **Full RBAC User Management** — the only item carried over from the previous focus list, now scoped precisely (confirmed by Mridha, r9). Two capabilities, both backend-complete, both frontend-missing:
+   - **Custom role builder** — an owner/admin can create, edit, clone, or delete a role with any hand-picked combination of permissions, not limited to the five built-in roles (owner/admin/manager/member/viewer). Backend: full CRUD + clone under `/organizations/:orgId/rbac/roles` (Section 5, AUTHZ/RBAC). Frontend has clone and permission-toggle-on-existing-role already (`settings/roles/page.tsx`, `PermissionForm.tsx`) but no create-a-role-from-scratch form.
+   - **Per-member permission overrides** — an admin can grant or deny specific individual permissions to one member on top of their assigned role, without creating a new role or reassigning them; effective permissions = role permissions + explicit grants − explicit denials. Backend: `GET/PATCH /organizations/:orgId/rbac/members/:memberId/permissions` (Section 5). Frontend: nothing built — no per-member override panel exists anywhere in `settings/members/` or `settings/roles/`.
+
+   These were previously tracked as two separate doc entries (this Current Focus list, and Section 11's "Complex Custom Role UI") — merged here into one workstream since Mridha is building them together as "Full RBAC."
+
+2. **CRM — functionality pass.** Next after RBAC. Scope not yet defined — CRM's core CRUD (leads, contacts, companies, pipeline, deals, reports) is already ✅ DONE (Section 8); this pass is about making it "more functional" beyond that baseline. Define scope when reached.
+3. **HRM — functionality pass.** Next after CRM. Same situation — HRM's full CRUD/workflow surface already ✅ DONE (Section 5, Section 8); this pass adds functionality beyond that baseline. Define scope when reached.
+
+**Confirmed explicitly deferred (r9):** Full Production Deployment (Section 11) — confirmed not started, and deliberately placed well after RBAC → CRM → HRM in the queue, not next. Everything else in Section 11 (MFA, SSO, email sending, resource-level permissions, billing, remaining business modules, mobile) stays queued with no committed order yet.
 
 Mobile App is paused, not abandoned — architecture is decided and documented (Section 9/10), implementation just isn't the current priority. See Section 11.
 
@@ -78,7 +84,7 @@ Backend may be modified or extended during Phase 2 if:
 
 ### Upcoming — Build Queue
 
-Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**. Nothing there is off-limits — it's next up, one at a time. When one starts, give it a proper entry in Section 5 and/or Section 8, the same as any other module.
+Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**. Nothing there is off-limits — it's next up, one at a time. When one starts, give it a proper entry in Section 5 and/or Section 8, the same as any other module. Priority order for what's already decided: **RBAC → CRM functionality pass → HRM functionality pass → (unordered queue) → Production Deployment (deliberately last)**.
 
 ---
 
@@ -288,7 +294,7 @@ Token contract:
 - Frontend never touches the refresh token directly
 - `/refresh` sends cookie, receives new access token in body
 
-**Mobile extension [🔵 ACTIVE]:**
+**Mobile extension [⚪ QUEUED — spec only, verified r9: zero mobile code exists anywhere in `backend/`]:**
 
 ```
 POST /api/v1/auth/mobile/signup
@@ -297,8 +303,10 @@ POST /api/v1/auth/mobile/logout
 POST /api/v1/auth/mobile/refresh
 ```
 
-Same underlying service and repository as above — only the handler differs. Web's `login`/`signup`/`logout`/`refresh` keep setting/reading the httpOnly cookie exactly as before, completely unchanged. The `mobile/*` variants return the refresh token in the JSON response body (for `expo-secure-store`) instead of a cookie, and accept it back in the request body on `mobile/refresh` and `mobile/logout`. `logout-all`, `password-reset/*`, and `me` are shared as-is by both clients — none of them depend on the cookie, so no mobile variant needed.
-Assumption to confirm: this assumes `signup` currently auto-authenticates (sets the cookie) the same way `login` does. If it doesn't, `mobile/signup` can just create the user and internally call the same login path before returning.
+This was previously flagged 🔵 ACTIVE, which was inconsistent with Section 11's Mobile App entry (correctly ⏸️ PAUSED, no code written). Corrected in r9 — this is still just the planned contract, kept here because it's a good plan, not because any of it is built. Promote back to 🔵 ACTIVE when mobile work actually resumes.
+
+Planned shape: same underlying service and repository as above — only the handler differs. Web's `login`/`signup`/`logout`/`refresh` keep setting/reading the httpOnly cookie exactly as before, completely unchanged. The `mobile/*` variants would return the refresh token in the JSON response body (for `expo-secure-store`) instead of a cookie, and accept it back in the request body on `mobile/refresh` and `mobile/logout`. `logout-all`, `password-reset/*`, and `me` are shared as-is by both clients — none of them depend on the cookie, so no mobile variant needed.
+Assumption to confirm when this starts: this assumes `signup` currently auto-authenticates (sets the cookie) the same way `login` does. If it doesn't, `mobile/signup` can just create the user and internally call the same login path before returning.
 
 ---
 
@@ -519,6 +527,72 @@ Permissions: `crm.reports.view`
 
 ---
 
+### HRM MODULE [✅ DONE — verified against source, r9]
+
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated the same way as CRM (`hrm.<submodule>.<action>`), 25 sub-modules, **201 routes total**. This entry summarizes; it does not reproduce every route — that level of detail belongs in a dedicated `docs/modules/hrm.md` (not yet written, see note at the end of this doc revision).
+
+**Database:** 40 tables, built across migrations `00020`–`00050`. That's 31 files in that numeric range, but `00048_seed_data_vertex.sql` is a general CRM seed migration (a "Vertex Logistics" test-data scenario), not HRM — so 30 migrations are HRM-specific, out of 50 total. Migration `00049` fixed a missing `'award'` value in an approval-type CHECK constraint; `00050` seeded ~400+ rows of realistic HRM test data.
+
+**Group A — Setup/Config** (`backend/internal/hrm/{departments,positions,salary,approvals,warningtypes,doctemplates,shifts,holidays,contracts}`):
+| Sub-module | Routes | Notes |
+|---|---|---|
+| departments | 5 | CRUD |
+| positions | 5 | CRUD |
+| salary | 15 | Salary components + structures; formula engine via `expr-lang/expr` |
+| approvals | 8 | Approval chain templates/levels; **missing an approval-instance list endpoint** — flagged in a standalone backend issues note, not yet fixed |
+| warningtypes | 9 | Warning type config + escalation rules |
+| doctemplates | 6 | Markdown templates, browser-rendered PDF |
+| shifts | 8 | Work schedules |
+| holidays | 10 | Holiday calendars |
+| contracts | 5 | Employee contracts |
+
+**Group B — Employee Lifecycle** (`{employees,promotions,transfers,resignations,terminations}`):
+| Sub-module | Routes | Notes |
+|---|---|---|
+| employees | 6 | Core employee CRUD |
+| promotions | 8 | Approval-chain gated, implements `HandleApprovalDecision` |
+| transfers | 8 | HR/manager-initiated only, approval-chain gated |
+| resignations | 8 | Notice period pulled from contract |
+| terminations | 7 | Approval-chain gated, immediate access revocation on decision |
+
+**Group C — Disciplinary** (`{warnings,complaints,employeedocs,acknowledgements}`):
+| Sub-module | Routes | Notes |
+|---|---|---|
+| warnings | 10 | Status-gated visibility, lazy expiry, approval-chain gated |
+| complaints | 10 | Person-against-person, required subject |
+| employeedocs | 8 | Bulk send, versioning |
+| acknowledgements | 6 | Polymorphic target, declined status, cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles |
+
+**Group D — Time & Compensation** (`{attendance,payslips}`):
+| Sub-module | Routes | Notes |
+|---|---|---|
+| attendance | 10 | Multi-punch, 3 sources (webhook + API key), regularization via approval chain, nightly absent cron, period lock |
+| payslips | 9 | Payroll runs, `ComputeSlab` progressive tax, attendance period must finalize first, immutable once finalized, dispute via acknowledgement decline |
+
+**Group E — Recognition & Communication** (`{awards,announcements,calendar,milestones}`):
+| Sub-module | Routes | Notes |
+|---|---|---|
+| awards | 7 | Per-type nomination restriction, optional monetary value, approval-chain gated |
+| announcements | 7 | Markdown, audience targeting, scheduling |
+| calendar | 6 | Separate from holiday calendar, simple recurrence, RSVP via acknowledgement |
+| milestones | 5 | Nightly cron, configurable rules, anniversary `year_intervals`, auto-drafts awards/announcements |
+
+**Reports:** `reports` — 3 routes.
+
+**Approval chain wiring (Phase 7.7):** Callback registry pattern on the approvals service (`RegisterCallback`). All five approval-gated modules (terminations, promotions, transfers, warnings, awards) implement `HandleApprovalDecision` and are registered in `main.go`:
+
+```go
+hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
+hrmApprovalsSvc.RegisterCallback("transfer", hrmTransfersSvc.HandleApprovalDecision)
+hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationsSvc.HandleApprovalDecision)
+hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
+hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
+```
+
+**Known open item:** a missing approval-instance list endpoint (documented separately) — the only unresolved backend gap found in this module during the r9 audit.
+
+---
+
 ### AUDIT [✅ DONE]
 
 Internal only. Append-only log for security-sensitive events. No public API endpoints.
@@ -537,13 +611,42 @@ Written to by auth service (login, logout, password reset) and task service.
 - Transactions for multi-step operations (org creation, membership changes, password reset)
 - Audit logs are append-only (no update/delete)
 
-### Migration Count: 20
+### Migration Count: 50
 
-Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
+Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`. Verified by direct count against source, r9 (was previously shown as 20 — badly stale; HRM alone added 30 migrations, `00021`–`00050`).
 
 ### Key Tables
 
-`users` · `organizations` · `permissions` · `roles` · `organization_members` · `auth_accounts` · `sessions` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks` · `crm_leads` · `crm_contacts` · `crm_companies` · `crm_pipelines` · `crm_stages` · `crm_deals` · `crm_notes` · `crm_tasks` · `crm_activities` · `crm_email_logs`
+Verified against source, r9. The previous list also had several names wrong — it said `crm_contacts`/`crm_companies`/`crm_notes`/`crm_tasks`/`crm_activities`/`crm_email_logs`, but the actual platform engagement layer uses a `platform_` prefix, not `crm_`, for these shared tables (see Section 4 folder structure — `internal/platform/contacts` and `internal/platform/engagement`).
+
+**Core / auth / org (Phase 1):**
+`users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
+
+**Platform (shared contacts + engagement):**
+`platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs`
+
+**CRM:**
+`crm_leads` · `crm_pipelines` · `crm_pipeline_stages` · `crm_deals`
+
+**HRM — Group A (Setup/Config):**
+`hrm_departments` · `hrm_positions` · `hrm_salary_components` · `hrm_salary_structures` · `hrm_salary_structure_components` · `hrm_approval_templates` · `hrm_approval_template_levels` · `hrm_approval_instances` · `hrm_approval_decisions` · `hrm_warning_types` · `hrm_warning_escalation_rules` · `hrm_document_templates` · `hrm_document_bulk_sends` · `hrm_shifts` · `hrm_work_schedule_assignments` · `hrm_holiday_calendars` · `hrm_holidays` · `hrm_calendar_assignments` · `hrm_employee_contracts`
+
+**HRM — Group B (Lifecycle):**
+`hrm_employees` · `hrm_promotions` · `hrm_transfers` · `hrm_resignations` · `hrm_terminations`
+
+**HRM — Group C (Disciplinary):**
+`hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_documents` · `hrm_acknowledgements`
+
+**HRM — Group D (Time & Compensation):**
+`hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
+
+**HRM — Group E (Recognition & Communication):**
+`hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
+
+**HRM — Leave (standalone, pre-dates Groups A–E):**
+`hrm_leave_types` · `hrm_leave_requests`
+
+That's 19 + 5 + 4 + 6 + 4 + 2 = **40 tables** (corrected in a follow-up pass, r9 — first draft of this list undercounted at 30 and had `hrm_calendar_assignments` misfiled under Group E; it's actually created alongside the holiday-calendar tables in migration `00028` and assigns holiday calendars to departments/orgs, unrelated to the Group E HR-events calendar).
 
 ---
 
@@ -801,12 +904,17 @@ These are shown after login when no org context exists.
 - Invitation list with resend/revoke actions
 - Role badge, status badge, action menu per member
 
-### SETTINGS — ROLES & PERMISSIONS [🔵 ACTIVE]
+### SETTINGS — ROLES & PERMISSIONS [🔵 ACTIVE — "Full RBAC User Management" is the current focus, r9]
 
-- `/[orgId]/settings/roles` — Role list, create role, clone role, delete role
-- `/[orgId]/settings/roles/:roleId` — Role detail with permission toggles
-- Permission matrix view (all roles × all permissions)
-- **Current focus:** per-member permission override screen — likely on the member's row/detail in `/[orgId]/settings/members`, showing their role's base permissions plus grant/deny toggles that call `GET/PATCH .../rbac/members/:memberId/permissions` (Section 5). Smaller and narrower than the role list above — this overrides individual grants on top of a role, it doesn't build new roles.
+Verified against source (r9) — corrected from what this doc previously implied:
+
+- `/[orgId]/settings/roles` — role list, clone role (drawer form, `CloneForm`), delete role, edit an _existing_ role's permissions inline (`PermissionForm.tsx`)
+- No `/[orgId]/settings/roles/:roleId` route exists — permission editing happens inline on the list page, not a separate detail route
+- No permission matrix view (all roles × all permissions) found
+- **No create-a-role-from-scratch form** — `frontend/src/lib/roles.ts` only exports `listRoles`, `listPermissions`, `updateRolePermissions`, `cloneRole`, `deleteRole`. The only way to get a new role today is to clone an existing one and then edit its permissions.
+- **No per-member permission override UI anywhere** — not on `/[orgId]/settings/members`, not on the roles page. Backend route (`rbac/members/:memberId/permissions`) is unused by the frontend.
+
+**Current focus (r9, confirmed by Mridha):** build both of the above as one "Full RBAC User Management" workstream — a real create-role-from-scratch form, and a per-member grant/deny override panel. See Section 2, Current Focus, item 1 for the full framing (effective permissions = role permissions + grants − denials).
 
 ### PROFILE & SETTINGS [🔵 ACTIVE]
 
@@ -819,12 +927,13 @@ These are shown after login when no org context exists.
 - Lead detail page or side panel
 - Convert lead flow → creates contact + deal
 
-### CRM — CONTACTS [🔵 ACTIVE — known gap, see below]
+### CRM — CONTACTS [✅ DONE — gap closed, verified r9]
 
-- `/[orgId]/crm/contacts` — Contacts list with search
-- `/[orgId]/crm/companies` — Companies list
-- Company detail with linked contacts
-- **Known pending integration work:** `main.go` wiring, a type conflict in `crm.ts` still unresolved, and a migration that hasn't been run. Backend itself is delivered — this is purely the last mile of hooking it up. Needs the current codebase to confirm exact state before fixing.
+- `/[orgId]/contacts` — Contacts list with search
+- `/[orgId]/companies` — Companies list
+- `/[orgId]/companies/:companyId` — Company detail with linked contacts
+- **Route-shape correction (r9):** these pages live at `/[orgId]/contacts` and `/[orgId]/companies`, not nested under `/[orgId]/crm/...` as this doc previously implied. The backend API routes are still under `/organizations/:orgId/crm/contacts` and `/organizations/:orgId/crm/companies` (Section 5) — only the frontend URL structure differs from the API path, which is fine, just worth knowing when navigating the codebase.
+- **Previously known gap — confirmed closed:** `main.go` wires `contacts.RegisterRoutes` (line ~460), `frontend/src/lib/crm/contacts.ts` and `.../companies.ts` call the correct paths, and `frontend/src/types/crm.ts` has a single, non-conflicting `Contact` interface.
 
 ### CRM — PIPELINE & DEALS [🔵 ACTIVE]
 
@@ -845,6 +954,24 @@ These are shown after login when no org context exists.
 
 - `/[orgId]/security/sessions` — Session list, revoke session
 - `/[orgId]/security/events` — Login event log
+
+### HRM [✅ DONE — all 8 phases complete, verified r9]
+
+All under `/[orgId]/hrm/...` (`frontend/src/app/(dashboard)/[orgId]/hrm/`), with matching components in `frontend/src/components/hrm/` and API helpers in `frontend/src/lib/hrm/`.
+
+- `/[orgId]/hrm/departments` · `/[orgId]/hrm/positions` — org structure
+- `/[orgId]/hrm/employees` — employee CRUD
+- `/[orgId]/hrm/leave` — leave requests
+- `/[orgId]/hrm/attendance` — attendance records
+- `/[orgId]/hrm/payroll` — payslips, payroll runs
+- `/[orgId]/hrm/lifecycle` — promotions, transfers, resignations, terminations
+- `/[orgId]/hrm/warnings` — employee warnings
+- `/[orgId]/hrm/compliance` — complaints, employee documents, acknowledgements
+- `/[orgId]/hrm/recognition` — awards, announcements
+- `/[orgId]/hrm/reports` — HRM reporting dashboard
+- `/[orgId]/hrm/setup/{approvals,document-templates,holidays,salary,shifts,warning-types}` — configuration screens
+
+**Approval integration:** `ApprovalInstanceView` drawer (approve/reject actions) is wired into the Warnings, Recognition, and Lifecycle pages wherever a record's `approval_instance_id` is non-null — confirmed present in all three page files.
 
 ---
 
@@ -1064,10 +1191,11 @@ Transactional email provider integration (SES / Postmark / Resend / etc.) for ve
 
 ---
 
-### COMPLEX CUSTOM ROLE UI [⚪ QUEUED — frontend only]
+### COMPLEX CUSTOM ROLE UI [🔵 ACTIVE — merged into "Full RBAC User Management," r9]
 
-A role-builder UI for creating fully arbitrary custom roles from scratch. Backend already supports this in full: `POST/PATCH/DELETE /organizations/:orgId/rbac/roles`, `/clone`, `/permissions` (Section 5, AUTHZ/RBAC). This is purely a frontend build.
-Not to be confused with the per-member permission override UI, which is current focus (Section 2, Section 8 — SETTINGS ROLES & PERMISSIONS). That one adjusts individual grants on top of a role; this one builds whole new roles. They may turn out to overlap enough that this entry becomes unnecessary — revisit once overrides ship.
+Previously tracked here as a separate, distinct-from-overrides queued item. Confirmed by Mridha (r9): this and the per-member permission override UI are being built together as one current-focus workstream, not sequentially. See Section 2, Current Focus, item 1 for the full scope, and Section 8 — SETTINGS ROLES & PERMISSIONS for verified current frontend state (clone-only today, no from-scratch form, no override panel).
+
+Backend already supports the role-builder half in full: `POST/PATCH/DELETE /organizations/:orgId/rbac/roles`, `/clone`, `/permissions` (Section 5, AUTHZ/RBAC). This entry stays in the build queue for historical reference but is no longer "queued" — remove once it ships, per this doc's own update convention.
 
 ---
 
@@ -1083,40 +1211,14 @@ Payment provider integration, plan tiers, usage limits, invoices, billing settin
 
 ---
 
-### HRM MODULE [🟡 PARTIAL — Phase 1 backend done, extended architecture designed]
+### HRM MODULE — ✅ DONE, shipped (r9)
 
-Phase 1 backend complete: departments, positions, employees, leave management,
-reports — 31 routes across 5 sub-domains. Frontend not started.
+Both backend and frontend complete, verified against source. Full detail lives in Section 5 (Backend Module Registry → HRM MODULE) and Section 8 (Frontend Module Registry → HRM). Kept here briefly for historical record per this doc's own update convention:
 
-Extended HRM architecture fully designed (Groups A–E, 22 additional migrations):
-
-GROUP A — Setup/Config: Salary component engine (expr-lang/expr formula + slab),
-configurable approval chains (sequential, SLA-based), warning type config,
-document templates (Markdown + browser PDF), shifts, holiday calendars, contracts.
-
-GROUP B — Employee Lifecycle: Promotions, transfers (HR/manager-initiated only),
-resignations (notice period from contract), terminations (extends existing endpoint,
-access revocation immediate).
-
-GROUP C — Disciplinary: Warning records (status-gated visibility, lazy expiry),
-complaints (person-against-person, required subject), document operations (bulk
-send, versioning), acknowledgements (polymorphic, declined status).
-
-GROUP D — Time & Compensation: Attendance (multi-punch, 3 sources via webhook +
-API key, regularization via approval chain, nightly absent cron, period lock),
-payslips (payroll runs, formula engine, attendance period must finalize first,
-immutable on finalize, dispute via acknowledgement decline).
-
-GROUP E — Recognition & Communication: Awards (per-type nomination restriction,
-optional monetary), announcements (Markdown, audience targeting, scheduling),
-HR calendar (separate from holiday calendar, simple recurrence, RSVP via
-acknowledgement), employee milestones (nightly cron, configurable rules,
-anniversary year_intervals, auto-draft awards/announcements).
-
-Implementation order: A → B → C → D → E (each group depends on prior).
-Migration range when built: 00021–00042 (22 new migrations, 42 total).
-Background jobs needed: 5 (absent-marker, warning expiry, milestone generator,
-announcement auto-publish, calendar reminders).
+- Backend: 30 HRM-specific migrations within the `00020`–`00050` range (one file in that range, `00048`, is unrelated CRM seed data), 40 tables, 25 sub-modules, 201 routes, Groups A–E plus a standalone Leave pair all shipped in the order originally planned (A → B → C → D → E) — confirmed by the seed-permission migrations (`00030`, `00035`, `00039`, `00042`, `00047`) marking the end of each group in sequence.
+- Frontend: all 8 phases shipped — every screen listed in Section 8's HRM entry exists and was found on disk.
+- Approval chain integration (Phase 7.7) wired end-to-end: callback registry pattern, all 5 gated modules registered in `main.go`, `ApprovalInstanceView` drawer live on the 3 relevant frontend pages.
+- One known open item carried forward: a missing approval-instance list endpoint (documented separately, not yet fixed).
 
 ---
 
@@ -1144,9 +1246,11 @@ Part of the stated long-term vision; added here alongside the rest — drop it i
 
 ---
 
-### FULL PRODUCTION DEPLOYMENT [🟠 IN PROGRESS]
+### FULL PRODUCTION DEPLOYMENT [⚪ QUEUED — confirmed not started, r9]
 
-Month 1 production roadmap is active: `docker-compose.prod.yml`, Caddy TLS config, `.env.production` template, Sentry wiring, and a nightly rclone backup script (14-day retention) are done. Remaining steps are Mridha's direct actions: VPS purchase, DNS, secret generation, storage account, live deploy, restore drill.
+Previously documented as substantially done (`docker-compose.prod.yml`, Caddy TLS, `.env.production`, Sentry, nightly rclone backup — all supposedly done, with only VPS/DNS/secrets/deploy left). The r9 audit found none of that in the repo — no Sentry SDK, no Caddyfile, `deploy.yml` still literally says "No real deployment happens yet." **Confirmed by Mridha (r9): not actually started.** That earlier "in progress" status was simply wrong.
+
+**Deliberately last in the queue.** Mridha's confirmed priority order (r9) is RBAC → CRM functionality pass → HRM functionality pass → (rest of this queue, unordered) → Production Deployment. This is not being worked on now and shouldn't be treated as close.
 
 ---
 
@@ -1318,5 +1422,32 @@ When something in the build queue starts real work:
 - Add a proper entry to Section 5 and/or Section 8 with real routes and permissions
 - Mark it `✅ DONE` in Section 11 (or remove the entry) once it ships
 - Update Section 2's phase status if it changes the active phase
+
+When something _existing_ is modified, not added (r9):
+
+- Route shape changes (a path moves, a param renames) — update the route block in Section 5/8/9/10 in place, don't leave the old shape sitting there uncorrected
+- A permission key is renamed, split, or merged — update every place it's listed (Section 5 module entry, Section 5 AUTHZ/RBAC key-permissions line if relevant)
+- A status flag becomes inconsistent across sections (e.g. Section 5 says `🔵 ACTIVE` for something Section 11 says is `⏸️ PAUSED` with no code) — this is a real bug in the document, not a style choice; fix it on sight, don't wait for a dedicated audit pass
+
+When a documented assumption gets resolved (r9):
+
+- Every "Assumption to confirm" note (e.g. the mobile signup/cookie one in Section 5) needs to be either deleted once confirmed true, or corrected with the real behavior once confirmed false — an unresolved assumption sitting in the doc for multiple revisions is a sign it was never checked
+
+When the DB schema changes (r9):
+
+- New table → add it to Section 6 Key Tables under the right group
+- Migration count changes → update Section 6's "Migration Count" line same-day, not on the next big audit — this number goes stale fastest of anything in the doc
+- A CHECK constraint, enum, or column is added/changed on an existing table in a way that affects API behavior → note it in the relevant Section 5 module entry, not just the migration file
+
+When a new dependency is added (r9):
+
+- Backend: add it to Section 15 (Version Awareness) with the version pinned
+- Frontend: same, plus note in Section 3 (Tech Stack) if it's a new category of tool (not just a version bump of something already listed)
+
+Periodic structural drift audit (r9):
+
+- Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence the way this r9 pass did, _then_ reconcile. The document has been wrong about migration counts, route counts, and ACTIVE/DONE status multiple times in a row; assume drift by default rather than assuming the doc is current
+- Cross-check Section 5 (backend) against Section 8 (frontend) against Section 11 (build queue) for the same module — these three have gone out of sync with each other (not just with the codebase) more than once
+- A doc pasted into a chat conversation is not guaranteed to be the same version as what's committed in the repo (`docs/Project_Instruction.md`) — confirmed happening at least once (r9). Whichever copy is more recent should overwrite the other after an update; don't let two versions silently diverge further
 
 Keep this document current. A stale instruction is worse than no instruction.

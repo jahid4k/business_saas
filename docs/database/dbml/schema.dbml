@@ -1,6 +1,6 @@
 Project BusinessSAAS {
   database_type: 'PostgreSQL'
-  Note: 'Generated from BusinessSAAS Phase 1 migrations.'
+  Note: 'Generated from BusinessSAAS Phase 1 migrations. HRM tables (40, migrations 00021-00046) added r9 — generated programmatically from source SQL, not hand-transcribed. CRM and platform tables are not yet represented in this DBML file — same gap as data-dictionary.md and erd.md before r9.'
 }
 
 Table users {
@@ -227,6 +227,796 @@ Table tasks {
   due_date timestamptz
   created_by uuid [ref: > users.id]
   assigned_to uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+// ============================================================
+// HRM tables (added r9)
+// ============================================================
+
+Table hrm_departments {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  parent_department_id uuid [ref: > hrm_departments.id]
+  head_employee_id uuid
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_positions {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  department_id uuid [ref: > hrm_departments.id]
+  title text
+  description text
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_employees {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  user_id uuid [ref: > users.id]
+  employee_number text
+  first_name text
+  last_name text
+  email text
+  work_email text
+  phone text
+  work_phone text
+  date_of_birth date
+  gender text
+  avatar_url text
+  hire_date date
+  termination_date date
+  employment_type text
+  status text
+  department_id uuid [ref: > hrm_departments.id]
+  position_id uuid [ref: > hrm_positions.id]
+  manager_id uuid
+  address text
+  city text
+  country text
+  notes text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_leave_types {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  max_days_per_year integer
+  is_paid boolean
+  requires_approval boolean
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_leave_requests {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  leave_type_id uuid [ref: > hrm_leave_types.id]
+  start_date date
+  end_date date
+  total_days numeric(5,1)
+  reason text
+  status text
+  reviewed_by uuid [ref: > users.id]
+  reviewed_at timestamptz
+  review_note text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_salary_components {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  component_type text
+  calc_method text
+  fixed_value numeric(15,4)
+  formula_expression text
+  formula_variables text[]
+  slab_config jsonb
+  is_taxable boolean
+  display_order integer
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_salary_structures {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  grade_label text
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_salary_structure_components {
+  id uuid [pk]
+  structure_id uuid [ref: > hrm_salary_structures.id]
+  component_id uuid [ref: > hrm_salary_components.id]
+  override_value numeric(15,4)
+  display_order integer
+}
+
+Table hrm_employee_salary_records {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  structure_id uuid [ref: > hrm_salary_structures.id]
+  basic_pay numeric(15,2)
+  effective_date date
+  change_reason text
+  change_notes text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+}
+
+Table hrm_approval_templates {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  action_type text
+  condition_expression text
+  is_default boolean
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_approval_template_levels {
+  id uuid [pk]
+  template_id uuid [ref: > hrm_approval_templates.id]
+  level integer
+  approver_type text
+  approver_role text
+  approver_user_id uuid [ref: > users.id]
+  sla_hours integer
+  on_sla_breach text
+}
+
+Table hrm_approval_instances {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  template_id uuid [ref: > hrm_approval_templates.id]
+  entity_type text
+  entity_id uuid
+  instance_snapshot jsonb
+  current_level integer
+  overall_status text
+  requested_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+  completed_at timestamptz
+}
+
+Table hrm_approval_decisions {
+  id uuid [pk]
+  instance_id uuid [ref: > hrm_approval_instances.id]
+  level integer
+  approver_id uuid [ref: > users.id]
+  action text
+  note text
+  decided_at timestamptz
+}
+
+Table hrm_warning_types {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  severity_level integer
+  can_be_issued_by text[]
+  requires_hr_approval boolean
+  approval_template_id uuid [ref: > hrm_approval_templates.id]
+  employee_can_respond boolean
+  response_window_days integer
+  auto_generate_document boolean
+  document_template_id uuid
+  valid_duration_days integer
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_warning_escalation_rules {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  trigger_warning_type_id uuid [ref: > hrm_warning_types.id]
+  trigger_count integer
+  within_days integer
+  action text
+  notification_roles text[]
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_document_templates {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  document_type text
+  description text
+  body_markdown text
+  available_variables text[]
+  requires_acknowledgement boolean
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_employee_documents {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  template_id uuid [ref: > hrm_document_templates.id]
+  title text
+  document_type text
+  file_url text
+  file_name text
+  file_size_bytes bigint
+  mime_type text
+  generated_content text
+  related_type text
+  related_id uuid
+  version integer
+  superseded_by uuid [ref: > hrm_employee_documents.id]
+  bulk_send_batch_id uuid
+  expiry_date date
+  status text
+  issued_by uuid [ref: > users.id]
+  sent_at timestamptz
+  acknowledged_at timestamptz
+  acknowledgement_note text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_document_bulk_sends {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  template_id uuid [ref: > hrm_document_templates.id]
+  sender_id uuid [ref: > users.id]
+  recipient_type text
+  recipient_ids jsonb
+  batch_id uuid
+  total_count integer
+  pending_count integer
+  completed_count integer
+  sent_at timestamptz
+  created_at timestamptz
+}
+
+Table hrm_shifts {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  shift_type text
+  start_time time
+  end_time time
+  core_start_time time
+  core_end_time time
+  weekly_hours_target numeric(5,2)
+  break_minutes integer
+  working_days text[]
+  track_overtime boolean
+  overtime_threshold_hours numeric(5,2)
+  track_breaks boolean
+  is_default boolean
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_work_schedule_assignments {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  shift_id uuid [ref: > hrm_shifts.id]
+  assignee_type text
+  assignee_id uuid
+  effective_date date
+  end_date date
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+}
+
+Table hrm_holiday_calendars {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  name text
+  description text
+  country_code text
+  year integer
+  is_active boolean
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_holidays {
+  id uuid [pk]
+  public_id text [unique]
+  calendar_id uuid [ref: > hrm_holiday_calendars.id]
+  name text
+  date date
+  holiday_type text
+  is_paid boolean
+  repeat_yearly boolean
+  created_at timestamptz
+}
+
+Table hrm_calendar_assignments {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  calendar_id uuid [ref: > hrm_holiday_calendars.id]
+  assignee_type text
+  assignee_id uuid
+  effective_date date
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+}
+
+Table hrm_employee_contracts {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  contract_type text
+  start_date date
+  end_date date
+  probation_end_date date
+  notice_period_days integer
+  salary_structure_id uuid [ref: > hrm_salary_structures.id]
+  work_hours_per_week numeric(5,2)
+  document_id uuid [ref: > hrm_employee_documents.id]
+  is_active boolean
+  notes text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_promotions {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  from_position_id uuid [ref: > hrm_positions.id]
+  from_department_id uuid [ref: > hrm_departments.id]
+  from_salary_structure_id uuid [ref: > hrm_salary_structures.id]
+  from_basic_pay numeric(15,2)
+  to_position_id uuid [ref: > hrm_positions.id]
+  to_department_id uuid [ref: > hrm_departments.id]
+  to_salary_structure_id uuid [ref: > hrm_salary_structures.id]
+  new_basic_pay numeric(15,2)
+  effective_date date
+  reason text
+  notes text
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  status text
+  applied_at timestamptz
+  applied_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_transfers {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  transfer_type text
+  from_department_id uuid [ref: > hrm_departments.id]
+  from_manager_employee_id uuid [ref: > hrm_employees.id]
+  from_location text
+  to_department_id uuid [ref: > hrm_departments.id]
+  to_manager_employee_id uuid [ref: > hrm_employees.id]
+  to_location text
+  effective_date date
+  reason text
+  notes text
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  status text
+  applied_at timestamptz
+  applied_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_resignations {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  resignation_date date
+  notice_period_days integer
+  is_notice_waived boolean
+  last_working_date date
+  reason_category text
+  reason_remarks text
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  exit_interview_completed boolean
+  exit_clearance_completed boolean
+  status text
+  accepted_at timestamptz
+  accepted_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_terminations {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  termination_type text
+  termination_date date
+  last_working_date date
+  reason text
+  internal_notes text
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  severance_amount numeric(15,2)
+  severance_currency text
+  is_rehire_eligible boolean
+  exit_clearance_completed boolean
+  status text
+  applied_at timestamptz
+  applied_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_employee_warnings {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  warning_type_id uuid [ref: > hrm_warning_types.id]
+  warning_type_name text
+  severity_level integer
+  title text
+  description text
+  incident_date date
+  issued_by uuid [ref: > users.id]
+  witness_ids uuid[]
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  can_employee_respond boolean
+  response_window_days integer
+  response_deadline date
+  employee_response text
+  employee_responded_at timestamptz
+  appeal_reason text
+  appeal_submitted_at timestamptz
+  appeal_resolution text
+  appeal_resolved_at timestamptz
+  expires_at date
+  is_active boolean
+  issued_at timestamptz
+  status text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_complaints {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  is_anonymous boolean
+  complaint_type text
+  title text
+  description text
+  incident_date date
+  against_employee_id uuid [ref: > hrm_employees.id]
+  against_details text
+  investigator_id uuid [ref: > users.id]
+  investigation_notes text
+  investigation_started_at timestamptz
+  resolution text
+  resolution_action text
+  resolved_at timestamptz
+  resolved_by uuid [ref: > users.id]
+  document_id uuid [ref: > hrm_employee_documents.id]
+  status text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_acknowledgements {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  acknowledgeable_type text
+  acknowledgeable_id uuid
+  entity_title text
+  notes text
+  signature_required boolean
+  signed_at timestamptz
+  signature_data text
+  status text
+  acknowledged_at timestamptz
+  declined_at timestamptz
+  decline_reason text
+  expires_at date
+  requested_by uuid [ref: > users.id]
+  requested_at timestamptz
+  reminder_sent_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+  DEFERRABLE initially
+}
+
+Table hrm_attendance_records {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  attendance_date date
+  shift_id uuid [ref: > hrm_shifts.id]
+  shift_name text
+  expected_in time
+  expected_out time
+  check_in_time time
+  check_out_time time
+  break_minutes integer
+  regular_hours numeric(5,2)
+  overtime_hours numeric(5,2)
+  day_type text
+  source text
+  notes text
+  regularization_reason text
+  regularization_instance_id uuid [ref: > hrm_approval_instances.id]
+  status text
+  approved_by uuid [ref: > users.id]
+  approved_at timestamptz
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_attendance_periods {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  period_year integer
+  period_month integer
+  status text
+  total_employees integer
+  total_work_days integer
+  total_present integer
+  total_absent integer
+  total_holidays integer
+  total_leaves integer
+  total_overtime_hours numeric(10,2)
+  finalized_at timestamptz
+  finalized_by uuid [ref: > users.id]
+  locked_at timestamptz
+  locked_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_payslip_runs {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  period_year integer
+  period_month integer
+  description text
+  currency text
+  attendance_period_id uuid [ref: > hrm_attendance_periods.id]
+  total_employees integer
+  total_gross_pay numeric(18,2)
+  total_deductions numeric(18,2)
+  total_net_pay numeric(18,2)
+  status text
+  computed_at timestamptz
+  computed_by uuid [ref: > users.id]
+  approved_at timestamptz
+  approved_by uuid [ref: > users.id]
+  paid_at timestamptz
+  paid_by uuid [ref: > users.id]
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_payslips {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  payslip_run_id uuid [ref: > hrm_payslip_runs.id]
+  period_year integer
+  period_month integer
+  salary_structure_id uuid [ref: > hrm_salary_structures.id]
+  salary_structure_name text
+  gross_pay numeric(15,2)
+  total_deductions numeric(15,2)
+  net_pay numeric(15,2)
+  basic_pay numeric(15,2)
+  work_days integer
+  present_days integer
+  absent_days integer
+  leave_days integer
+  holiday_days integer
+  overtime_hours numeric(7,2)
+  currency text
+  status text
+  payment_reference text
+  payment_date date
+  paid_at timestamptz
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_payslip_lines {
+  id uuid [pk]
+  payslip_id uuid [ref: > hrm_payslips.id]
+  org_id uuid [ref: > organizations.id]
+  component_id uuid [ref: > hrm_salary_components.id]
+  component_name text
+  component_type text
+  calc_method text
+  formula_used text
+  computed_amount numeric(15,2)
+  display_order integer
+  created_at timestamptz
+}
+
+Table hrm_awards {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  award_type text
+  title text
+  description text
+  points integer
+  monetary_value numeric(12,2)
+  currency text
+  award_date date
+  issued_by uuid [ref: > users.id]
+  approval_instance_id uuid [ref: > hrm_approval_instances.id]
+  certificate_document_id uuid [ref: > hrm_employee_documents.id]
+  announcement_id uuid
+  status text
+  issued_at timestamptz
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_announcements {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  title text
+  content text
+  category text
+  scope_type text
+  scope_ids uuid[]
+  scheduled_at timestamptz
+  published_at timestamptz
+  expires_at timestamptz
+  requires_acknowledgement boolean
+  acknowledgement_deadline date
+  is_pinned boolean
+  pin_order integer
+  author_id uuid [ref: > users.id]
+  status text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_calendar_events {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  title text
+  description text
+  event_type text
+  start_date date
+  end_date date
+  is_all_day boolean
+  start_time time
+  end_time time
+  location text
+  scope_type text
+  scope_ids uuid[]
+  requires_rsvp boolean
+  rsvp_deadline date
+  organizer_id uuid [ref: > users.id]
+  is_auto_generated boolean
+  source text
+  source_id uuid
+  status text
+  created_by uuid [ref: > users.id]
+  created_at timestamptz
+  updated_at timestamptz
+}
+
+Table hrm_employee_milestones {
+  id uuid [pk]
+  public_id text [unique]
+  org_id uuid [ref: > organizations.id]
+  employee_id uuid [ref: > hrm_employees.id]
+  milestone_type text
+  title text
+  description text
+  milestone_date date
+  years_count integer
+  is_auto_generated boolean
+  auto_award_id uuid [ref: > hrm_awards.id]
+  auto_announcement_id uuid [ref: > hrm_announcements.id]
+  auto_calendar_event_id uuid [ref: > hrm_calendar_events.id]
+  is_acknowledged boolean
+  acknowledged_at timestamptz
+  created_by uuid [ref: > users.id]
   created_at timestamptz
   updated_at timestamptz
 }
