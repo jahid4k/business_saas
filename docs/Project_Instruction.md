@@ -1,6 +1,6 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-07-13 (r9 — HRM module verified complete against the actual codebase and marked ✅ DONE: backend is 50 migrations / 201 routes / 40 tables across 25 sub-modules, not the 20 migrations / 31 routes / 30 tables earlier drafts of this doc showed; frontend is all 8 areas built, not "not started." CRM Contacts known gap closed. AUTH mobile extension corrected from 🔵 ACTIVE to ⚪ QUEUED — no mobile code exists in the repo. Section 6 migration count, table list, and table-to-group mapping corrected (in two passes — first pass undercounted at 30 tables and misfiled `hrm_calendar_assignments` under the wrong group; both fixed). "How to Update This Document" gained triggers for modified-route drift, assumption resolution, schema changes, and periodic audits. Production deployment confirmed NOT started by Mridha — earlier "in progress" status was wrong, corrected to ⚪ QUEUED. Current Focus reset: "Full RBAC User Management" — merging the previously-separate per-member-override and custom-role-builder entries into one workstream — is next, followed by a CRM functionality pass, then an HRM functionality pass; Production Deployment confirmed deliberately last. `docs/modules/hrm.md` and HRM entries in the database docs written from scratch (see those files' own headers for what changed).)
+> Last updated: 2026-07-14 (r10 — Full RBAC User Management shipped: custom role builder (`PermissionForm.tsx` create mode, wired to the already-existing `CreateRole` endpoint) and per-member permission overrides (new `MemberPermissionsForm.tsx`, unified checklist with a "from role" tag, diffed against the role baseline at save time). Backend `UpdateMemberPermissions` gained two guards it was missing — can no longer target yourself or the org owner — found and closed during this build, not before. Permission categorization extracted to `lib/permissionGroups.ts`, shared between both forms, now includes all 25 HRM resources that were previously invisible in the picker despite existing in the database since HRM shipped. Also shipped as standalone User Management items before Full RBAC absorbed the rest of that work: admin password reset (`members.password_reset`, migration 00051) and a lightweight per-org seat limit (`organizations.max_seats`, migration 00052, no admin UI yet — direct DB write only). Migration count 50 → 52. Current Focus reset: CRM is now the sole focus; HRM functionality pass pushed back in the queue, not dropped. Section 11's "COMPLEX CUSTOM ROLE UI" entry removed — shipped, per this doc's own "remove once it ships" convention — and replaced with a new CRM — Advanced Functionality Pass entry capturing Mridha's five-category wish list (communication/omnichannel, workflow automation, productivity, analytics/forecasting, post-sale/financials), triaged by buildability rather than left as a flat list; nothing in it has started.)
 > This document is both a Claude system instruction and a personal project reference.
 > Update the STATUS blocks and MODULE REGISTRY whenever the project state changes.
 
@@ -61,18 +61,22 @@ Active work:
 
 _This list hasn't been checked against the real codebase in a while — several of these are probably done. Don't trust it blindly; "Current Focus" below is what's actually being worked on right now._
 
-### Current Focus (r9)
+### Current Focus (r10)
 
-1. **Full RBAC User Management** — the only item carried over from the previous focus list, now scoped precisely (confirmed by Mridha, r9). Two capabilities, both backend-complete, both frontend-missing:
-   - **Custom role builder** — an owner/admin can create, edit, clone, or delete a role with any hand-picked combination of permissions, not limited to the five built-in roles (owner/admin/manager/member/viewer). Backend: full CRUD + clone under `/organizations/:orgId/rbac/roles` (Section 5, AUTHZ/RBAC). Frontend has clone and permission-toggle-on-existing-role already (`settings/roles/page.tsx`, `PermissionForm.tsx`) but no create-a-role-from-scratch form.
-   - **Per-member permission overrides** — an admin can grant or deny specific individual permissions to one member on top of their assigned role, without creating a new role or reassigning them; effective permissions = role permissions + explicit grants − explicit denials. Backend: `GET/PATCH /organizations/:orgId/rbac/members/:memberId/permissions` (Section 5). Frontend: nothing built — no per-member override panel exists anywhere in `settings/members/` or `settings/roles/`.
+**Full RBAC User Management is done** — both halves shipped:
 
-   These were previously tracked as two separate doc entries (this Current Focus list, and Section 11's "Complex Custom Role UI") — merged here into one workstream since Mridha is building them together as "Full RBAC."
+- **Custom role builder** — `PermissionForm.tsx` now runs in a create mode (name + description fields, empty permission set to start, same permission picker), wired to the already-existing `CreateRole` backend endpoint. "+ New role" button on `/[orgId]/settings/roles`.
+- **Per-member permission overrides** — new `MemberPermissionsForm.tsx` drawer off the members list ("Manage permissions" / "View permissions" depending on grant), unified checklist with a "from role" tag on inherited permissions — checking/unchecking diffs against the role baseline into custom grants / denials at save time. Backend `UpdateMemberPermissions` gained two guards it was missing: can no longer target yourself or the org owner (matches the existing pattern on `ResetMemberPassword`/`UpdateMember`).
+- Permission categorization (`GROUPS`/`RESOURCE_LABEL`) extracted to a shared `lib/permissionGroups.ts` so the role editor and override panel can't drift apart — now includes all 25 HRM resources, previously invisible in the picker despite existing in the database since HRM shipped.
 
-2. **CRM — functionality pass.** Next after RBAC. Scope not yet defined — CRM's core CRUD (leads, contacts, companies, pipeline, deals, reports) is already ✅ DONE (Section 8); this pass is about making it "more functional" beyond that baseline. Define scope when reached.
-3. **HRM — functionality pass.** Next after CRM. Same situation — HRM's full CRUD/workflow surface already ✅ DONE (Section 5, Section 8); this pass adds functionality beyond that baseline. Define scope when reached.
+**CRM is now the sole focus.** HRM functionality pass (previously next in line) is pushed back — not abandoned, just no longer next. Mridha has laid out a five-category wish list (communication/omnichannel, workflow automation, productivity, analytics/forecasting, post-sale/financials) that needs scoping before it's a real build queue — see Section 11, CRM — Advanced Functionality Pass, for the full breakdown and triage by buildability. Nothing in that list is started; first real decisions (which tier, which items) still pending as of r10.
 
-**Confirmed explicitly deferred (r9):** Full Production Deployment (Section 11) — confirmed not started, and deliberately placed well after RBAC → CRM → HRM in the queue, not next. Everything else in Section 11 (MFA, SSO, email sending, resource-level permissions, billing, remaining business modules, mobile) stays queued with no committed order yet.
+**Also shipped, r10** (scoped as standalone User Management items before Full RBAC absorbed most of that work):
+
+- **Admin password reset** — `members.password_reset` permission (migration 00051), `POST /organizations/:orgId/members/:memberId/reset-password`, wired into the members list action menu. Revokes the target's sessions, audit-logged.
+- **Lightweight seat limit** — `organizations.max_seats` (migration 00052, nullable = unlimited), enforced in `InviteMember`. No admin UI to set the limit yet — direct DB write only, deliberately not tied to the (still nonexistent) billing system.
+
+**Confirmed still deferred:** Impersonation (needs its own design pass before any code), auto-seeded client/vendor roles (tied to a portal decision not yet made), Full Production Deployment (Section 11) — still not started, still deliberately last. Everything else in Section 11 (MFA, SSO, email sending, resource-level permissions, billing, remaining business modules, mobile) stays queued with no committed order yet.
 
 Mobile App is paused, not abandoned — architecture is decided and documented (Section 9/10), implementation just isn't the current priority. See Section 11.
 
@@ -84,7 +88,7 @@ Backend may be modified or extended during Phase 2 if:
 
 ### Upcoming — Build Queue
 
-Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**. Nothing there is off-limits — it's next up, one at a time. When one starts, give it a proper entry in Section 5 and/or Section 8, the same as any other module. Priority order for what's already decided: **RBAC → CRM functionality pass → HRM functionality pass → (unordered queue) → Production Deployment (deliberately last)**.
+Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**. Nothing there is off-limits — it's next up, one at a time. When one starts, give it a proper entry in Section 5 and/or Section 8, the same as any other module. Priority order for what's already decided: **RBAC (done) → CRM functionality pass (sole current focus) → HRM functionality pass (pushed back, not dropped) → (unordered queue) → Production Deployment (deliberately last)**.
 
 ---
 
@@ -359,6 +363,7 @@ GET   /api/v1/organizations/:orgId/members/:memberId
 PATCH /api/v1/organizations/:orgId/members/:memberId
 PATCH /api/v1/organizations/:orgId/members/:memberId/role
 PATCH /api/v1/organizations/:orgId/members/:memberId/status
+POST  /api/v1/organizations/:orgId/members/:memberId/reset-password   ← r10, admin-initiated, no token/email step
 
 POST   /api/v1/organizations/:orgId/invitations/:invitationId/resend
 DELETE /api/v1/organizations/:orgId/invitations/:invitationId
@@ -382,7 +387,13 @@ PATCH /api/v1/organizations/:orgId/rbac/members/:memberId/permissions
 ```
 
 Roles: `owner` · `admin` · `manager` · `member` · `viewer`
-Key permissions: `members.view` · `members.update` · `members.invite` · `members.remove` · `roles.view` · `roles.create` · `roles.update` · `roles.delete` · `roles.clone` · `roles.permissions.update` · `members.permissions.view` · `members.permissions.update`
+Key permissions: `members.view` · `members.update` · `members.invite` · `members.remove` · `members.password_reset` · `roles.view` · `roles.create` · `roles.update` · `roles.delete` · `roles.clone` · `roles.permissions.update` · `members.permissions.view` · `members.permissions.update`
+
+**r10 additions:**
+
+- `members.password_reset` (owner/admin only) — admin sets a new password directly for another member; revokes their sessions; audit-logged as `authz.member_password_reset`.
+- `UpdateMemberPermissions` now rejects `callerID == member.UserID` (`ErrCannotChangeOwnPermissions`) and targeting the owner (`ErrCannotModifyOwner`, already used elsewhere) — both gaps existed since this endpoint shipped, only caught while building its frontend.
+- `organizations.max_seats` (nullable int, migration 00052) — checked in `InviteMember` via `checkSeatLimit`; `ErrSeatLimitReached` → 409. No endpoint to set it yet — direct DB write only.
 
 ---
 
@@ -611,9 +622,9 @@ Written to by auth service (login, logout, password reset) and task service.
 - Transactions for multi-step operations (org creation, membership changes, password reset)
 - Audit logs are append-only (no update/delete)
 
-### Migration Count: 50
+### Migration Count: 52
 
-Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`. Verified by direct count against source, r9 (was previously shown as 20 — badly stale; HRM alone added 30 migrations, `00021`–`00050`).
+Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`. 50 as of r9 (HRM, `00021`–`00050`); r10 adds `00051_add_member_password_reset_permission.sql` and `00052_add_organization_max_seats.sql`.
 
 ### Key Tables
 
@@ -898,23 +909,20 @@ These are shown after login when no org context exists.
 - Inline create form, inline edit, delete with confirmation
 - Permission gates: create, update, delete based on user role
 
-### SETTINGS — MEMBERS [🔵 ACTIVE]
+### SETTINGS — MEMBERS [🔵 ACTIVE — password reset and permission overrides added, r10]
 
-- `/[orgId]/settings/members` — Members list + invite + role assignment
-- Invitation list with resend/revoke actions
-- Role badge, status badge, action menu per member
+- `/[orgId]/settings/members` — members list + invite + role assignment (unchanged)
+- Invitation list with resend/revoke actions (unchanged)
+- Per-member action menu, each item independently permission-gated: Reset password (`ResetPasswordForm.tsx` drawer, warns it revokes all the target's sessions), Manage/View permissions (`MemberPermissionsForm.tsx` drawer), Remove member (unchanged)
+- Menu and all three actions hidden for your own row and the org owner's row, matching the backend guards exactly
 
-### SETTINGS — ROLES & PERMISSIONS [🔵 ACTIVE — "Full RBAC User Management" is the current focus, r9]
+### SETTINGS — ROLES & PERMISSIONS [✅ DONE — Full RBAC shipped, r10]
 
-Verified against source (r9) — corrected from what this doc previously implied:
-
-- `/[orgId]/settings/roles` — role list, clone role (drawer form, `CloneForm`), delete role, edit an _existing_ role's permissions inline (`PermissionForm.tsx`)
-- No `/[orgId]/settings/roles/:roleId` route exists — permission editing happens inline on the list page, not a separate detail route
-- No permission matrix view (all roles × all permissions) found
-- **No create-a-role-from-scratch form** — `frontend/src/lib/roles.ts` only exports `listRoles`, `listPermissions`, `updateRolePermissions`, `cloneRole`, `deleteRole`. The only way to get a new role today is to clone an existing one and then edit its permissions.
-- **No per-member permission override UI anywhere** — not on `/[orgId]/settings/members`, not on the roles page. Backend route (`rbac/members/:memberId/permissions`) is unused by the frontend.
-
-**Current focus (r9, confirmed by Mridha):** build both of the above as one "Full RBAC User Management" workstream — a real create-role-from-scratch form, and a per-member grant/deny override panel. See Section 2, Current Focus, item 1 for the full framing (effective permissions = role permissions + grants − denials).
+- `/[orgId]/settings/roles` — role list (name, System/Custom badge, description, permission count, Edit/View, Clone, Delete) plus a new "+ New role" button (gated on `roles.create`)
+- Role creation and editing both go through `PermissionForm.tsx` — `role` prop present = edit mode (unchanged from r9), absent + `onCreate` provided = create mode (name + description fields, reserved-name validation mirroring the backend's `roleNamePattern`, empty permission set to start)
+- Permission categorization moved to shared `lib/permissionGroups.ts` (`GROUPS`/`RESOURCE_LABEL`), imported by both this form and the new member override panel — added all 25 HRM resources, which had no picker entry at all before r10
+- No `/[orgId]/settings/roles/:roleId` route — permission editing/creation still happens via drawer, not a separate detail route (unchanged)
+- No permission matrix view (all roles × all permissions) — unchanged gap, not part of this pass
 
 ### PROFILE & SETTINGS [🔵 ACTIVE]
 
@@ -1191,11 +1199,41 @@ Transactional email provider integration (SES / Postmark / Resend / etc.) for ve
 
 ---
 
-### COMPLEX CUSTOM ROLE UI [🔵 ACTIVE — merged into "Full RBAC User Management," r9]
+### CRM — ADVANCED FUNCTIONALITY PASS [⚪ QUEUED — being scoped, r10]
 
-Previously tracked here as a separate, distinct-from-overrides queued item. Confirmed by Mridha (r9): this and the per-member permission override UI are being built together as one current-focus workstream, not sequentially. See Section 2, Current Focus, item 1 for the full scope, and Section 8 — SETTINGS ROLES & PERMISSIONS for verified current frontend state (clone-only today, no from-scratch form, no override panel).
+Mridha's full wish list (r10), organized by buildability rather than the original 5-category order — more useful for sequencing. Nothing started.
 
-Backend already supports the role-builder half in full: `POST/PATCH/DELETE /organizations/:orgId/rbac/roles`, `/clone`, `/permissions` (Section 5, AUTHZ/RBAC). This entry stays in the build queue for historical reference but is no longer "queued" — remove once it ships, per this doc's own update convention.
+**Contained — no new infrastructure, no new vendor relationship, or one well-understood API integration:**
+
+- Lead routing/assignment (round-robin, territory rules)
+- Templates & snippets
+- Smart task dashboard (priority-ranked "today's tasks" over existing data)
+- Activity metrics reporting (calls/meetings/deals-closed per rep)
+- Sales forecasting (weighted pipeline by historical win rate per stage, not a flat sum)
+- Data enrichment on company domain (Clearbit or Apollo — single integration point, real per-lookup cost)
+- Trigger-based actions — start as a small hardcoded set ("on Closed Won, do X/Y/Z"), not a general rule engine
+
+**Needs new infrastructure first, or a real ongoing vendor cost:**
+
+- Reminders / SLA alerts ("no contact in 48h", "stuck in stage 14 days") — needs a background job scheduler and a notification delivery path, neither exists yet; blocked on that, not on CRM logic
+- Meeting scheduling via Calendly — moderate, mostly a webhook integration
+- Sales velocity (time-in-stage) — confirmed no stage-transition history exists (`crm_deals` only stores current `stage_id`, no log table); needs a schema addition before it's buildable at all
+- SMS via Twilio — contained, but a new vendor relationship + per-message cost
+
+**Major, multi-week-plus, each closer to its own product than a CRM feature:**
+
+- Two-way email sync (Gmail/Outlook) — real OAuth/sync complexity, and overlaps with the already-designed-but-unbuilt lead auto-capture email parsing (Email Sending entry, above) — reconcile into one plan, don't build twice
+- Telephony / call recording / transcription — vendor integration, per-minute cost, recording storage (fits an attachments-style pattern), a transcription provider
+- Automated sequences/cadences — a mini workflow engine (multi-step, wait conditions, branch on reply) — probably the single most complex item here, and depends on email sync for reply detection
+- CPQ + e-signature (DocuSign) — a full quoting/proposal product in its own right
+- Invoicing/accounting integration (Stripe/QuickBooks/Xero) — overlaps with the already-deferred Accounting and Billing modules (below); worth deciding if this means "integrate with external tools" or "this is part of the future in-house Accounting module"
+- Ticketing/Helpdesk — a full support-ticketing system, not a CRM feature; wasn't on the original long-term module list (CRM/HRM/Accounting/Projects/E-commerce) at all
+
+**Likely not worth pursuing at this stack/scale:**
+
+- LinkedIn message sync — no official third-party API; competitors mostly rely on browser-extension scraping, fragile and ToS-risky
+
+Next step: pick a tier, or specific items. Nothing prioritized within a tier yet.
 
 ---
 
