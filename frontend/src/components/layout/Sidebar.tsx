@@ -34,6 +34,8 @@ import {
   Clock3,
   FileText,
   Workflow,
+  ListTree,
+  Settings,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -42,10 +44,12 @@ import { usePermissionStore } from "@/stores/permissionStore";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface NavItem {
+  id?: string;
   label: string;
-  href: string;
+  href?: string;
   icon: LucideIcon;
   permission?: string;
+  items?: NavItem[];
 }
 
 interface Module {
@@ -129,22 +133,10 @@ function buildModules(orgId: string): Module[] {
           permission: "hrm.awards.view",
         },
         {
-          label: "Salary Setup",
-          href: `/${orgId}/hrm/setup/salary`,
-          icon: Wallet,
-          permission: "hrm.salary.view",
-        },
-        {
           label: "Payroll",
           href: `/${orgId}/hrm/payroll`,
           icon: Receipt,
           permission: "hrm.payroll.view",
-        },
-        {
-          label: "Warning Types",
-          href: `/${orgId}/hrm/setup/warning-types`,
-          icon: ShieldAlert,
-          permission: "hrm.warning_types.view",
         },
         {
           label: "Warnings",
@@ -153,34 +145,10 @@ function buildModules(orgId: string): Module[] {
           permission: "hrm.warnings.view",
         },
         {
-          label: "Shifts",
-          href: `/${orgId}/hrm/setup/shifts`,
-          icon: Clock3,
-          permission: "hrm.shifts.view",
-        },
-        {
-          label: "Holiday Calendars",
-          href: `/${orgId}/hrm/setup/holidays`,
-          icon: CalendarRange,
-          permission: "hrm.holidays.view",
-        },
-        {
-          label: "Document Templates",
-          href: `/${orgId}/hrm/setup/document-templates`,
-          icon: FileText,
-          permission: "hrm.doc_templates.view",
-        },
-        {
           label: "Reports",
           href: `/${orgId}/hrm/reports`,
           icon: BarChart2,
           permission: "hrm.reports.view",
-        },
-        {
-          label: "Approval Chains",
-          href: `/${orgId}/hrm/setup/approvals`,
-          icon: Workflow,
-          permission: "hrm.approvals.view",
         },
         {
           label: "Departments",
@@ -193,6 +161,56 @@ function buildModules(orgId: string): Module[] {
           href: `/${orgId}/hrm/positions`,
           icon: Briefcase,
           permission: "hrm.positions.view",
+        },
+        // ── nested HRM Setup accordion ──────────────────────────────────
+        {
+          id: "hrm-setup",
+          label: "HRM Setup",
+          icon: Settings,
+          items: [
+            {
+              label: "Statuses",
+              href: `/${orgId}/hrm/setup/statuses`,
+              icon: ListTree,
+              permission: "hrm.employees.view",
+            },
+            {
+              label: "Salary Setup",
+              href: `/${orgId}/hrm/setup/salary`,
+              icon: Wallet,
+              permission: "hrm.salary.view",
+            },
+            {
+              label: "Warning Types",
+              href: `/${orgId}/hrm/setup/warning-types`,
+              icon: ShieldAlert,
+              permission: "hrm.warning_types.view",
+            },
+            {
+              label: "Shifts",
+              href: `/${orgId}/hrm/setup/shifts`,
+              icon: Clock3,
+              permission: "hrm.shifts.view",
+            },
+            {
+              label: "Holiday Calendars",
+              href: `/${orgId}/hrm/setup/holidays`,
+              icon: CalendarRange,
+              permission: "hrm.holidays.view",
+            },
+            {
+              label: "Document Templates",
+              href: `/${orgId}/hrm/setup/document-templates`,
+              icon: FileText,
+              permission: "hrm.doc_templates.view",
+            },
+            {
+              label: "Approval Chains",
+              href: `/${orgId}/hrm/setup/approvals`,
+              icon: Workflow,
+              permission: "hrm.approvals.view",
+            },
+          ],
         },
       ],
     },
@@ -293,7 +311,6 @@ function LogoMark() {
 }
 
 // ── CollapseTooltip ────────────────────────────────────────────────────────────
-// Kept dark in both modes — tooltip pattern typically stays inverted
 function CollapseTooltip({ label, extra }: { label: string; extra?: string }) {
   return (
     <span
@@ -353,7 +370,7 @@ function NavLink({
                   ? "bg-purple-50 dark:bg-purple-700/10"
                   : "hover:bg-gray-100 dark:hover:bg-white/4"
               }`
-            : `gap-2.5 border-l-2 ${compact ? "py-1.75 px-2" : "py-2 px-2"} ${
+            : `gap-2.5 border-l-2 ${compact ? "py-1.5 px-2" : "py-2 px-2"} ${
                 active
                   ? "bg-purple-50 dark:bg-purple-700/10 border-purple-600 dark:border-[#7c3aed]"
                   : "border-transparent hover:bg-gray-100 dark:hover:bg-white/4"
@@ -479,6 +496,110 @@ function ModuleRow({
   );
 }
 
+// ── NavTree (recursive) ────────────────────────────────────────────────────────
+function NavTree({
+  items,
+  level = 1,
+  closed,
+  expandedNodes,
+  toggleNode,
+  hasPermission,
+  isPathActive,
+}: {
+  items: NavItem[];
+  level: number;
+  closed: boolean;
+  expandedNodes: Set<string>;
+  toggleNode: (id: string) => void;
+  hasPermission: (p: string) => boolean;
+  isPathActive: (href: string) => boolean;
+}) {
+  return (
+    <div
+      className={`space-y-0.5 ${
+        level > 0
+          ? "ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5"
+          : ""
+      }`}
+    >
+      {items.map((item) => {
+        if (item.permission && !hasPermission(item.permission)) return null;
+
+        const hasChildren = !!(item.items && item.items.length > 0);
+        const nodeId = item.id ?? item.label;
+        const isOpen = expandedNodes.has(nodeId);
+        const active = item.href ? isPathActive(item.href) : false;
+
+        return (
+          <div key={nodeId}>
+            {hasChildren ? (
+              <div className="group relative">
+                <button
+                  onClick={() => toggleNode(nodeId)}
+                  className={`
+                    w-full flex items-center rounded-md transition-colors duration-100
+                    ${closed ? "justify-center py-2.5 px-0" : "gap-2.5 px-2 py-1.5"}
+                    hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer
+                  `}
+                  title={closed ? item.label : undefined}
+                >
+                  <item.icon
+                    size={13}
+                    className="shrink-0 text-gray-500 dark:text-[#888]"
+                  />
+                  {!closed && (
+                    <>
+                      <span className="flex-1 text-left text-[0.78rem] text-gray-600 dark:text-[#aaa] font-normal whitespace-nowrap">
+                        {item.label}
+                      </span>
+                      <ChevronRight
+                        size={11}
+                        className={`shrink-0 transition-transform duration-200 text-gray-400 dark:text-[#555] ${
+                          isOpen ? "rotate-90" : ""
+                        }`}
+                      />
+                    </>
+                  )}
+                </button>
+                {closed && <CollapseTooltip label={item.label} />}
+              </div>
+            ) : item.href ? (
+              <NavLink
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                active={active}
+                closed={closed}
+                compact
+              />
+            ) : null}
+
+            {hasChildren && !closed && (
+              <div
+                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                  isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
+              >
+                <div className="overflow-hidden min-h-0">
+                  <NavTree
+                    items={item.items!}
+                    level={level + 1}
+                    closed={closed}
+                    expandedNodes={expandedNodes}
+                    toggleNode={toggleNode}
+                    hasPermission={hasPermission}
+                    isPathActive={isPathActive}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 export default function Sidebar({ orgId }: { orgId: string }) {
   const pathname = usePathname();
@@ -495,23 +616,57 @@ export default function Sidebar({ orgId }: { orgId: string }) {
 
   const [openModules, setOpenModules] = useState<Set<string>>(new Set());
 
-  // Icon-only collapse is a desktop concept. On mobile the sidebar is an
-  // off-canvas drawer (open/closed driven by mobileMenuOpen) and should
-  // always show full labels when it's open — collapsing it to icons would
-  // defeat the point of a drawer meant for one-handed tap navigation.
   const closed = sidebarCollapsed && !mobileMenuOpen;
   const modules = buildModules(orgId);
 
-  // Auto-expand module that owns the current route
+  // Auto-expand the node tree that owns the current route
   useEffect(() => {
+    const nodesToExpand = new Set<string>();
+
+    function traverse(items: NavItem[] | undefined): boolean {
+      if (!items) return false;
+      let found = false;
+      for (const item of items) {
+        if (item.href && pathname.startsWith(item.href)) {
+          found = true;
+        }
+        if (item.items && item.items.length > 0) {
+          const nodeId = item.id ?? item.label;
+          if (traverse(item.items)) {
+            nodesToExpand.add(nodeId);
+            found = true;
+          }
+        }
+      }
+      return found;
+    }
+
     modules.forEach((m) => {
-      if (m.status === "live" && pathname.startsWith(`/${orgId}/${m.id}`)) {
-        setOpenModules((prev) => new Set([...prev, m.id]));
+      if (m.status === "live") {
+        const moduleMatch = pathname.startsWith(`/${orgId}/${m.id}`);
+        const childMatch = traverse(m.items);
+        if (moduleMatch || childMatch) {
+          nodesToExpand.add(m.id);
+        }
       }
     });
+
+    setTimeout(() => {
+      setOpenModules((prev) => {
+        const next = new Set(prev);
+        let changed = false;
+        nodesToExpand.forEach((id) => {
+          if (!next.has(id)) {
+            next.add(id);
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }, 0);
   }, [pathname, orgId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const toggleModule = (id: string) =>
+  const toggleNode = (id: string) =>
     setOpenModules((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -532,7 +687,16 @@ export default function Sidebar({ orgId }: { orgId: string }) {
       setOpenModules((prev) => new Set([...prev, m.id]));
       return;
     }
-    toggleModule(m.id);
+    toggleNode(m.id);
+  };
+
+  const handleNodeClick = (id: string) => {
+    if (closed) {
+      setSidebarCollapsed(false);
+      setOpenModules((prev) => new Set([...prev, id]));
+      return;
+    }
+    toggleNode(id);
   };
 
   const isPathActive = (href: string) =>
@@ -541,7 +705,7 @@ export default function Sidebar({ orgId }: { orgId: string }) {
 
   return (
     <>
-      {/* Mobile backdrop — tapping it closes the drawer */}
+      {/* Mobile backdrop */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/50 lg:hidden"
@@ -565,10 +729,10 @@ export default function Sidebar({ orgId }: { orgId: string }) {
         {/* ── Header ──────────────────────────────── */}
         <div
           className={`
-          h-14 flex items-center shrink-0 gap-2
-          border-b border-gray-100 dark:border-white/5
-          ${closed ? "justify-center px-3" : "justify-between pl-4.5 pr-3"}
-        `}
+            h-14 flex items-center shrink-0 gap-2
+            border-b border-gray-100 dark:border-white/5
+            ${closed ? "justify-center px-3" : "justify-between pl-4.5 pr-3"}
+          `}
         >
           {!closed && (
             <Link
@@ -584,13 +748,13 @@ export default function Sidebar({ orgId }: { orgId: string }) {
           <button
             onClick={toggleSidebar}
             className="
-            hidden lg:flex w-6 h-6 shrink-0 items-center justify-center rounded-md
-            border border-gray-200 dark:border-white/10
-            text-gray-400 dark:text-[#444]
-            hover:bg-gray-100 dark:hover:bg-white/8
-            hover:text-gray-700 dark:hover:text-[#bbb]
-            transition-colors
-          "
+              hidden lg:flex w-6 h-6 shrink-0 items-center justify-center rounded-md
+              border border-gray-200 dark:border-white/10
+              text-gray-400 dark:text-[#444]
+              hover:bg-gray-100 dark:hover:bg-white/8
+              hover:text-gray-700 dark:hover:text-[#bbb]
+              transition-colors
+            "
             title={closed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {closed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
@@ -601,13 +765,13 @@ export default function Sidebar({ orgId }: { orgId: string }) {
               setMobileMenuOpen(false);
             }}
             className="
-            lg:hidden w-6 h-6 shrink-0 flex items-center justify-center rounded-md
-            border border-gray-200 dark:border-white/10
-            text-gray-400 dark:text-[#444]
-            hover:bg-gray-100 dark:hover:bg-white/8
-            hover:text-gray-700 dark:hover:text-[#bbb]
-            transition-colors
-          "
+              lg:hidden w-6 h-6 shrink-0 flex items-center justify-center rounded-md
+              border border-gray-200 dark:border-white/10
+              text-gray-400 dark:text-[#444]
+              hover:bg-gray-100 dark:hover:bg-white/8
+              hover:text-gray-700 dark:hover:text-[#bbb]
+              transition-colors
+            "
             title="Close menu"
           >
             <X size={14} />
@@ -618,11 +782,11 @@ export default function Sidebar({ orgId }: { orgId: string }) {
         <Link
           href="/select-organization"
           className={`
-          flex items-center shrink-0 no-underline
-          border-b border-gray-100 dark:border-white/5
-          hover:bg-gray-100 dark:hover:bg-white/4 transition-colors
-          ${closed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3.5 py-2.5"}
-        `}
+            flex items-center shrink-0 no-underline
+            border-b border-gray-100 dark:border-white/5
+            hover:bg-gray-100 dark:hover:bg-white/4 transition-colors
+            ${closed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3.5 py-2.5"}
+          `}
           title={closed ? (currentOrg?.name ?? "Switch workspace") : undefined}
         >
           <div className="w-7.5 h-7.5 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
@@ -685,7 +849,6 @@ export default function Sidebar({ orgId }: { orgId: string }) {
               const visible = (m.items ?? []).filter(
                 (i) => !i.permission || hasPermission(i.permission),
               );
-              const itemH = 34; // px per sub-item
 
               return (
                 <div key={m.id}>
@@ -697,28 +860,22 @@ export default function Sidebar({ orgId }: { orgId: string }) {
                     onClick={() => handleModuleClick(m)}
                   />
 
-                  {/* Accordion — maxHeight must stay inline (computed value) */}
                   {m.status === "live" && !closed && (
                     <div
-                      className="overflow-hidden transition-[max-height] duration-200 ease-in-out"
-                      style={{
-                        maxHeight: isOpen
-                          ? `${visible.length * itemH + 8}px`
-                          : "0px",
-                      }}
+                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
                     >
-                      <div className="ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5 space-y-0.5">
-                        {visible.map((item) => (
-                          <NavLink
-                            key={item.href}
-                            href={item.href}
-                            icon={item.icon}
-                            label={item.label}
-                            active={isPathActive(item.href)}
-                            closed={false}
-                            compact
-                          />
-                        ))}
+                      <div className="overflow-hidden min-h-0">
+                        <NavTree
+                          items={visible}
+                          level={1}
+                          closed={closed}
+                          expandedNodes={openModules}
+                          toggleNode={handleNodeClick}
+                          hasPermission={hasPermission}
+                          isPathActive={isPathActive}
+                        />
                       </div>
                     </div>
                   )}
@@ -755,10 +912,10 @@ export default function Sidebar({ orgId }: { orgId: string }) {
           <Link
             href={`/${orgId}/settings/profile`}
             className={`
-            flex items-center no-underline rounded-md
-            hover:bg-gray-100 dark:hover:bg-white/5 transition-colors
-            ${closed ? "justify-center p-2" : "gap-2.5 px-2 py-1.5"}
-          `}
+              flex items-center no-underline rounded-md
+              hover:bg-gray-100 dark:hover:bg-white/5 transition-colors
+              ${closed ? "justify-center p-2" : "gap-2.5 px-2 py-1.5"}
+            `}
             title={closed ? (user?.displayName ?? "Profile") : undefined}
           >
             <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">

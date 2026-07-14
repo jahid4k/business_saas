@@ -74,7 +74,21 @@ export type EmploymentType =
   | "part_time"
   | "contractor"
   | "intern";
-export type EmployeeStatus = "active" | "inactive" | "on_leave" | "terminated";
+export type EmployeeStatusCategory =
+  | "active"
+  | "inactive"
+  | "on_leave"
+  | "terminated";
+
+export interface EmployeeStatusModel {
+  id: string;
+  org_id: string;
+  name: string;
+  category: EmployeeStatusCategory;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
 export type Gender = "male" | "female" | "other" | "prefer_not_to_say";
 
 export interface Employee {
@@ -95,7 +109,8 @@ export interface Employee {
   hire_date: string;
   termination_date?: string;
   employment_type: EmploymentType;
-  status: EmployeeStatus;
+  status_id: string;
+  status?: EmployeeStatusModel;
   department_id?: string;
   position_id?: string;
   manager_id?: string;
@@ -116,7 +131,7 @@ export interface EmployeeListResponse {
 }
 
 export interface EmployeeListFilter {
-  status?: EmployeeStatus;
+  status_id?: string;
   employment_type?: EmploymentType;
   department_id?: string;
   manager_id?: string;
@@ -137,6 +152,7 @@ export interface CreateEmployeePayload {
   gender?: Gender;
   hire_date: string;
   employment_type?: EmploymentType;
+  status_id?: string;
   department_id?: string;
   position_id?: string;
   manager_id?: string;
@@ -157,7 +173,7 @@ export interface UpdateEmployeePayload {
   date_of_birth?: string;
   gender?: Gender;
   employment_type?: EmploymentType;
-  status?: EmployeeStatus;
+  status_id?: string;
   department_id?: string;
   position_id?: string;
   manager_id?: string;

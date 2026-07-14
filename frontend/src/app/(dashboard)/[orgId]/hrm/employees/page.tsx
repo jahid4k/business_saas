@@ -14,18 +14,14 @@ import {
   UserX,
 } from "lucide-react";
 import gsap from "gsap";
-import type {
-  Employee,
-  EmployeeStatus,
-  Department,
-  Position,
-} from "@/types/hrm";
+import { Employee, Department, Position } from "@/types/hrm";
 import {
   listEmployees,
   createEmployee,
   updateEmployee,
   deleteEmployee,
   terminateEmployee,
+  listEmployeeStatuses,
 } from "@/lib/hrm/employees";
 import { listDepartments } from "@/lib/hrm/departments";
 import { listPositions } from "@/lib/hrm/positions";
@@ -34,35 +30,6 @@ import { useDrawer } from "@/contexts/DrawerContext";
 import EmployeeForm from "@/components/hrm/employees/EmployeeForm";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
-
-type FilterKey = "all" | EmployeeStatus;
-
-const STATUS_STYLE: Record<EmployeeStatus, { label: string; badge: string }> = {
-  active: {
-    label: "Active",
-    badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-  },
-  inactive: {
-    label: "Inactive",
-    badge: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
-  },
-  on_leave: {
-    label: "On leave",
-    badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-  },
-  terminated: {
-    label: "Terminated",
-    badge: "bg-red-500/10 text-red-400 border-red-500/20",
-  },
-};
-
-const STATUS_TABS: FilterKey[] = [
-  "all",
-  "active",
-  "on_leave",
-  "inactive",
-  "terminated",
-];
 
 export default function EmployeesPage({
   params,
@@ -74,7 +41,7 @@ export default function EmployeesPage({
   const { hasPermission } = usePermissionStore();
   const queryClient = useQueryClient();
 
-  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [activeFilter, setActiveFilter] = useState<string>("all");
   const [deptFilter, setDeptFilter] = useState<string>("");
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -90,6 +57,12 @@ export default function EmployeesPage({
   const canUpdate = hasPermission("hrm.employees.update");
   const canDelete = hasPermission("hrm.employees.delete");
   const canTerminate = hasPermission("hrm.employees.terminate");
+
+  const statusesQuery = useQuery({
+    queryKey: ["hrm", "employee-statuses", orgId],
+    queryFn: () => listEmployeeStatuses(orgId),
+  });
+  const statuses = statusesQuery.data ?? [];
 
   const empKey = queryKeys.hrm.employees.list(orgId);
   const empQuery = useQuery({
@@ -139,7 +112,7 @@ export default function EmployeesPage({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return employees.filter((e) => {
-      if (activeFilter !== "all" && e.status !== activeFilter) return false;
+      if (activeFilter !== "all" && e.status_id !== activeFilter) return false;
       if (deptFilter && e.department_id !== deptFilter) return false;
       if (q) {
         const hay =
@@ -157,6 +130,7 @@ export default function EmployeesPage({
       content: (
         <EmployeeForm
           orgId={orgId}
+          statuses={statuses}
           onSave={async (values) => {
             const created = await createEmployee(orgId, {
               first_name: values.first_name,
@@ -171,6 +145,7 @@ export default function EmployeesPage({
               hire_date: values.hire_date,
               employment_type: (values.employment_type ||
                 undefined) as Employee["employment_type"],
+              status_id: values.status_id || undefined,
               department_id: values.department_id || undefined,
               position_id: values.position_id || undefined,
               manager_id: values.manager_id || undefined,
@@ -199,6 +174,7 @@ export default function EmployeesPage({
         <EmployeeForm
           orgId={orgId}
           employee={employee}
+          statuses={statuses}
           onSave={async (values) => {
             const updated = await updateEmployee(orgId, employee.id, {
               first_name: values.first_name,
@@ -212,7 +188,7 @@ export default function EmployeesPage({
               gender: (values.gender || undefined) as Employee["gender"],
               employment_type: (values.employment_type ||
                 undefined) as Employee["employment_type"],
-              status: (values.status || undefined) as Employee["status"],
+              status_id: values.status_id || undefined,
               department_id: values.department_id || undefined,
               position_id: values.position_id || undefined,
               manager_id: values.manager_id || undefined,
@@ -273,7 +249,7 @@ export default function EmployeesPage({
                 letterSpacing: "-0.02em",
               }}
             >
-              Employees
+              Employees ajsdkjf;
             </h1>
             <p className="text-sm text-[var(--text-muted)]">
               {employees.length}{" "}
@@ -328,24 +304,42 @@ export default function EmployeesPage({
           </select>
         </div>
 
-        <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)]">
-          {STATUS_TABS.map((key) => {
-            const count =
-              key === "all"
-                ? employees.length
-                : employees.filter((e) => e.status === key).length;
-            const active = activeFilter === key;
+        <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)] overflow-x-auto scrollbar-hide">
+          <button
+            onClick={() => setActiveFilter("all")}
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${
+              activeFilter === "all"
+                ? "text-purple-400 border-purple-500"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+            }`}
+          >
+            All
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                activeFilter === "all"
+                  ? "bg-purple-500/15 text-purple-400"
+                  : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+              }`}
+            >
+              {employees.length}
+            </span>
+          </button>
+
+          {statuses.map((s) => {
+            const count = employees.filter((e) => e.status_id === s.id).length;
+            const active = activeFilter === s.id;
             return (
               <button
-                key={key}
-                onClick={() => setActiveFilter(key)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
+                key={s.id}
+                onClick={() => setActiveFilter(s.id)}
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${
                   active
-                    ? "text-purple-400 border-purple-500"
+                    ? "border-[currentcolor]"
                     : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
                 }`}
+                style={active ? { color: s.color } : {}}
               >
-                {key === "all" ? "All" : STATUS_STYLE[key].label}
+                {s.name}
                 {count > 0 && (
                   <span
                     className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
@@ -400,15 +394,17 @@ export default function EmployeesPage({
               const confirmingDelete = deleteConfirm === emp.id;
               const confirmingTerminate = terminateConfirm === emp.id;
               const menuOpen = openMenuId === emp.id;
-              const s = STATUS_STYLE[emp.status];
-              console.log("emp", emp);
+              const statusObj =
+                statuses.find((s) => s.id === emp.status_id) || emp.status;
               const fullName =
                 `${emp.first_name} ${emp.last_name ?? ""}`.trim();
 
               return (
                 <div
                   key={emp.id}
-                  className="emp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150"
+                  className={`emp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${
+                    menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"
+                  }`}
                 >
                   <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
                     {emp.first_name[0]?.toUpperCase()}
@@ -425,9 +421,18 @@ export default function EmployeesPage({
                     </p>
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <span
-                        className={`text-xs px-2 py-0.5 rounded-full border font-medium ${s.badge}`}
+                        className="text-xs px-2 py-0.5 rounded-full border font-medium"
+                        style={
+                          statusObj
+                            ? {
+                                color: statusObj.color,
+                                backgroundColor: `color-mix(in srgb, ${statusObj.color} 10%, transparent)`,
+                                borderColor: `color-mix(in srgb, ${statusObj.color} 20%, transparent)`,
+                              }
+                            : {}
+                        }
                       >
-                        {s.label}
+                        {statusObj?.name || "Unknown"}
                       </span>
                       {emp.employee_number && (
                         <span className="text-xs text-[var(--text-muted)]">
@@ -506,18 +511,19 @@ export default function EmployeesPage({
                                 Edit
                               </button>
                             )}
-                            {canTerminate && emp.status !== "terminated" && (
-                              <button
-                                onClick={() => {
-                                  setTerminateConfirm(emp.id);
-                                  setOpenMenuId(null);
-                                }}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors text-left"
-                              >
-                                <UserX size={13} />
-                                Terminate
-                              </button>
-                            )}
+                            {canTerminate &&
+                              statusObj?.category !== "terminated" && (
+                                <button
+                                  onClick={() => {
+                                    setTerminateConfirm(emp.id);
+                                    setOpenMenuId(null);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors text-left"
+                                >
+                                  <UserX size={13} />
+                                  Terminate
+                                </button>
+                              )}
                             {canDelete && (
                               <button
                                 onClick={() => {

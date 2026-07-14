@@ -286,7 +286,7 @@ export default function Topbar({ orgId }: { orgId: string }) {
 
                 <div style={{ padding: "4px" }}>
                   <DropdownLink
-                    href="/settings/profile"
+                    href={`/${orgId}/settings/profile`}
                     icon={User}
                     onClick={() => setMenuOpen(false)}
                   >

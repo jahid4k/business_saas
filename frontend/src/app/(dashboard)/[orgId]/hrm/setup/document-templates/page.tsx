@@ -155,7 +155,7 @@ export default function DocumentTemplatesPage({
             return (
               <div
                 key={t.id}
-                className="group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+                className={`group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <FileText size={15} />
