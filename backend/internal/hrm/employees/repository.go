@@ -257,7 +257,7 @@ func (r *repoImpl) Update(ctx context.Context, e *Employee) error {
 		    first_name = $3, last_name = $4, email = $5, work_email = $6,
 		    phone = $7, work_phone = $8,
 		    date_of_birth = $9, gender = $10, avatar_url = $11,
-		    hire_date = $12, termination_date = $13, employment_type = $14, status = $15,
+		    hire_date = $12, termination_date = $13, employment_type = $14, status_id = $15,
 		    department_id = $16, position_id = $17, manager_id = $18,
 		    address = $19, city = $20, country = $21, notes = $22,
 		    updated_at = NOW()
@@ -269,7 +269,7 @@ func (r *repoImpl) Update(ctx context.Context, e *Employee) error {
 		e.FirstName, e.LastName, e.Email, e.WorkEmail,
 		e.Phone, e.WorkPhone,
 		e.DateOfBirth, e.Gender, e.AvatarURL,
-		e.HireDate, e.TerminationDate, e.EmploymentType, e.Status,
+		e.HireDate, e.TerminationDate, e.EmploymentType, e.StatusID,
 		e.DepartmentID, e.PositionID, e.ManagerID,
 		e.Address, e.City, e.Country, e.Notes,
 		e.ID, e.OrgID,

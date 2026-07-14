@@ -249,7 +249,7 @@ export default function EmployeesPage({
                 letterSpacing: "-0.02em",
               }}
             >
-              Employees
+              Employees ajsdkjf;
             </h1>
             <p className="text-sm text-[var(--text-muted)]">
               {employees.length}{" "}
@@ -402,7 +402,9 @@ export default function EmployeesPage({
               return (
                 <div
                   key={emp.id}
-                  className="emp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150"
+                  className={`emp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${
+                    menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"
+                  }`}
                 >
                   <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
                     {emp.first_name[0]?.toUpperCase()}

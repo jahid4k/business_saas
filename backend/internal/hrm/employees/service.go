@@ -3,6 +3,7 @@ package employees
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
