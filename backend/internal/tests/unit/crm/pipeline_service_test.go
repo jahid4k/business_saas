@@ -316,3 +316,103 @@ func TestReorderStages_Success(t *testing.T) {
 		t.Fatalf("ReorderStages() error: %v", err)
 	}
 }
+
+func TestUpdatePipeline_Success(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Old Name"})
+
+	newName := "New Name"
+	updated, err := svc.UpdatePipeline(context.Background(), "org-1", p.ID, pipeline.UpdatePipelineRequest{Name: &newName})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if updated.Name != newName {
+		t.Errorf("expected Name=%q, got %q", newName, updated.Name)
+	}
+}
+
+func TestUpdatePipeline_CrossOrg(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Old Name"})
+
+	newName := "New Name"
+	_, err := svc.UpdatePipeline(context.Background(), "org-2", p.ID, pipeline.UpdatePipelineRequest{Name: &newName})
+	if !errors.Is(err, pipeline.ErrPipelineNotFound) {
+		t.Fatalf("SECURITY: expected ErrPipelineNotFound on cross-org update, got %v", err)
+	}
+}
+
+func TestDeletePipeline_Success(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Pipeline"})
+
+	err := svc.DeletePipeline(context.Background(), "org-1", p.ID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	got, _ := svc.GetPipeline(context.Background(), "org-1", p.ID)
+	if got != nil {
+		t.Fatal("expected pipeline to be deleted")
+	}
+}
+
+func TestListStages_Success(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Pipeline"})
+	svc.CreateStage(context.Background(), "org-1", p.ID, pipeline.CreateStageRequest{Name: "S1"})
+	svc.CreateStage(context.Background(), "org-1", p.ID, pipeline.CreateStageRequest{Name: "S2"})
+
+	resp, err := svc.ListStages(context.Background(), "org-1", p.ID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(resp.Stages) != 2 {
+		t.Errorf("expected 2 stages, got %d", len(resp.Stages))
+	}
+}
+
+func TestListStages_PipelineNotFound(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	_, err := svc.ListStages(context.Background(), "org-1", "nonexistent")
+	if !errors.Is(err, pipeline.ErrPipelineNotFound) {
+		t.Fatalf("expected ErrPipelineNotFound, got %v", err)
+	}
+}
+
+func TestUpdateStage_Success(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Pipeline"})
+	s, _ := svc.CreateStage(context.Background(), "org-1", p.ID, pipeline.CreateStageRequest{Name: "Old Name"})
+
+	newName := "New Name"
+	updated, err := svc.UpdateStage(context.Background(), "org-1", p.ID, s.ID, pipeline.UpdateStageRequest{Name: &newName})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if updated.Name != newName {
+		t.Errorf("expected Name=%q, got %q", newName, updated.Name)
+	}
+}
+
+func TestDeleteStage_Success(t *testing.T) {
+	repo := newStubPipelineRepo()
+	svc := newPipelineSvc(repo)
+	p, _ := svc.CreatePipeline(context.Background(), "org-1", "user-1", pipeline.CreatePipelineRequest{Name: "Pipeline"})
+	s, _ := svc.CreateStage(context.Background(), "org-1", p.ID, pipeline.CreateStageRequest{Name: "Stage"})
+
+	err := svc.DeleteStage(context.Background(), "org-1", p.ID, s.ID)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	got, _ := svc.GetStage(context.Background(), "org-1", s.ID)
+	if got != nil {
+		t.Fatal("expected stage to be deleted")
+	}
+}
+

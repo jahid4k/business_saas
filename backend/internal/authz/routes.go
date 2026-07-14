@@ -37,6 +37,7 @@ func RegisterRoutes(
 	orgMembers.Patch("/:memberId", permFn("members.update"), handler.UpdateMember)
 	orgMembers.Patch("/:memberId/role", permFn("members.update"), handler.AssignRole)
 	orgMembers.Patch("/:memberId/status", permFn("members.update"), handler.UpdateMember)
+	orgMembers.Post("/:memberId/reset-password", permFn("members.password_reset"), handler.ResetMemberPassword)
 
 	orgInvitations := orgs.Group("/invitations")
 	orgInvitations.Post("/:invitationId/resend", permFn("members.invite"), handler.ResendInvitation)

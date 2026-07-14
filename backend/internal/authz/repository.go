@@ -41,6 +41,9 @@ type Repository interface {
 	ResendInvitation(ctx context.Context, organizationID, invitationRef, tokenHash string, expiresAt time.Time) (*OrganizationInvitation, error)
 	RevokeInvitation(ctx context.Context, organizationID, invitationRef string) error
 	AcceptInvitation(ctx context.Context, organizationID, tokenHash, userID string) (*Membership, *OrganizationInvitation, error)
+	SetUserPasswordHash(ctx context.Context, userID, passwordHash string) error
+	CountActiveMembers(ctx context.Context, organizationID string) (int, error)
+	GetOrganizationMaxSeats(ctx context.Context, organizationID string) (*int, error)
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
@@ -166,7 +169,13 @@ func (r *repoImpl) GetMembership(ctx context.Context, userID, organizationID str
 }
 
 func (r *repoImpl) GetMemberByRef(ctx context.Context, organizationID, memberRef string) (*Membership, error) {
-	q := `SELECT ` + membershipSelect + `
+	const omSelect = `
+		om.id, om.public_id, om.user_id, om.org_id, om.role_id, om.role_key,
+		COALESCE(om.title, ''), COALESCE(om.department, ''), om.status,
+		COALESCE(om.custom_permissions, ARRAY[]::TEXT[]), COALESCE(om.denied_permissions, ARRAY[]::TEXT[]),
+		om.invitation_status, om.invited_by, om.invitation_sent_at, om.invitation_accepted_at,
+		om.joined_at, om.created_at, om.updated_at`
+	q := `SELECT ` + omSelect + `
 		FROM organization_members om
 		JOIN users u ON u.id = om.user_id
 		WHERE om.org_id = $1
@@ -710,4 +719,31 @@ func (r *repoImpl) AcceptInvitation(ctx context.Context, organizationID, tokenHa
 		return nil, nil, fmt.Errorf("authz: AcceptInvitation: commit: %w", err)
 	}
 	return member, accepted, nil
+}
+
+func (r *repoImpl) SetUserPasswordHash(ctx context.Context, userID, passwordHash string) error {
+	const q = `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+	if _, err := r.db.Exec(ctx, q, passwordHash, userID); err != nil {
+		return fmt.Errorf("authz: SetUserPasswordHash: %w", err)
+	}
+	return nil
+}
+
+func (r *repoImpl) CountActiveMembers(ctx context.Context, organizationID string) (int, error) {
+	const q = `SELECT COUNT(*) FROM organization_members WHERE org_id = $1 AND status = 'active'`
+	var count int
+	if err := r.db.QueryRow(ctx, q, organizationID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("authz: CountActiveMembers: %w", err)
+	}
+	return count, nil
+}
+
+// GetOrganizationMaxSeats returns nil when the organization has no seat cap set (unlimited).
+func (r *repoImpl) GetOrganizationMaxSeats(ctx context.Context, organizationID string) (*int, error) {
+	const q = `SELECT max_seats FROM organizations WHERE id = $1`
+	var maxSeats *int
+	if err := r.db.QueryRow(ctx, q, organizationID).Scan(&maxSeats); err != nil {
+		return nil, fmt.Errorf("authz: GetOrganizationMaxSeats: %w", err)
+	}
+	return maxSeats, nil
 }

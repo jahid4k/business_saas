@@ -2,6 +2,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
 import type { Role, Permission } from "@/types/rbac";
 
@@ -47,6 +50,58 @@ const GROUPS: { label: string; resources: string[] }[] = [
     label: "Platform & Projects",
     resources: ["platform.contacts", "platform.companies", "projects"],
   },
+  // HRM — mirrors the Group A–E breakdown from docs/Project_Instruction.md
+  // Section 5, so the picker reads the same way the module is documented.
+  {
+    label: "HRM — Setup & Configuration",
+    resources: [
+      "hrm.departments",
+      "hrm.positions",
+      "hrm.salary",
+      "hrm.approvals",
+      "hrm.warning_types",
+      "hrm.doc_templates",
+      "hrm.shifts",
+      "hrm.holidays",
+      "hrm.contracts",
+    ],
+  },
+  {
+    label: "HRM — Employee Lifecycle",
+    resources: [
+      "hrm.employees",
+      "hrm.promotions",
+      "hrm.transfers",
+      "hrm.resignations",
+      "hrm.terminations",
+    ],
+  },
+  {
+    label: "HRM — Disciplinary",
+    resources: [
+      "hrm.warnings",
+      "hrm.complaints",
+      "hrm.documents",
+      "hrm.acknowledgements",
+    ],
+  },
+  {
+    label: "HRM — Time & Compensation",
+    resources: ["hrm.leave", "hrm.attendance", "hrm.payroll"],
+  },
+  {
+    label: "HRM — Recognition & Communication",
+    resources: [
+      "hrm.awards",
+      "hrm.announcements",
+      "hrm.calendar",
+      "hrm.milestones",
+    ],
+  },
+  {
+    label: "HRM — Reports",
+    resources: ["hrm.reports"],
+  },
 ];
 
 // Readable label per resource key
@@ -74,28 +129,103 @@ const RESOURCE_LABEL: Record<string, string> = {
   settings: "Settings",
   subscription: "Subscription",
   tasks: "Tasks",
+  "hrm.departments": "Departments",
+  "hrm.positions": "Positions",
+  "hrm.salary": "Salary",
+  "hrm.approvals": "Approval Chains",
+  "hrm.warning_types": "Warning Types",
+  "hrm.doc_templates": "Document Templates",
+  "hrm.shifts": "Shifts",
+  "hrm.holidays": "Holidays",
+  "hrm.contracts": "Contracts",
+  "hrm.employees": "Employees",
+  "hrm.promotions": "Promotions",
+  "hrm.transfers": "Transfers",
+  "hrm.resignations": "Resignations",
+  "hrm.terminations": "Terminations",
+  "hrm.warnings": "Warnings",
+  "hrm.complaints": "Complaints",
+  "hrm.documents": "Employee Documents",
+  "hrm.acknowledgements": "Acknowledgements",
+  "hrm.leave": "Leave",
+  "hrm.attendance": "Attendance",
+  "hrm.payroll": "Payroll",
+  "hrm.awards": "Awards",
+  "hrm.announcements": "Announcements",
+  "hrm.calendar": "HR Calendar",
+  "hrm.milestones": "Milestones",
+  "hrm.reports": "HRM Reports",
 };
 
+// Mirrors the backend's roleNamePattern + reserved-name check in
+// internal/authz/service.go (validateRoleName) — same rule, checked
+// client-side first so this fails instantly instead of after a round trip.
+const RESERVED_NAMES = new Set([
+  "owner",
+  "admin",
+  "manager",
+  "member",
+  "viewer",
+]);
+
+const createSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "At least 2 characters")
+    .max(50, "At most 50 characters")
+    .regex(
+      /^[A-Za-z0-9][A-Za-z0-9 _-]*$/,
+      "Letters, numbers, spaces, - and _ only",
+    )
+    .refine(
+      (v) => !RESERVED_NAMES.has(v.toLowerCase()),
+      "That name is reserved for a built-in role",
+    ),
+  description: z.string().trim().max(200, "At most 200 characters").optional(),
+});
+type CreateValues = z.infer<typeof createSchema>;
+
 interface PermissionFormProps {
-  role: Role;
+  /** Omit to create a brand-new role instead of editing an existing one. */
+  role?: Role;
   allPerms: Permission[];
-  onSave: (permissionKeys: string[]) => Promise<void>;
+  /** Edit mode — called with the full replacement permission list. */
+  onSave?: (permissionKeys: string[]) => Promise<void>;
+  /** Create mode — called with the new role's name, description, and permissions. */
+  onCreate?: (values: {
+    name: string;
+    description: string;
+    permissionKeys: string[];
+  }) => Promise<void>;
 }
 
 export default function PermissionForm({
   role,
   allPerms,
   onSave,
+  onCreate,
 }: PermissionFormProps) {
   const { closeDrawer } = useDrawer();
-  const readonly = role.isSystem; // System roles are view-only
+  const isCreate = !role;
+  const readonly = role?.isSystem ?? false; // System roles are view-only
 
-  // Selected keys — starts from role's current permissions
+  // Selected keys — starts from the role's current permissions, or empty when creating
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(role.permissionKeys),
+    new Set(role?.permissionKeys ?? []),
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const {
+    register,
+    trigger,
+    getValues,
+    formState: { errors },
+  } = useForm<CreateValues>({
+    resolver: zodResolver(createSchema),
+    defaultValues: { name: "", description: "" },
+  });
 
   // Group all permissions by resource
   const byResource = useMemo(() => {
@@ -133,9 +263,30 @@ export default function PermissionForm({
 
   const handleSave = async () => {
     setError(null);
+
+    if (isCreate) {
+      const valid = await trigger();
+      if (!valid) return;
+      const { name, description } = getValues();
+      setSaving(true);
+      try {
+        await onCreate?.({
+          name: name.trim(),
+          description: (description ?? "").trim(),
+          permissionKeys: Array.from(selected),
+        });
+        closeDrawer();
+      } catch {
+        setError("Failed to create role. Please try again.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     try {
-      await onSave(Array.from(selected));
+      await onSave?.(Array.from(selected));
       closeDrawer();
     } catch {
       setError("Failed to save permissions. Please try again.");
@@ -159,6 +310,44 @@ export default function PermissionForm({
         {error && (
           <div className="px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">
             {error}
+          </div>
+        )}
+
+        {/* Name + description — create mode only */}
+        {isCreate && (
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                Role name <span className="text-red-400">*</span>
+              </label>
+              <input
+                {...register("name")}
+                autoFocus
+                placeholder="e.g. HRM Head"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+              />
+              {errors.name && (
+                <p className="text-xs text-red-400">{errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                Description
+              </label>
+              <input
+                {...register("description")}
+                placeholder="Optional — shown in the roles list"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+              />
+              {errors.description && (
+                <p className="text-xs text-red-400">
+                  {errors.description.message}
+                </p>
+              )}
+            </div>
+            <p className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest pt-2">
+              Permissions
+            </p>
           </div>
         )}
 
@@ -283,7 +472,13 @@ export default function PermissionForm({
             disabled={saving}
             className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
           >
-            {saving ? "Saving…" : "Save permissions"}
+            {saving
+              ? isCreate
+                ? "Creating…"
+                : "Saving…"
+              : isCreate
+                ? "Create role"
+                : "Save permissions"}
           </button>
         )}
       </div>

@@ -106,6 +106,27 @@ func (h *Handler) AssignRole(c fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"user_id": targetUserID, "organization_id": orgID, "role": roleName}, "Role assigned successfully")
 }
 
+// ResetMemberPassword handles POST /api/v1/organizations/:orgId/members/:memberId/reset-password
+// Requires: members.password_reset
+func (h *Handler) ResetMemberPassword(c fiber.Ctx) error {
+	callerID, ok := userIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
+	orgID, ok := organizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	var req ResetMemberPasswordRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+	if err := h.service.ResetMemberPassword(c.Context(), callerID, orgID, c.Params("memberId"), req); err != nil {
+		return h.authzError(c, err)
+	}
+	return response.OK(c, fiber.Map{"memberId": c.Params("memberId")}, "Password reset")
+}
+
 func (h *Handler) UpdateMember(c fiber.Ctx) error {
 	callerID, ok := userIDFromCtx(c)
 	if !ok {
@@ -319,6 +340,10 @@ func (h *Handler) GetMemberPermissions(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateMemberPermissions(c fiber.Ctx) error {
+	callerID, ok := userIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
@@ -327,7 +352,7 @@ func (h *Handler) UpdateMemberPermissions(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
-	perms, err := h.service.UpdateMemberPermissions(c.Context(), orgID, c.Params("memberId"), req)
+	perms, err := h.service.UpdateMemberPermissions(c.Context(), callerID, orgID, c.Params("memberId"), req)
 	if err != nil {
 		return h.authzError(c, err)
 	}
@@ -397,6 +422,14 @@ func (h *Handler) authzError(c fiber.Ctx, err error) error {
 		return response.BadRequest(c, "INVITATION_EXPIRED", "Invitation has expired")
 	case errors.Is(err, ErrInvitationEmailMismatch):
 		return response.Forbidden(c, "INVITATION_EMAIL_MISMATCH", "This invitation belongs to a different email address")
+	case errors.Is(err, ErrCannotResetOwnPassword):
+		return response.BadRequest(c, "CANNOT_RESET_OWN_PASSWORD", "Use account settings to change your own password")
+	case errors.Is(err, ErrPasswordTooShort):
+		return response.BadRequest(c, "PASSWORD_TOO_SHORT", "Password must be at least 8 characters")
+	case errors.Is(err, ErrSeatLimitReached):
+		return response.Conflict(c, "SEAT_LIMIT_REACHED", "This organization has reached its member seat limit")
+	case errors.Is(err, ErrCannotChangeOwnPermissions):
+		return response.BadRequest(c, "CANNOT_CHANGE_OWN_PERMISSIONS", "You cannot change your own permissions")
 	default:
 		log.Error("authz error", slog.Any("error", err))
 		return response.InternalServerError(c)
