@@ -14,6 +14,11 @@ type PermissionFunc func(permission string) fiber.Handler
 //	PATCH  /organizations/:orgId/hrm/employees/:empId                  <- hrm.employees.update
 //	DELETE /organizations/:orgId/hrm/employees/:empId                  <- hrm.employees.delete
 //	POST   /organizations/:orgId/hrm/employees/:empId/terminate        <- hrm.employees.terminate
+//
+//	GET    /organizations/:orgId/hrm/employee-statuses                 <- hrm.employees.view
+//	POST   /organizations/:orgId/hrm/employee-statuses                 <- hrm.employees.manage_setup
+//	PATCH  /organizations/:orgId/hrm/employee-statuses/:id             <- hrm.employees.manage_setup
+//	DELETE /organizations/:orgId/hrm/employee-statuses/:id             <- hrm.employees.manage_setup
 func RegisterRoutes(
 	router fiber.Router,
 	handler *Handler,
@@ -31,4 +36,11 @@ func RegisterRoutes(
 
 	// Terminate must be registered before /:empId matches catch all sub-paths
 	emps.Post("/:empId/terminate", permFn("hrm.employees.terminate"), handler.Terminate)
+
+	statuses := router.Group("/organizations/:orgId/hrm/employee-statuses", requireAuth, requireOrgMatch)
+	statuses.Get("", permFn("hrm.employees.view"), handler.ListStatuses)
+	// We use hrm.employees.update for setup for now. (Or a setup specific permission if it exists, but hrm.employees.update makes sense for now).
+	statuses.Post("", permFn("hrm.employees.update"), handler.CreateStatus)
+	statuses.Patch("/:id", permFn("hrm.employees.update"), handler.UpdateStatus)
+	statuses.Delete("/:id", permFn("hrm.employees.update"), handler.DeleteStatus)
 }

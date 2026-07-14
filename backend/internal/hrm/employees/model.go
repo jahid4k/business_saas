@@ -24,22 +24,33 @@ func (t EmploymentType) IsValid() bool {
 	return false
 }
 
-// EmployeeStatus defines the allowed lifecycle states of an employee record.
-type EmployeeStatus string
+// EmployeeStatusCategory defines the base system categories for employee statuses.
+type EmployeeStatusCategory string
 
 const (
-	EmployeeStatusActive     EmployeeStatus = "active"
-	EmployeeStatusInactive   EmployeeStatus = "inactive"
-	EmployeeStatusOnLeave    EmployeeStatus = "on_leave"
-	EmployeeStatusTerminated EmployeeStatus = "terminated"
+	EmployeeStatusCategoryActive     EmployeeStatusCategory = "active"
+	EmployeeStatusCategoryInactive   EmployeeStatusCategory = "inactive"
+	EmployeeStatusCategoryOnLeave    EmployeeStatusCategory = "on_leave"
+	EmployeeStatusCategoryTerminated EmployeeStatusCategory = "terminated"
 )
 
-func (s EmployeeStatus) IsValid() bool {
+func (s EmployeeStatusCategory) IsValid() bool {
 	switch s {
-	case EmployeeStatusActive, EmployeeStatusInactive, EmployeeStatusOnLeave, EmployeeStatusTerminated:
+	case EmployeeStatusCategoryActive, EmployeeStatusCategoryInactive, EmployeeStatusCategoryOnLeave, EmployeeStatusCategoryTerminated:
 		return true
 	}
 	return false
+}
+
+// EmployeeStatusModel represents a dynamic status defined per organization.
+type EmployeeStatusModel struct {
+	ID        string                 `db:"id"         json:"id"`
+	OrgID     string                 `db:"org_id"     json:"org_id"`
+	Name      string                 `db:"name"       json:"name"`
+	Category  EmployeeStatusCategory `db:"category"   json:"category"`
+	Color     string                 `db:"color"      json:"color"`
+	CreatedAt time.Time              `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time              `db:"updated_at" json:"updated_at"`
 }
 
 // Gender defines the allowed values for the gender field.
@@ -79,8 +90,9 @@ type Employee struct {
 	AvatarURL       *string        `db:"avatar_url"       json:"avatar_url,omitempty"`
 	HireDate        time.Time      `db:"hire_date"        json:"hire_date"`
 	TerminationDate *time.Time     `db:"termination_date" json:"termination_date,omitempty"`
-	EmploymentType  EmploymentType `db:"employment_type"  json:"employment_type"`
-	Status          EmployeeStatus `db:"status"           json:"status"`
+	EmploymentType  EmploymentType       `db:"employment_type"  json:"employment_type"`
+	StatusID        string               `db:"status_id"        json:"status_id"`
+	Status          *EmployeeStatusModel `db:"-"                json:"status,omitempty"`
 	DepartmentID    *string        `db:"department_id"    json:"department_id,omitempty"`
 	PositionID      *string        `db:"position_id"      json:"position_id,omitempty"`
 	ManagerID       *string        `db:"manager_id"       json:"manager_id,omitempty"`
@@ -96,7 +108,7 @@ type Employee struct {
 // ListFilter narrows the employee list query.
 // Zero values mean "no filter on this field".
 type ListFilter struct {
-	Status         EmployeeStatus
+	StatusID       string
 	EmploymentType EmploymentType
 	DepartmentID   string
 	ManagerID      string
@@ -160,7 +172,7 @@ type UpdateEmployeeRequest struct {
 	Gender         *string `json:"gender"`
 	AvatarURL      *string `json:"avatar_url"`
 	EmploymentType *string `json:"employment_type"`
-	Status         *string `json:"status"`
+	StatusID       *string `json:"status_id"`
 	DepartmentID   *string `json:"department_id"`
 	PositionID     *string `json:"position_id"`
 	ManagerID      *string `json:"manager_id"`
@@ -175,6 +187,20 @@ type UpdateEmployeeRequest struct {
 type TerminateEmployeeRequest struct {
 	TerminationDate string  `json:"termination_date"` // required — ISO 8601 date: "YYYY-MM-DD"
 	Notes           *string `json:"notes"`
+}
+
+// CreateEmployeeStatusRequest is the body for POST /hrm/employee-statuses
+type CreateEmployeeStatusRequest struct {
+	Name     string                 `json:"name"`
+	Category EmployeeStatusCategory `json:"category"`
+	Color    string                 `json:"color"`
+}
+
+// UpdateEmployeeStatusRequest is the body for PATCH /hrm/employee-statuses/:id
+type UpdateEmployeeStatusRequest struct {
+	Name     *string                 `json:"name"`
+	Category *EmployeeStatusCategory `json:"category"`
+	Color    *string                 `json:"color"`
 }
 
 // EmployeeListResponse wraps paginated list results.
@@ -201,4 +227,8 @@ var (
 	ErrAlreadyTerminated         = errors.New("employee is already terminated")
 	ErrEmployeeNumberConflict    = errors.New("an employee with this employee_number already exists in the organization")
 	ErrSelfManager               = errors.New("an employee cannot be their own manager")
+	ErrStatusNameRequired        = errors.New("status name is required")
+	ErrStatusColorRequired       = errors.New("status color is required")
+	ErrInvalidStatusCategory     = errors.New("invalid status category")
+	ErrCannotModifyDefaultStatus = errors.New("cannot modify or delete default system statuses")
 )

@@ -35,13 +35,8 @@ func (h *Handler) List(c fiber.Ctx) error {
 
 	filter := ListFilter{}
 
-	if st := strings.TrimSpace(c.Query("status")); st != "" {
-		s := EmployeeStatus(st)
-		if !s.IsValid() {
-			return response.BadRequest(c, "INVALID_STATUS",
-				"status must be one of: active, inactive, on_leave, terminated")
-		}
-		filter.Status = s
+	if st := strings.TrimSpace(c.Query("status_id")); st != "" {
+		filter.StatusID = st
 	}
 	if et := strings.TrimSpace(c.Query("employment_type")); et != "" {
 		t := EmploymentType(et)
@@ -165,6 +160,71 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 	return response.NoContent(c)
 }
 
+// ListStatuses handles GET /api/v1/organizations/:orgId/hrm/employee-statuses
+// Requires: hrm.employees.view
+func (h *Handler) ListStatuses(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+
+	list, err := h.service.ListStatuses(c.Context(), orgID)
+	if err != nil {
+		log.Error("employees: ListStatuses error", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	return response.OK(c, fiber.Map{"statuses": list}, "OK")
+}
+
+// CreateStatus handles POST /api/v1/organizations/:orgId/hrm/employee-statuses
+func (h *Handler) CreateStatus(c fiber.Ctx) error {
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	var req CreateEmployeeStatusRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	st, err := h.service.CreateStatus(c.Context(), orgID, req)
+	if err != nil {
+		return h.empError(c, err)
+	}
+	return response.Created(c, fiber.Map{"status": st}, "Status created")
+}
+
+// UpdateStatus handles PATCH /api/v1/organizations/:orgId/hrm/employee-statuses/:id
+func (h *Handler) UpdateStatus(c fiber.Ctx) error {
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	var req UpdateEmployeeStatusRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	st, err := h.service.UpdateStatus(c.Context(), orgID, c.Params("id"), req)
+	if err != nil {
+		return h.empError(c, err)
+	}
+	return response.OK(c, fiber.Map{"status": st}, "Status updated")
+}
+
+// DeleteStatus handles DELETE /api/v1/organizations/:orgId/hrm/employee-statuses/:id
+func (h *Handler) DeleteStatus(c fiber.Ctx) error {
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.DeleteStatus(c.Context(), orgID, c.Params("id")); err != nil {
+		return h.empError(c, err)
+	}
+	return response.NoContent(c)
+}
+
 func (h *Handler) empError(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
@@ -186,8 +246,7 @@ func (h *Handler) empError(c fiber.Ctx, err error) error {
 		return response.BadRequest(c, "TERMINATION_BEFORE_HIRE", "termination_date cannot be before hire_date")
 	case errors.Is(err, ErrInvalidEmploymentType):
 		return response.BadRequest(c, "INVALID_EMPLOYMENT_TYPE", "employment_type must be one of: full_time, part_time, contractor, intern")
-	case errors.Is(err, ErrInvalidStatus):
-		return response.BadRequest(c, "INVALID_STATUS", "status must be one of: active, inactive, on_leave, terminated")
+
 	case errors.Is(err, ErrInvalidGender):
 		return response.BadRequest(c, "INVALID_GENDER", "gender must be one of: male, female, other, prefer_not_to_say")
 	case errors.Is(err, ErrAlreadyTerminated):
@@ -196,6 +255,16 @@ func (h *Handler) empError(c fiber.Ctx, err error) error {
 		return response.Conflict(c, "EMPLOYEE_NUMBER_CONFLICT", "An employee with this employee_number already exists")
 	case errors.Is(err, ErrSelfManager):
 		return response.BadRequest(c, "SELF_MANAGER", "An employee cannot be their own manager")
+	case errors.Is(err, ErrInvalidStatusCategory):
+		return response.BadRequest(c, "INVALID_CATEGORY", "Invalid status category")
+	case errors.Is(err, ErrStatusNameRequired):
+		return response.BadRequest(c, "NAME_REQUIRED", "Status name is required")
+	case errors.Is(err, ErrStatusColorRequired):
+		return response.BadRequest(c, "COLOR_REQUIRED", "Status color is required")
+	case errors.Is(err, ErrCannotModifyDefaultStatus):
+		return response.Forbidden(c, "FORBIDDEN", "Cannot modify or delete default system statuses")
+	case err != nil && strings.Contains(err.Error(), "status not found"):
+		return response.NotFound(c, "STATUS_NOT_FOUND", "Status not found")
 	default:
 		log.Error("employees error", slog.Any("error", err))
 		return response.InternalServerError(c)

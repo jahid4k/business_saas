@@ -34,6 +34,7 @@ import {
   Clock3,
   FileText,
   Workflow,
+  ListTree,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -187,6 +188,12 @@ function buildModules(orgId: string): Module[] {
           href: `/${orgId}/hrm/departments`,
           icon: Building2,
           permission: "hrm.departments.view",
+        },
+        {
+          label: "Statuses",
+          href: `/${orgId}/hrm/setup/statuses`,
+          icon: ListTree,
+          permission: "hrm.employees.view",
         },
         {
           label: "Positions",
@@ -614,32 +621,6 @@ export default function Sidebar({ orgId }: { orgId: string }) {
           </button>
         </div>
 
-        {/* ── Org switcher ────────────────────────── */}
-        <Link
-          href="/select-organization"
-          className={`
-          flex items-center shrink-0 no-underline
-          border-b border-gray-100 dark:border-white/5
-          hover:bg-gray-100 dark:hover:bg-white/4 transition-colors
-          ${closed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3.5 py-2.5"}
-        `}
-          title={closed ? (currentOrg?.name ?? "Switch workspace") : undefined}
-        >
-          <div className="w-7.5 h-7.5 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
-            {(currentOrg?.name ?? "W")[0].toUpperCase()}
-          </div>
-          {!closed && (
-            <div className="min-w-0">
-              <p className="text-[0.8rem] font-semibold truncate leading-snug text-gray-800 dark:text-[#e0e0e0]">
-                {currentOrg?.name ?? "Workspace"}
-              </p>
-              <p className="text-[0.65rem] text-gray-400 dark:text-[#444]">
-                Switch workspace
-              </p>
-            </div>
-          )}
-        </Link>
-
         {/* ── Scrollable nav ──────────────────────── */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2 scrollbar-none">
           {/* COMMON */}
@@ -747,7 +728,7 @@ export default function Sidebar({ orgId }: { orgId: string }) {
         </nav>
 
         {/* ── Footer — user profile ────────────────── */}
-        <div
+        {/* <div
           className={`border-t border-gray-100 dark:border-white/5 shrink-0 ${
             closed ? "p-1.5" : "p-2"
           }`}
@@ -775,7 +756,7 @@ export default function Sidebar({ orgId }: { orgId: string }) {
               </div>
             )}
           </Link>
-        </div>
+        </div> */}
       </aside>
     </>
   );
