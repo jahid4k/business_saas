@@ -1,6 +1,11 @@
 // src/lib/members.ts
 import api from "./api";
-import type { Member, MemberRole, InviteRequest } from "@/types/rbac";
+import type {
+  Member,
+  MemberRole,
+  InviteRequest,
+  MemberPermissions,
+} from "@/types/rbac";
 
 // GET /organizations/:orgId/members → data.members: Member[]
 export async function listMembers(orgId: string): Promise<Member[]> {
@@ -76,4 +81,33 @@ export async function resetMemberPassword(
     `/api/v1/organizations/${orgId}/members/${membershipId}/reset-password`,
     { newPassword },
   );
+}
+
+// GET /organizations/:orgId/rbac/members/:memberId/permissions
+export async function getMemberPermissions(
+  orgId: string,
+  membershipId: string,
+): Promise<MemberPermissions> {
+  const res = await api.get<{
+    success: boolean;
+    data: { permissions: MemberPermissions };
+  }>(`/api/v1/organizations/${orgId}/rbac/members/${membershipId}/permissions`);
+  return res.data.data.permissions;
+}
+
+// PATCH /organizations/:orgId/rbac/members/:memberId/permissions
+// Sends the full replacement custom-grant and denied lists (not a diff).
+export async function updateMemberPermissions(
+  orgId: string,
+  membershipId: string,
+  body: { customPermissions: string[]; deniedPermissions: string[] },
+): Promise<MemberPermissions> {
+  const res = await api.patch<{
+    success: boolean;
+    data: { permissions: MemberPermissions };
+  }>(
+    `/api/v1/organizations/${orgId}/rbac/members/${membershipId}/permissions`,
+    body,
+  );
+  return res.data.data.permissions;
 }

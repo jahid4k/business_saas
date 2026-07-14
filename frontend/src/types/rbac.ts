@@ -56,3 +56,13 @@ export interface InviteRequest {
   email: string;
   role: MemberRole;
 }
+
+// GET/PATCH /organizations/:orgId/rbac/members/:memberId/permissions
+export interface MemberPermissions {
+  memberId: string;
+  userId: string;
+  rolePermissionKeys: string[];
+  customPermissions: string[];
+  deniedPermissions: string[];
+  effectivePermissions: string[];
+}

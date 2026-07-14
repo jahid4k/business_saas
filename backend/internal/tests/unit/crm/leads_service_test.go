@@ -327,3 +327,37 @@ func TestListLeads_OnlyReturnsOwnOrg(t *testing.T) {
 		t.Errorf("expected 1 lead in org-1, got %d", resp.Total)
 	}
 }
+
+func TestUpdateLead_Success(t *testing.T) {
+	svc := newSvc(newStubLeadRepo())
+	created, _ := svc.CreateLead(context.Background(), "org-1", "user-1", leads.CreateLeadRequest{FirstName: "Dave"})
+
+	newFirstName := "David"
+	status := leads.LeadStatusContacted
+	updated, err := svc.UpdateLead(context.Background(), "org-1", created.ID, leads.UpdateLeadRequest{
+		FirstName: &newFirstName,
+		Status:    (*string)(&status),
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if updated.FirstName != newFirstName {
+		t.Errorf("expected FirstName=%q, got %q", newFirstName, updated.FirstName)
+	}
+	if updated.Status != leads.LeadStatusContacted {
+		t.Errorf("expected Status=%q, got %q", leads.LeadStatusContacted, updated.Status)
+	}
+}
+
+func TestGetLeadsBySource_Success(t *testing.T) {
+	svc := newSvc(newStubLeadRepo())
+	// Since our stub repo returns empty slice, we just test that the service calls it without error
+	res, err := svc.GetLeadsBySource(context.Background(), "org-1")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if res == nil {
+		t.Error("expected non-nil result")
+	}
+}
+

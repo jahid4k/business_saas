@@ -340,6 +340,10 @@ func (h *Handler) GetMemberPermissions(c fiber.Ctx) error {
 }
 
 func (h *Handler) UpdateMemberPermissions(c fiber.Ctx) error {
+	callerID, ok := userIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := organizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
@@ -348,7 +352,7 @@ func (h *Handler) UpdateMemberPermissions(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
-	perms, err := h.service.UpdateMemberPermissions(c.Context(), orgID, c.Params("memberId"), req)
+	perms, err := h.service.UpdateMemberPermissions(c.Context(), callerID, orgID, c.Params("memberId"), req)
 	if err != nil {
 		return h.authzError(c, err)
 	}
@@ -424,6 +428,8 @@ func (h *Handler) authzError(c fiber.Ctx, err error) error {
 		return response.BadRequest(c, "PASSWORD_TOO_SHORT", "Password must be at least 8 characters")
 	case errors.Is(err, ErrSeatLimitReached):
 		return response.Conflict(c, "SEAT_LIMIT_REACHED", "This organization has reached its member seat limit")
+	case errors.Is(err, ErrCannotChangeOwnPermissions):
+		return response.BadRequest(c, "CANNOT_CHANGE_OWN_PERMISSIONS", "You cannot change your own permissions")
 	default:
 		log.Error("authz error", slog.Any("error", err))
 		return response.InternalServerError(c)
