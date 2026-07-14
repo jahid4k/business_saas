@@ -9,7 +9,12 @@ import { useDrawer } from "@/contexts/DrawerContext";
 import { listDepartments } from "@/lib/hrm/departments";
 import { listPositions } from "@/lib/hrm/positions";
 import { listEmployees } from "@/lib/hrm/employees";
-import type { Employee, Department, Position } from "@/types/hrm";
+import type {
+  Employee,
+  Department,
+  Position,
+  EmployeeStatusModel,
+} from "@/types/hrm";
 
 const GENDERS = [
   { value: "male", label: "Male" },
@@ -23,13 +28,6 @@ const EMPLOYMENT_TYPES = [
   { value: "part_time", label: "Part-time" },
   { value: "contractor", label: "Contractor" },
   { value: "intern", label: "Intern" },
-];
-
-const STATUSES = [
-  { value: "active", label: "Active" },
-  { value: "inactive", label: "Inactive" },
-  { value: "on_leave", label: "On leave" },
-  { value: "terminated", label: "Terminated" },
 ];
 
 const schema = z.object({
@@ -47,7 +45,7 @@ const schema = z.object({
   gender: z.string().optional(),
   hire_date: z.string().min(1, "Hire date is required"),
   employment_type: z.string().optional(),
-  status: z.string().optional(),
+  status_id: z.string().optional(),
   department_id: z.string().optional(),
   position_id: z.string().optional(),
   manager_id: z.string().optional(),
@@ -61,6 +59,7 @@ type EmployeeFormValues = z.infer<typeof schema>;
 interface EmployeeFormProps {
   orgId: string;
   employee?: Employee | null;
+  statuses: EmployeeStatusModel[];
   onSave: (values: EmployeeFormValues) => Promise<void>;
 }
 
@@ -84,6 +83,7 @@ function toDateInput(iso?: string) {
 export default function EmployeeForm({
   orgId,
   employee,
+  statuses,
   onSave,
 }: EmployeeFormProps) {
   const { closeDrawer } = useDrawer();
@@ -123,7 +123,7 @@ export default function EmployeeForm({
       gender: employee?.gender ?? "",
       hire_date: toDateInput(employee?.hire_date),
       employment_type: employee?.employment_type ?? "full_time",
-      status: employee?.status ?? "active",
+      status_id: employee?.status_id ?? "",
       department_id: employee?.department_id ?? "",
       position_id: employee?.position_id ?? "",
       manager_id: employee?.manager_id ?? "",
@@ -370,14 +370,15 @@ export default function EmployeeForm({
               <label className="block text-sm font-medium text-[var(--text-secondary)]">
                 Status
               </label>
-              <select {...register("status")} className={inputCls}>
-                {STATUSES.map((s) => (
+              <select {...register("status_id")} className={inputCls}>
+                <option value="">Select status</option>
+                {statuses.map((s) => (
                   <option
-                    key={s.value}
-                    value={s.value}
+                    key={s.id}
+                    value={s.id}
                     style={{ background: "var(--bg-elevated)" }}
                   >
-                    {s.label}
+                    {s.name}
                   </option>
                 ))}
               </select>

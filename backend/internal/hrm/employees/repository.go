@@ -23,6 +23,11 @@ type Repository interface {
 	Create(ctx context.Context, e *Employee) error
 	Update(ctx context.Context, e *Employee) error
 	Delete(ctx context.Context, orgID, ref string) error
+	GetDefaultStatusID(ctx context.Context, orgID string, category EmployeeStatusCategory) (string, error)
+	ListStatuses(ctx context.Context, orgID string) ([]*EmployeeStatusModel, error)
+	CreateStatus(ctx context.Context, s *EmployeeStatusModel) error
+	UpdateStatus(ctx context.Context, s *EmployeeStatusModel) error
+	DeleteStatus(ctx context.Context, orgID, statusID string) error
 
 	// ExistsByEmployeeNumber returns true when another active employee already
 	// holds the same employee_number within the org, ignoring excludeID.
@@ -41,7 +46,7 @@ const empSelect = `
 	id, public_id, org_id, user_id, employee_number,
 	first_name, last_name, email, work_email, phone, work_phone,
 	date_of_birth, gender, avatar_url,
-	hire_date, termination_date, employment_type, status,
+	hire_date, termination_date, employment_type, status_id,
 	department_id, position_id, manager_id,
 	address, city, country, notes,
 	created_by, created_at, updated_at`
@@ -52,7 +57,7 @@ func scanEmployee(row pgx.Row) (*Employee, error) {
 		&e.ID, &e.PublicID, &e.OrgID, &e.UserID, &e.EmployeeNumber,
 		&e.FirstName, &e.LastName, &e.Email, &e.WorkEmail, &e.Phone, &e.WorkPhone,
 		&e.DateOfBirth, &e.Gender, &e.AvatarURL,
-		&e.HireDate, &e.TerminationDate, &e.EmploymentType, &e.Status,
+		&e.HireDate, &e.TerminationDate, &e.EmploymentType, &e.StatusID,
 		&e.DepartmentID, &e.PositionID, &e.ManagerID,
 		&e.Address, &e.City, &e.Country, &e.Notes,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
@@ -71,9 +76,9 @@ func buildListWhere(orgID string, filter ListFilter) (string, []any) {
 	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
 
-	if filter.Status != "" {
-		args = append(args, string(filter.Status))
-		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	if filter.StatusID != "" {
+		args = append(args, filter.StatusID)
+		clauses = append(clauses, fmt.Sprintf("status_id = $%d", len(args)))
 	}
 	if filter.EmploymentType != "" {
 		args = append(args, string(filter.EmploymentType))
@@ -150,13 +155,75 @@ func (r *repoImpl) FindByRef(ctx context.Context, orgID, ref string) (*Employee,
 	return e, nil
 }
 
+func (r *repoImpl) GetDefaultStatusID(ctx context.Context, orgID string, category EmployeeStatusCategory) (string, error) {
+	var id string
+	q := `SELECT id FROM hrm_employee_statuses WHERE org_id = $1 AND category = $2 ORDER BY created_at ASC LIMIT 1`
+	if err := r.db.QueryRow(ctx, q, orgID, string(category)).Scan(&id); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+func (r *repoImpl) ListStatuses(ctx context.Context, orgID string) ([]*EmployeeStatusModel, error) {
+	q := `SELECT id, org_id, name, category, color, created_at, updated_at 
+		  FROM hrm_employee_statuses 
+		  WHERE org_id = $1 
+		  ORDER BY created_at ASC`
+	rows, err := r.db.Query(ctx, q, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("statuses: ListStatuses: %w", err)
+	}
+	defer rows.Close()
+
+	var list []*EmployeeStatusModel
+	for rows.Next() {
+		s := &EmployeeStatusModel{}
+		if err := rows.Scan(&s.ID, &s.OrgID, &s.Name, &s.Category, &s.Color, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, rows.Err()
+}
+
+func (r *repoImpl) CreateStatus(ctx context.Context, s *EmployeeStatusModel) error {
+	const q = `
+		INSERT INTO hrm_employee_statuses (org_id, name, category, color)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, created_at, updated_at`
+	return r.db.QueryRow(ctx, q, s.OrgID, s.Name, string(s.Category), s.Color).
+		Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt)
+}
+
+func (r *repoImpl) UpdateStatus(ctx context.Context, s *EmployeeStatusModel) error {
+	const q = `
+		UPDATE hrm_employee_statuses
+		SET name = $1, category = $2, color = $3, updated_at = NOW()
+		WHERE id = $4 AND org_id = $5
+		RETURNING updated_at`
+	return r.db.QueryRow(ctx, q, s.Name, string(s.Category), s.Color, s.ID, s.OrgID).
+		Scan(&s.UpdatedAt)
+}
+
+func (r *repoImpl) DeleteStatus(ctx context.Context, orgID, statusID string) error {
+	const q = `DELETE FROM hrm_employee_statuses WHERE id = $1 AND org_id = $2`
+	res, err := r.db.Exec(ctx, q, statusID, orgID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 func (r *repoImpl) Create(ctx context.Context, e *Employee) error {
 	const q = `
 		INSERT INTO hrm_employees (
 			org_id, user_id, employee_number,
 			first_name, last_name, email, work_email, phone, work_phone,
 			date_of_birth, gender, avatar_url,
-			hire_date, employment_type, status,
+			hire_date, employment_type, status_id,
 			department_id, position_id, manager_id,
 			address, city, country, notes, created_by
 		) VALUES (
@@ -172,7 +239,7 @@ func (r *repoImpl) Create(ctx context.Context, e *Employee) error {
 		e.OrgID, e.UserID, e.EmployeeNumber,
 		e.FirstName, e.LastName, e.Email, e.WorkEmail, e.Phone, e.WorkPhone,
 		e.DateOfBirth, e.Gender, e.AvatarURL,
-		e.HireDate, e.EmploymentType, e.Status,
+		e.HireDate, e.EmploymentType, e.StatusID,
 		e.DepartmentID, e.PositionID, e.ManagerID,
 		e.Address, e.City, e.Country, e.Notes, e.CreatedBy,
 	))

@@ -7,6 +7,7 @@ import type {
   CreateEmployeePayload,
   UpdateEmployeePayload,
   TerminateEmployeePayload,
+  EmployeeStatusModel,
 } from "@/types/hrm";
 
 const base = (orgId: string) => `/api/v1/organizations/${orgId}/hrm/employees`;
@@ -74,4 +75,49 @@ export async function terminateEmployee(
     data: { employee: Employee };
   }>(`${base(orgId)}/${empId}/terminate`, body);
   return res.data.data.employee;
+}
+
+export async function listEmployeeStatuses(
+  orgId: string,
+): Promise<EmployeeStatusModel[]> {
+  const res = await api.get<{
+    success: boolean;
+    data: { statuses: EmployeeStatusModel[] };
+  }>(`/api/v1/organizations/${orgId}/hrm/employee-statuses`);
+  return res.data.data.statuses;
+}
+
+export async function createEmployeeStatus(
+  orgId: string,
+  payload: { name: string; category: string; color: string },
+): Promise<EmployeeStatusModel> {
+  const res = await api.post<{
+    success: boolean;
+    data: { status: EmployeeStatusModel };
+  }>(`/api/v1/organizations/${orgId}/hrm/employee-statuses`, payload);
+  return res.data.data.status;
+}
+
+export async function updateEmployeeStatus(
+  orgId: string,
+  statusId: string,
+  payload: { name?: string; category?: string; color?: string },
+): Promise<EmployeeStatusModel> {
+  const res = await api.patch<{
+    success: boolean;
+    data: { status: EmployeeStatusModel };
+  }>(
+    `/api/v1/organizations/${orgId}/hrm/employee-statuses/${statusId}`,
+    payload,
+  );
+  return res.data.data.status;
+}
+
+export async function deleteEmployeeStatus(
+  orgId: string,
+  statusId: string,
+): Promise<void> {
+  await api.delete(
+    `/api/v1/organizations/${orgId}/hrm/employee-statuses/${statusId}`,
+  );
 }
