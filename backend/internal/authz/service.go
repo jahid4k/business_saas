@@ -45,7 +45,7 @@ type Service interface {
 	CloneRole(ctx context.Context, organizationID, roleRef string, req CloneRoleRequest) (*Role, error)
 	ListPermissions(ctx context.Context) ([]*Permission, error)
 	GetMemberPermissions(ctx context.Context, organizationID, memberRef string) (*MemberPermissionsResponse, error)
-	UpdateMemberPermissions(ctx context.Context, organizationID, memberRef string, req UpdateMemberPermissionsRequest) (*MemberPermissionsResponse, error)
+	UpdateMemberPermissions(ctx context.Context, callerID, organizationID, memberRef string, req UpdateMemberPermissionsRequest) (*MemberPermissionsResponse, error)
 	CheckMember(ctx context.Context, organizationID string, req CheckMemberPermissionRequest) (*CheckMemberPermissionResponse, error)
 	PermissionMatrix(ctx context.Context, organizationID string) (*PermissionMatrixResponse, error)
 	ResetMemberPassword(ctx context.Context, callerID, organizationID, memberRef string, req ResetMemberPasswordRequest) error
@@ -506,7 +506,20 @@ func (s *serviceImpl) GetMemberPermissions(ctx context.Context, organizationID, 
 	return s.memberPermissionsResponse(ctx, organizationID, m)
 }
 
-func (s *serviceImpl) UpdateMemberPermissions(ctx context.Context, organizationID, memberRef string, req UpdateMemberPermissionsRequest) (*MemberPermissionsResponse, error) {
+func (s *serviceImpl) UpdateMemberPermissions(ctx context.Context, callerID, organizationID, memberRef string, req UpdateMemberPermissionsRequest) (*MemberPermissionsResponse, error) {
+	m, err := s.repo.GetMemberByRef(ctx, organizationID, memberRef)
+	if err != nil {
+		return nil, fmt.Errorf("authz: UpdateMemberPermissions: get member: %w", err)
+	}
+	if m == nil {
+		return nil, ErrMemberNotFound
+	}
+	if callerID == m.UserID {
+		return nil, ErrCannotChangeOwnPermissions
+	}
+	if m.RoleKey == RoleOwner {
+		return nil, ErrCannotModifyOwner
+	}
 	custom := req.CustomPermissions
 	if custom == nil {
 		custom = req.Grant
@@ -518,12 +531,12 @@ func (s *serviceImpl) UpdateMemberPermissions(ctx context.Context, organizationI
 	if err := s.validatePermissionKeys(ctx, append(custom, denied...)); err != nil {
 		return nil, err
 	}
-	m, err := s.repo.UpdateMemberPermissions(ctx, organizationID, memberRef, custom, denied)
+	updated, err := s.repo.UpdateMemberPermissions(ctx, organizationID, memberRef, custom, denied)
 	if err != nil {
 		return nil, fmt.Errorf("authz: UpdateMemberPermissions: %w", err)
 	}
-	s.invalidateUser(ctx, m.UserID, organizationID)
-	return s.memberPermissionsResponse(ctx, organizationID, m)
+	s.invalidateUser(ctx, updated.UserID, organizationID)
+	return s.memberPermissionsResponse(ctx, organizationID, updated)
 }
 
 func (s *serviceImpl) CheckMember(ctx context.Context, organizationID string, req CheckMemberPermissionRequest) (*CheckMemberPermissionResponse, error) {
@@ -749,23 +762,24 @@ func normaliseKeys(keys []string) []string {
 }
 
 var (
-	ErrCannotAssignOwner       = errors.New("owner role cannot be assigned via API")
-	ErrCannotChangeOwnRole     = errors.New("you cannot change your own role")
-	ErrCannotModifyOwner       = errors.New("owner membership cannot be modified this way")
-	ErrCannotModifySystemRole  = errors.New("system roles cannot be modified")
-	ErrRoleNotFound            = errors.New("role not found")
-	ErrMemberNotFound          = errors.New("member not found in this organization")
-	ErrInvalidMemberStatus     = errors.New("invalid member status")
-	ErrInvalidRoleName         = errors.New("invalid role name")
-	ErrReservedRoleName        = errors.New("reserved role name")
-	ErrPermissionRequired      = errors.New("at least one permission must be provided")
-	ErrInvalidPermissionKey    = errors.New("invalid permission key")
-	ErrInvalidInvitationEmail  = errors.New("invalid invitation email")
-	ErrInvitationNotFound      = errors.New("invitation not found")
-	ErrInvitationNotPending    = errors.New("invitation is not pending")
-	ErrInvitationExpired       = errors.New("invitation has expired")
-	ErrInvitationEmailMismatch = errors.New("invitation email does not match authenticated user")
-	ErrCannotResetOwnPassword  = errors.New("use account settings to change your own password")
-	ErrPasswordTooShort        = errors.New("password must be at least 8 characters")
-	ErrSeatLimitReached        = errors.New("organization has reached its member seat limit")
+	ErrCannotAssignOwner          = errors.New("owner role cannot be assigned via API")
+	ErrCannotChangeOwnRole        = errors.New("you cannot change your own role")
+	ErrCannotModifyOwner          = errors.New("owner membership cannot be modified this way")
+	ErrCannotModifySystemRole     = errors.New("system roles cannot be modified")
+	ErrRoleNotFound               = errors.New("role not found")
+	ErrMemberNotFound             = errors.New("member not found in this organization")
+	ErrInvalidMemberStatus        = errors.New("invalid member status")
+	ErrInvalidRoleName            = errors.New("invalid role name")
+	ErrReservedRoleName           = errors.New("reserved role name")
+	ErrPermissionRequired         = errors.New("at least one permission must be provided")
+	ErrInvalidPermissionKey       = errors.New("invalid permission key")
+	ErrInvalidInvitationEmail     = errors.New("invalid invitation email")
+	ErrInvitationNotFound         = errors.New("invitation not found")
+	ErrInvitationNotPending       = errors.New("invitation is not pending")
+	ErrInvitationExpired          = errors.New("invitation has expired")
+	ErrInvitationEmailMismatch    = errors.New("invitation email does not match authenticated user")
+	ErrCannotResetOwnPassword     = errors.New("use account settings to change your own password")
+	ErrPasswordTooShort           = errors.New("password must be at least 8 characters")
+	ErrSeatLimitReached           = errors.New("organization has reached its member seat limit")
+	ErrCannotChangeOwnPermissions = errors.New("you cannot change your own permissions")
 )

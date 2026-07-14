@@ -169,7 +169,13 @@ func (r *repoImpl) GetMembership(ctx context.Context, userID, organizationID str
 }
 
 func (r *repoImpl) GetMemberByRef(ctx context.Context, organizationID, memberRef string) (*Membership, error) {
-	q := `SELECT ` + membershipSelect + `
+	const omSelect = `
+		om.id, om.public_id, om.user_id, om.org_id, om.role_id, om.role_key,
+		COALESCE(om.title, ''), COALESCE(om.department, ''), om.status,
+		COALESCE(om.custom_permissions, ARRAY[]::TEXT[]), COALESCE(om.denied_permissions, ARRAY[]::TEXT[]),
+		om.invitation_status, om.invited_by, om.invitation_sent_at, om.invitation_accepted_at,
+		om.joined_at, om.created_at, om.updated_at`
+	q := `SELECT ` + omSelect + `
 		FROM organization_members om
 		JOIN users u ON u.id = om.user_id
 		WHERE om.org_id = $1

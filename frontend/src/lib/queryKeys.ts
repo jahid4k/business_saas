@@ -27,6 +27,8 @@ export const queryKeys = {
     all: (orgId: string) => ["members", orgId] as const,
     list: (orgId: string) => ["members", orgId, "list"] as const,
     me: (orgId: string) => ["members", orgId, "me"] as const,
+    permissions: (orgId: string, memberId: string) =>
+      ["members", orgId, memberId, "permissions"] as const,
   },
 
   roles: {

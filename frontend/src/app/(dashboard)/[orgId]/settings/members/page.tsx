@@ -16,11 +16,13 @@ import {
   resendInvitation,
   cancelInvitation,
   resetMemberPassword,
+  updateMemberPermissions,
 } from "@/lib/members";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import InviteForm from "@/components/members/InviteForm";
 import ResetPasswordForm from "@/components/members/ResetPasswordForm";
+import MemberPermissionsForm from "@/components/members/MemberPermissionsForm";
 import type { Member, MemberRole } from "@/types/rbac";
 
 const ROLE_STYLE: Record<string, { label: string; cls: string }> = {
@@ -91,6 +93,8 @@ export default function MembersPage({
   const canUpdate = hasPermission("members.update");
   const canRemove = hasPermission("members.remove");
   const canResetPassword = hasPermission("members.password_reset");
+  const canViewMemberPerms = hasPermission("members.permissions.view");
+  const canEditMemberPerms = hasPermission("members.permissions.update");
 
   // ── Query ─────────────────────────────────────────────────────────────────
   const membersKey = queryKeys.members.list(orgId);
@@ -157,6 +161,28 @@ export default function MembersPage({
           onSave={async (newPassword) => {
             await resetMemberPassword(orgId, m.membershipId, newPassword);
             toast.success(`Password reset for ${m.displayName}.`);
+          }}
+        />
+      ),
+    });
+  };
+
+  const handleManagePermissions = (m: Member) => {
+    setOpenMenu(null);
+    openDrawer({
+      title: `Permissions — ${m.displayName}`,
+      width: "lg",
+      content: (
+        <MemberPermissionsForm
+          orgId={orgId}
+          membershipId={m.membershipId}
+          memberName={m.displayName}
+          onSave={async (customPermissions, deniedPermissions) => {
+            await updateMemberPermissions(orgId, m.membershipId, {
+              customPermissions,
+              deniedPermissions,
+            });
+            toast.success(`Permissions updated for ${m.displayName}.`);
           }}
         />
       ),
@@ -267,9 +293,9 @@ export default function MembersPage({
               className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
               style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
             >
-              Active members ({active.length})
+              Active members ({active.length}) fasdfasd
             </p>
-            <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
+            <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
               {active.length === 0 ? (
                 <p className="px-5 py-8 text-sm text-center text-[var(--text-muted)]">
                   No active members yet.
@@ -285,8 +311,8 @@ export default function MembersPage({
                   return (
                     <div
                       key={m.membershipId}
-                      className={`member-row relative group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors first:rounded-t-xl last:rounded-b-xl ${
-                        menuOpen ? "z-50" : "z-0"
+                      className={`member-row group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors ${
+                        menuOpen ? "relative z-50" : "relative z-0"
                       }`}
                     >
                       <Avatar name={m.displayName} email={m.email} />
@@ -363,7 +389,10 @@ export default function MembersPage({
                             No
                           </button>
                         </div>
-                      ) : (canRemove || canResetPassword) &&
+                      ) : (canRemove ||
+                          canResetPassword ||
+                          canViewMemberPerms ||
+                          canEditMemberPerms) &&
                         !isMe &&
                         !isOwner ? (
                         <div
@@ -382,13 +411,23 @@ export default function MembersPage({
                             <MoreHorizontal size={15} />
                           </button>
                           {menuOpen && (
-                            <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                            <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
                               {canResetPassword && (
                                 <button
                                   onClick={() => handleResetPassword(m)}
                                   className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors text-left"
                                 >
                                   Reset password
+                                </button>
+                              )}
+                              {(canViewMemberPerms || canEditMemberPerms) && (
+                                <button
+                                  onClick={() => handleManagePermissions(m)}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors text-left"
+                                >
+                                  {canEditMemberPerms
+                                    ? "Manage permissions"
+                                    : "View permissions"}
                                 </button>
                               )}
                               {canRemove && (
