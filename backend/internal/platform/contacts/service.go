@@ -30,6 +30,8 @@ type Service interface {
 	CreateCompany(ctx context.Context, orgID, userID string, req CreateCompanyRequest) (*Company, error)
 	UpdateCompany(ctx context.Context, orgID, companyID string, req UpdateCompanyRequest) (*Company, error)
 	DeleteCompany(ctx context.Context, orgID, companyID string) error
+
+	EnrichCompany(ctx context.Context, domain string) (*EnrichedCompanyData, error)
 }
 
 type serviceImpl struct {
@@ -226,6 +228,31 @@ func (s *serviceImpl) GetCompany(ctx context.Context, orgID, companyID string) (
 		return nil, ErrCompanyNotFound
 	}
 	return c, nil
+}
+
+// EnrichCompany is a mock implementation of a data enrichment API (e.g. Clearbit, Apollo).
+func (s *serviceImpl) EnrichCompany(ctx context.Context, domain string) (*EnrichedCompanyData, error) {
+	if domain == "" {
+		return nil, fmt.Errorf("domain is required")
+	}
+
+	// Mock data based on domain
+	name := strings.TrimSuffix(domain, ".com")
+	name = strings.TrimSuffix(name, ".io")
+	name = strings.Title(name)
+
+	return &EnrichedCompanyData{
+		Name:          name,
+		Domain:        domain,
+		Industry:      "Technology",
+		Logo:          fmt.Sprintf("https://logo.clearbit.com/%s", domain),
+		EmployeeCount: 150,
+		EstimatedRev:  "$10M - $50M",
+		Location:      "San Francisco, CA",
+		LinkedIn:      fmt.Sprintf("https://linkedin.com/company/%s", strings.ToLower(name)),
+		Twitter:       fmt.Sprintf("https://twitter.com/%s", strings.ToLower(name)),
+		Description:   fmt.Sprintf("%s is a leading technology company focused on innovation.", name),
+	}, nil
 }
 
 func (s *serviceImpl) CreateCompany(ctx context.Context, orgID, userID string, req CreateCompanyRequest) (*Company, error) {

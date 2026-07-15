@@ -99,6 +99,33 @@ export interface Stage {
   updated_at: string;
 }
 
+export interface PipelineForecast {
+  stage_id: string;
+  stage_name: string;
+  probability: number;
+  deal_count: number;
+  total_value: number;
+  weighted_value: number;
+}
+
+export interface GetForecastResponse {
+  forecasts: PipelineForecast[];
+  total_weighted_value: number;
+}
+
+export interface EnrichedCompanyData {
+  name: string;
+  domain: string;
+  industry: string;
+  logo: string;
+  employee_count: number;
+  estimated_revenue: string;
+  location: string;
+  linkedin: string;
+  twitter: string;
+  description: string;
+}
+
 export interface PipelineListResponse {
   pipelines: Pipeline[];
   total: number;

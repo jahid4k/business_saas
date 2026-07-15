@@ -163,6 +163,14 @@ func (r *stubAuthzRepo) GetMemberWithUserByRef(_ context.Context, _, _ string) (
 func (r *stubAuthzRepo) ListMembers(_ context.Context, _ string) ([]*authz.MemberWithUser, error) {
 	return nil, nil
 }
+func (r *stubAuthzRepo) CountActiveMembers(_ context.Context, _ string) (int, error) {
+	return 1, nil
+}
+func (r *stubAuthzRepo) GetOrganizationMaxSeats(_ context.Context, _ string) (*int, error) {
+	val := 100
+	return &val, nil
+}
+func (r *stubAuthzRepo) SetUserPasswordHash(_ context.Context, _, _ string) error { return nil }
 func (r *stubAuthzRepo) GetRoleByID(_ context.Context, _ string) (*authz.Role, error) { return nil, nil }
 func (r *stubAuthzRepo) GetRoleByRef(_ context.Context, _, _ string) (*authz.Role, error) {
 	return nil, nil

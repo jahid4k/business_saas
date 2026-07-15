@@ -100,7 +100,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		redis:    rdb,
 		authSvc:  auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc),
 		userSvc:  user.NewService(userRepo),
-		authzSvc: authz.NewService(authzRepo, rdb),
+		authzSvc: authz.NewService(authzRepo, rdb, auditSvc, authRepo),
 		orgSvc:   organizations.NewService(orgRepo, authzRepo, jwtMgr),
 		taskSvc:  task.NewService(taskRepo, auditSvc),
 	}

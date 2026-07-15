@@ -76,15 +76,17 @@ func (s *serviceImpl) Can(ctx context.Context, userID, organizationID, resource,
 	permKey := strings.ToLower(strings.TrimSpace(resource + "." + action))
 	cacheKey := permCacheKey(userID, organizationID)
 
-	exists, err := s.redis.Exists(ctx, cacheKey).Result()
-	if err != nil {
-		slog.Warn("authz: redis unavailable, falling back to DB", slog.String("key", cacheKey), slog.Any("error", err))
-	} else if exists > 0 {
-		isMember, simErr := s.redis.SIsMember(ctx, cacheKey, permKey).Result()
-		if simErr == nil {
-			return isMember, nil
+	if s.redis != nil {
+		exists, err := s.redis.Exists(ctx, cacheKey).Result()
+		if err != nil {
+			slog.Warn("authz: redis unavailable, falling back to DB", slog.String("key", cacheKey), slog.Any("error", err))
+		} else if exists > 0 {
+			isMember, simErr := s.redis.SIsMember(ctx, cacheKey, permKey).Result()
+			if simErr == nil {
+				return isMember, nil
+			}
+			slog.Warn("authz: redis unavailable, falling back to DB", slog.String("key", cacheKey), slog.Any("error", simErr))
 		}
-		slog.Warn("authz: redis unavailable, falling back to DB", slog.String("key", cacheKey), slog.Any("error", simErr))
 	}
 
 	perms, err := s.repo.GetUserPermissions(ctx, userID, organizationID)
@@ -96,11 +98,13 @@ func (s *serviceImpl) Can(ctx context.Context, userID, organizationID, resource,
 		for _, p := range perms {
 			members = append(members, p.Key())
 		}
-		pipe := s.redis.Pipeline()
-		pipe.SAdd(ctx, cacheKey, members...)
-		pipe.Expire(ctx, cacheKey, permCacheTTL)
-		if _, pipeErr := pipe.Exec(ctx); pipeErr != nil {
-			slog.Warn("authz: failed to populate permission cache", slog.String("key", cacheKey), slog.Any("error", pipeErr))
+		if s.redis != nil {
+			pipe := s.redis.Pipeline()
+			pipe.SAdd(ctx, cacheKey, members...)
+			pipe.Expire(ctx, cacheKey, permCacheTTL)
+			if _, pipeErr := pipe.Exec(ctx); pipeErr != nil {
+				slog.Warn("authz: failed to populate permission cache", slog.String("key", cacheKey), slog.Any("error", pipeErr))
+			}
 		}
 	}
 	for _, p := range perms {
@@ -662,21 +666,25 @@ func (s *serviceImpl) validatePermissionKeys(ctx context.Context, keys []string)
 
 func (s *serviceImpl) invalidateUser(ctx context.Context, userID, organizationID string) {
 	cacheKey := permCacheKey(userID, organizationID)
-	if err := s.redis.Del(ctx, cacheKey).Err(); err != nil {
-		slog.Warn("authz: failed to invalidate permission cache", slog.String("key", cacheKey), slog.Any("error", err))
+	if s.redis != nil {
+		if err := s.redis.Del(ctx, cacheKey).Err(); err != nil {
+			slog.Warn("authz: failed to invalidate permission cache", slog.String("key", cacheKey), slog.Any("error", err))
+		}
 	}
 }
 
 func (s *serviceImpl) invalidateOrg(ctx context.Context, organizationID string) {
-	pattern := "perm:*:" + organizationID
-	iter := s.redis.Scan(ctx, 0, pattern, 100).Iterator()
-	var keys []string
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-	if len(keys) > 0 {
-		if err := s.redis.Del(ctx, keys...).Err(); err != nil {
-			slog.Warn("authz: failed to invalidate organization permission cache", slog.String("organization_id", organizationID), slog.Any("error", err))
+	if s.redis != nil {
+		pattern := "perm:*:" + organizationID
+		iter := s.redis.Scan(ctx, 0, pattern, 100).Iterator()
+		var keys []string
+		for iter.Next(ctx) {
+			keys = append(keys, iter.Val())
+		}
+		if len(keys) > 0 {
+			if err := s.redis.Del(ctx, keys...).Err(); err != nil {
+				slog.Warn("authz: failed to invalidate organization permission cache", slog.String("organization_id", organizationID), slog.Any("error", err))
+			}
 		}
 	}
 }

@@ -99,3 +99,33 @@ func (h *Handler) GetOverview(c fiber.Ctx) error {
 		"recent_deals": recentDeals,
 	}, "OK")
 }
+
+func (h *Handler) GetAgenda(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	result, err := h.service.GetAgenda(c.Context(), orgID(c))
+	if err != nil {
+		log.Error("reports: GetAgenda", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	return response.OK(c, result, "OK")
+}
+
+func (h *Handler) GetRepPerformance(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	result, err := h.service.GetRepPerformance(c.Context(), orgID(c))
+	if err != nil {
+		log.Error("reports: GetRepPerformance", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	return response.OK(c, fiber.Map{"rep_performance": result}, "OK")
+}
+
+func (h *Handler) GetForecast(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	result, err := h.service.GetForecast(c.Context(), orgID(c))
+	if err != nil {
+		log.Error("reports: GetForecast", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	return response.OK(c, result, "OK")
+}

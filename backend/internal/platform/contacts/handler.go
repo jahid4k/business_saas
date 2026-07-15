@@ -209,3 +209,19 @@ func (h *Handler) DeleteCompany(c fiber.Ctx) error {
 	}
 	return response.NoContent(c)
 }
+
+func (h *Handler) EnrichCompany(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	domain := c.Query("domain")
+	if domain == "" {
+		return response.BadRequest(c, "DOMAIN_REQUIRED", "domain query parameter is required")
+	}
+
+	data, err := h.service.EnrichCompany(c.Context(), domain)
+	if err != nil {
+		log.Error("contacts: EnrichCompany", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	return response.OK(c, data, "Company enriched successfully")
+}

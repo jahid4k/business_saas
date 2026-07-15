@@ -15,6 +15,7 @@ import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import StatusForm from "@/components/hrm/setup/StatusForm";
 import { toast } from "sonner";
+import { queryKeys } from "@/lib/queryKeys";
 
 export default function StatusesPage({
   params,
@@ -32,7 +33,7 @@ export default function StatusesPage({
   // Instead of using a dedicated queryKeys for statuses, we invalidate the employees key or create one
   // let's define a unique key for statuses
   const listKey = ["hrm", "employee_statuses", orgId];
-
+  
   const listQuery = useQuery({
     queryKey: listKey,
     queryFn: () => listEmployeeStatuses(orgId),
@@ -47,16 +48,11 @@ export default function StatusesPage({
           onSave={async (payload) => {
             try {
               const res = await createEmployeeStatus(orgId, payload);
-              queryClient.setQueryData<EmployeeStatusModel[]>(
-                listKey,
-                (old) => [...(old ?? []), res],
-              );
+              queryClient.setQueryData<EmployeeStatusModel[]>(listKey, (old) => [...(old ?? []), res]);
               toast.success("Status created.");
               closeDrawer();
             } catch (err: any) {
-              toast.error(
-                err.response?.data?.message || "Failed to create status.",
-              );
+              toast.error(err.response?.data?.message || "Failed to create status.");
               throw err;
             }
           }}
@@ -76,14 +72,12 @@ export default function StatusesPage({
             try {
               const res = await updateEmployeeStatus(orgId, status.id, payload);
               queryClient.setQueryData<EmployeeStatusModel[]>(listKey, (old) =>
-                (old ?? []).map((s) => (s.id === status.id ? res : s)),
+                (old ?? []).map((s) => (s.id === status.id ? res : s))
               );
               toast.success("Status updated.");
               closeDrawer();
             } catch (err: any) {
-              toast.error(
-                err.response?.data?.message || "Failed to update status.",
-              );
+              toast.error(err.response?.data?.message || "Failed to update status.");
               throw err;
             }
           }}
@@ -97,14 +91,11 @@ export default function StatusesPage({
     try {
       await deleteEmployeeStatus(orgId, status.id);
       queryClient.setQueryData<EmployeeStatusModel[]>(listKey, (old) =>
-        (old ?? []).filter((s) => s.id !== status.id),
+        (old ?? []).filter((s) => s.id !== status.id)
       );
       toast.success("Status deleted.");
     } catch (err: any) {
-      toast.error(
-        err.response?.data?.message ||
-          "Failed to delete status. Ensure no employees are assigned to it.",
-      );
+      toast.error(err.response?.data?.message || "Failed to delete status. Ensure no employees are assigned to it.");
     }
     setDeleteConfirm(null);
   };
@@ -150,7 +141,7 @@ export default function StatusesPage({
             No statuses found
           </h3>
           <p className="text-sm text-[var(--text-muted)] mb-6 max-w-sm mx-auto">
-            You don&apos;t have any employee statuses yet.
+            You don't have any employee statuses yet.
           </p>
           {canManage && (
             <button
@@ -166,13 +157,7 @@ export default function StatusesPage({
         <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl overflow-hidden">
           <div className="divide-y divide-[var(--border)]">
             {items.map((status) => {
-              const isDefault = [
-                "Active",
-                "Inactive",
-                "On leave",
-                "Terminated",
-                "Resigned",
-              ].includes(status.name);
+              const isDefault = ["Active", "Inactive", "On leave", "Terminated", "Resigned"].includes(status.name);
               const isConfirming = deleteConfirm === status.id;
 
               return (
@@ -198,9 +183,7 @@ export default function StatusesPage({
                       )}
                     </div>
                     <div className="text-sm text-[var(--text-muted)] flex items-center gap-2">
-                      <span className="capitalize">
-                        {status.category.replace("_", " ")}
-                      </span>
+                      <span className="capitalize">{status.category.replace("_", " ")}</span>
                     </div>
                   </div>
 

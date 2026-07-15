@@ -11,6 +11,7 @@ import (
 
 	"github.com/mridha/businesssaas/internal/crm/leads"
 	"github.com/mridha/businesssaas/internal/crm/pipeline"
+	"github.com/mridha/businesssaas/internal/platform/engagement"
 )
 
 // Service defines the business logic for CRM deals.
@@ -37,15 +38,16 @@ type Service interface {
 }
 
 type serviceImpl struct {
-	repo        Repository
-	pipelineSvc pipeline.Service
+	repo          Repository
+	pipelineSvc   pipeline.Service
+	engagementSvc engagement.Service
 }
 
 // NewService creates a new deals service.
 // pipelineSvc is injected so deals can validate stage ownership without
 // duplicating pipeline queries.
-func NewService(repo Repository, pipelineSvc pipeline.Service) Service {
-	return &serviceImpl{repo: repo, pipelineSvc: pipelineSvc}
+func NewService(repo Repository, pipelineSvc pipeline.Service, engagementSvc engagement.Service) Service {
+	return &serviceImpl{repo: repo, pipelineSvc: pipelineSvc, engagementSvc: engagementSvc}
 }
 
 func (s *serviceImpl) ListDeals(ctx context.Context, orgID string) (*DealListResponse, error) {
@@ -188,6 +190,21 @@ func (s *serviceImpl) MarkDealWon(ctx context.Context, orgID, dealID string) (*D
 	if err := s.repo.UpdateDeal(ctx, d); err != nil {
 		return nil, fmt.Errorf("deals: MarkDealWon: %w", err)
 	}
+
+	// OnDealWon Hook: Auto-generate a note for the deal
+	if s.engagementSvc != nil {
+		content := fmt.Sprintf("🎉 Deal won! Total value: %.2f %s.", d.Value, d.Currency)
+		authorID := d.OwnerID // use owner as author, or fallback
+		if authorID == nil || *authorID == "" {
+			authorID = &d.CreatedBy
+		}
+		_, _ = s.engagementSvc.CreateNote(ctx, orgID, *authorID, "crm", engagement.CreateNoteRequest{
+			RelatedType: "deal",
+			RelatedID:   d.ID,
+			Content:     content,
+		})
+	}
+
 	return d, nil
 }
 

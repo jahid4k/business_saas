@@ -14,7 +14,11 @@ import {
   UserX,
 } from "lucide-react";
 import gsap from "gsap";
-import { Employee, Department, Position } from "@/types/hrm";
+import {
+  Employee,
+  Department,
+  Position,
+} from "@/types/hrm";
 import {
   listEmployees,
   createEmployee,
@@ -30,6 +34,8 @@ import { useDrawer } from "@/contexts/DrawerContext";
 import EmployeeForm from "@/components/hrm/employees/EmployeeForm";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
+
+
 
 export default function EmployeesPage({
   params,
@@ -76,10 +82,10 @@ export default function EmployeesPage({
   useEffect(() => {
     listDepartments(orgId)
       .then((r) => setDepartments(r.departments))
-      .catch(() => {});
+      .catch(() => { });
     listPositions(orgId)
       .then((r) => setPositions(r.positions))
-      .catch(() => {});
+      .catch(() => { });
   }, [orgId]);
 
   useEffect(() => {
@@ -249,7 +255,7 @@ export default function EmployeesPage({
                 letterSpacing: "-0.02em",
               }}
             >
-              Employees ajsdkjf;
+              Employees
             </h1>
             <p className="text-sm text-[var(--text-muted)]">
               {employees.length}{" "}
@@ -307,19 +313,17 @@ export default function EmployeesPage({
         <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)] overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setActiveFilter("all")}
-            className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${
-              activeFilter === "all"
+            className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${activeFilter === "all"
                 ? "text-purple-400 border-purple-500"
                 : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
-            }`}
+              }`}
           >
             All
             <span
-              className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
-                activeFilter === "all"
+              className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${activeFilter === "all"
                   ? "bg-purple-500/15 text-purple-400"
                   : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
-              }`}
+                }`}
             >
               {employees.length}
             </span>
@@ -332,21 +336,19 @@ export default function EmployeesPage({
               <button
                 key={s.id}
                 onClick={() => setActiveFilter(s.id)}
-                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${
-                  active
+                className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors whitespace-nowrap ${active
                     ? "border-[currentcolor]"
                     : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
-                }`}
+                  }`}
                 style={active ? { color: s.color } : {}}
               >
                 {s.name}
                 {count > 0 && (
                   <span
-                    className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
-                      active
+                    className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${active
                         ? "bg-purple-500/15 text-purple-400"
                         : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
-                    }`}
+                      }`}
                   >
                     {count}
                   </span>
@@ -394,8 +396,7 @@ export default function EmployeesPage({
               const confirmingDelete = deleteConfirm === emp.id;
               const confirmingTerminate = terminateConfirm === emp.id;
               const menuOpen = openMenuId === emp.id;
-              const statusObj =
-                statuses.find((s) => s.id === emp.status_id) || emp.status;
+              const statusObj = statuses.find(s => s.id === emp.status_id) || emp.status;
               const fullName =
                 `${emp.first_name} ${emp.last_name ?? ""}`.trim();
 
@@ -422,15 +423,11 @@ export default function EmployeesPage({
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <span
                         className="text-xs px-2 py-0.5 rounded-full border font-medium"
-                        style={
-                          statusObj
-                            ? {
-                                color: statusObj.color,
-                                backgroundColor: `color-mix(in srgb, ${statusObj.color} 10%, transparent)`,
-                                borderColor: `color-mix(in srgb, ${statusObj.color} 20%, transparent)`,
-                              }
-                            : {}
-                        }
+                        style={statusObj ? {
+                          color: statusObj.color,
+                          backgroundColor: `color-mix(in srgb, ${statusObj.color} 10%, transparent)`,
+                          borderColor: `color-mix(in srgb, ${statusObj.color} 20%, transparent)`
+                        } : {}}
                       >
                         {statusObj?.name || "Unknown"}
                       </span>
@@ -511,19 +508,18 @@ export default function EmployeesPage({
                                 Edit
                               </button>
                             )}
-                            {canTerminate &&
-                              statusObj?.category !== "terminated" && (
-                                <button
-                                  onClick={() => {
-                                    setTerminateConfirm(emp.id);
-                                    setOpenMenuId(null);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors text-left"
-                                >
-                                  <UserX size={13} />
-                                  Terminate
-                                </button>
-                              )}
+                            {canTerminate && statusObj?.category !== "terminated" && (
+                              <button
+                                onClick={() => {
+                                  setTerminateConfirm(emp.id);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors text-left"
+                              >
+                                <UserX size={13} />
+                                Terminate
+                              </button>
+                            )}
                             {canDelete && (
                               <button
                                 onClick={() => {

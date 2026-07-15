@@ -6,6 +6,7 @@ import type {
   CreateCompanyPayload,
   UpdateCompanyPayload,
   ContactListResponse,
+  EnrichedCompanyData,
 } from "@/types/crm";
 
 const base = (orgId: string) => `/api/v1/organizations/${orgId}/crm/companies`;
@@ -66,6 +67,17 @@ export async function getCompanyContacts(
 ): Promise<ContactListResponse> {
   const res = await api.get<{ success: boolean; data: ContactListResponse }>(
     `${base(orgId)}/${companyId}/contacts`,
+  );
+  return res.data.data;
+}
+
+export async function enrichCompany(
+  orgId: string,
+  domain: string,
+): Promise<EnrichedCompanyData> {
+  const res = await api.get<{ success: boolean; data: EnrichedCompanyData }>(
+    `${base(orgId)}/enrich`,
+    { params: { domain } },
   );
   return res.data.data;
 }

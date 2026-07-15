@@ -74,11 +74,7 @@ export type EmploymentType =
   | "part_time"
   | "contractor"
   | "intern";
-export type EmployeeStatusCategory =
-  | "active"
-  | "inactive"
-  | "on_leave"
-  | "terminated";
+export type EmployeeStatusCategory = "active" | "inactive" | "on_leave" | "terminated";
 
 export interface EmployeeStatusModel {
   id: string;

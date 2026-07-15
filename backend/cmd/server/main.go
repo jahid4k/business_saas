@@ -75,6 +75,8 @@ import (
 	crmleads "github.com/mridha/businesssaas/internal/crm/leads"
 	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
 	crmreports "github.com/mridha/businesssaas/internal/crm/reports"
+	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
+	crmtemplates "github.com/mridha/businesssaas/internal/crm/templates"
 
 	// ── Internal — HRM Phase 1 (Core Employee Management) ────────────────────
 	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
@@ -206,6 +208,8 @@ func main() {
 	dealsRepo := crmdeals.NewRepository(pgPool)
 	leadsRepo := crmleads.NewRepository(pgPool)
 	reportsRepo := crmreports.NewRepository(pgPool)
+	crmTemplatesRepo := crmtemplates.NewRepository(pgPool)
+	crmSettingsRepo := crmsettings.NewRepository(pgPool)
 
 	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
 	// Departments, Positions, Employees, Leave, Reports
@@ -267,10 +271,12 @@ func main() {
 	engagementSvc := engagement.NewService(engagementRepo)
 
 	// ── CRM (wire in dependency order) ────────────────────────────────────────
+	crmSettingsSvc := crmsettings.NewService(crmSettingsRepo)
 	pipelineSvc := crmpipeline.NewService(pipelineRepo)
-	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc)
-	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc)
+	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc, engagementSvc)
+	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc, crmSettingsSvc)
 	crmRptSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
+	crmTemplatesSvc := crmtemplates.NewService(crmTemplatesRepo)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	// If your Phase 1 services require auditSvc, replace NewService(repo) with
@@ -355,6 +361,8 @@ func main() {
 	dealsHandler := crmdeals.NewHandler(dealsSvc)
 	leadsHandler := crmleads.NewHandler(leadsSvc)
 	crmRptHandler := crmreports.NewHandler(crmRptSvc)
+	crmTemplatesHandler := crmtemplates.NewHandler(crmTemplatesSvc)
+	crmSettingsHandler := crmsettings.NewHandler(crmSettingsSvc)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	hrmDeptsHandler := hrmdepts.NewHandler(hrmDeptsSvc)
@@ -465,6 +473,8 @@ func main() {
 	crmpipeline.RegisterRoutes(api, pipelineHandler, permFn, requireAuth, requireOrgMatch)
 	crmdeals.RegisterRoutes(api, dealsHandler, permFn, requireAuth, requireOrgMatch)
 	crmreports.RegisterRoutes(api, crmRptHandler, permFn, requireAuth, requireOrgMatch)
+	crmtemplates.RegisterRoutes(api, crmTemplatesHandler, permFn, requireAuth, requireOrgMatch)
+	crmsettings.RegisterRoutes(api, crmSettingsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
 	// Routes under /organizations/:orgId/hrm/{departments,positions,employees,leave,reports}

@@ -15,12 +15,14 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
 import gsap from "gsap";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import {
   getCompany,
+  enrichCompany,
   updateCompany,
   deleteCompany,
   getCompanyContacts,
@@ -68,6 +70,7 @@ export default function CompanyDetailPage({
   const [loading, setLoading] = useState(true);
   const [pageErr, setPageErr] = useState<string | null>(null);
   const [deleteContactId, setDeleteContactId] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
 
   const contactListRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +79,30 @@ export default function CompanyDetailPage({
   const canCreateContact = hasPermission("crm.contacts.create");
   const canUpdateContact = hasPermission("crm.contacts.update");
   const canDeleteContact = hasPermission("crm.contacts.delete");
+
+  const handleEnrich = async () => {
+    if (!company?.domain) {
+      setPageErr("Company domain is required for enrichment.");
+      return;
+    }
+    setEnriching(true);
+    setPageErr(null);
+    try {
+      const data = await enrichCompany(orgId, company.domain);
+      // Auto-update the company with the enriched data
+      const updated = await updateCompany(orgId, companyId, {
+        name: data.name,
+        industry: data.industry,
+        // The mock returns more fields, but for now we only update what our model has
+      });
+      setCompany(updated);
+      alert("Company enriched successfully!");
+    } catch {
+      setPageErr("Failed to enrich company data.");
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -289,16 +316,26 @@ export default function CompanyDetailPage({
             </div>
           </div>
 
-          {/* Edit / Delete */}
+          {/* Edit / Delete / Enrich */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {canUpdateCompany && (
-              <button
-                onClick={openEditCompany}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
-              >
-                <Pencil size={12} />
-                Edit
-              </button>
+              <>
+                <button
+                  onClick={handleEnrich}
+                  disabled={enriching || !company.domain}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                >
+                  <Sparkles size={12} />
+                  {enriching ? "Enriching..." : "Enrich"}
+                </button>
+                <button
+                  onClick={openEditCompany}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+                >
+                  <Pencil size={12} />
+                  Edit
+                </button>
+              </>
             )}
             {canDeleteCompany && (
               <button
