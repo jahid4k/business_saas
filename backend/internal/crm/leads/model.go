@@ -46,6 +46,9 @@ type Lead struct {
 	CreatedBy          string     `db:"created_by"           json:"created_by"`
 	CreatedAt          time.Time  `db:"created_at"           json:"created_at"`
 	UpdatedAt          time.Time  `db:"updated_at"           json:"updated_at"`
+	CustomFields       map[string]any `db:"custom_fields"    json:"custom_fields,omitempty"`
+	CaptureSource      *string        `db:"capture_source"   json:"capture_source,omitempty"`
+	CaptureMetadata    map[string]any `db:"capture_metadata" json:"capture_metadata,omitempty"`
 }
 
 type CreateLeadRequest struct {
@@ -55,8 +58,11 @@ type CreateLeadRequest struct {
 	Phone       *string `json:"phone"`
 	CompanyName *string `json:"company_name"`
 	Title       *string `json:"title"`
-	Source      *string `json:"source"`
-	OwnerID     *string `json:"owner_id"`
+	Source          *string `json:"source"`
+	OwnerID         *string `json:"owner_id"`
+	CustomFields    map[string]any `json:"custom_fields,omitempty"`
+	CaptureSource   *string        `json:"capture_source,omitempty"`
+	CaptureMetadata map[string]any `json:"capture_metadata,omitempty"`
 }
 
 type UpdateLeadRequest struct {
@@ -105,4 +111,5 @@ var (
 	ErrFirstNameRequired    = errors.New("first_name is required")
 	ErrInvalidStatus        = errors.New("invalid status value")
 	ErrLeadAlreadyConverted = errors.New("lead has already been converted")
+	ErrDuplicateEmail       = errors.New("a lead with this email already exists")
 )
