@@ -13,6 +13,8 @@ import (
 // dependencies (deals, leads, engagement) to avoid duplicating queries.
 type Repository interface {
 	GetSummary(ctx context.Context, orgID string) (*CRMSummary, error)
+	GetRepPerformance(ctx context.Context, orgID string) ([]*RepPerformance, error)
+	GetForecast(ctx context.Context, orgID string) (*Forecast, error)
 }
 
 type repoImpl struct {
@@ -51,4 +53,62 @@ func (r *repoImpl) GetSummary(ctx context.Context, orgID string) (*CRMSummary, e
 		return nil, fmt.Errorf("reports: GetSummary: %w", err)
 	}
 	return summary, nil
+}
+
+func (r *repoImpl) GetRepPerformance(ctx context.Context, orgID string) ([]*RepPerformance, error) {
+	const q = `
+		SELECT
+			u.id,
+			u.full_name,
+			(SELECT COUNT(*) FROM platform_activities a WHERE a.org_id = $1 AND a.created_by = u.id AND a.type = 'call') as calls,
+			(SELECT COUNT(*) FROM platform_activities a WHERE a.org_id = $1 AND a.created_by = u.id AND a.type = 'meeting') as meetings,
+			(SELECT COUNT(*) FROM crm_deals d WHERE d.org_id = $1 AND d.owner_id = u.id AND d.status = 'won' AND d.deleted_at IS NULL) as deals_closed,
+			(SELECT COALESCE(SUM(d.value), 0) FROM crm_deals d WHERE d.org_id = $1 AND d.owner_id = u.id AND d.status = 'won' AND d.deleted_at IS NULL) as revenue_won
+		FROM org_members om
+		JOIN users u ON u.id = om.user_id
+		WHERE om.org_id = $1
+		ORDER BY revenue_won DESC, deals_closed DESC
+	`
+
+	rows, err := r.db.Query(ctx, q, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("reports: GetRepPerformance: query: %w", err)
+	}
+	defer rows.Close()
+
+	var result []*RepPerformance
+	for rows.Next() {
+		rp := &RepPerformance{}
+		if err := rows.Scan(
+			&rp.RepID,
+			&rp.RepName,
+			&rp.Calls,
+			&rp.Meetings,
+			&rp.DealsClosed,
+			&rp.RevenueWon,
+		); err != nil {
+			return nil, fmt.Errorf("reports: GetRepPerformance: scan: %w", err)
+		}
+
+		result = append(result, rp)
+	}
+	return result, rows.Err()
+}
+
+func (r *repoImpl) GetForecast(ctx context.Context, orgID string) (*Forecast, error) {
+	const q = `
+		SELECT
+			COALESCE(SUM(d.value), 0) as total_pipeline_value,
+			COALESCE(SUM(d.value * (s.probability::numeric / 100)), 0) as weighted_forecast
+		FROM crm_deals d
+		JOIN crm_pipeline_stages s ON d.stage_id = s.id
+		WHERE d.org_id = $1 AND d.status = 'open' AND d.deleted_at IS NULL
+	`
+
+	f := &Forecast{}
+	err := r.db.QueryRow(ctx, q, orgID).Scan(&f.TotalPipelineValue, &f.WeightedForecast)
+	if err != nil {
+		return nil, fmt.Errorf("reports: GetForecast: %w", err)
+	}
+	return f, nil
 }

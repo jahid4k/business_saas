@@ -36,6 +36,7 @@ import {
   Workflow,
   ListTree,
   Settings,
+  Route,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -71,6 +72,12 @@ function buildModules(orgId: string): Module[] {
       status: "live",
       items: [
         {
+          label: "Today's Agenda",
+          href: `/${orgId}/crm/agenda`,
+          icon: CheckSquare,
+          permission: "crm.reports.view", // Reusing reports permission since agenda is an aggregated view
+        },
+        {
           label: "Leads",
           href: `/${orgId}/crm/leads`,
           icon: Funnel,
@@ -87,6 +94,25 @@ function buildModules(orgId: string): Module[] {
           href: `/${orgId}/crm/reports`,
           icon: BarChart2,
           permission: "crm.reports.view",
+        },
+        {
+          id: "crm-setup",
+          label: "CRM Setup",
+          icon: Settings,
+          items: [
+            {
+              label: "Templates",
+              href: `/${orgId}/crm/setup/templates`,
+              icon: FileText,
+              permission: "crm.templates.view",
+            },
+            {
+              label: "Lead Routing",
+              href: `/${orgId}/crm/setup/routing`,
+              icon: Route,
+              permission: "settings.view", // Same permission as the route
+            },
+          ],
         },
       ],
     },
@@ -286,24 +312,8 @@ function LogoMark() {
         aria-hidden="true"
       >
         <rect x="2" y="2" width="6" height="6" rx="1.5" fill="white" />
-        <rect
-          x="10"
-          y="2"
-          width="6"
-          height="6"
-          rx="1.5"
-          fill="white"
-          fillOpacity="0.5"
-        />
-        <rect
-          x="2"
-          y="10"
-          width="6"
-          height="6"
-          rx="1.5"
-          fill="white"
-          fillOpacity="0.5"
-        />
+        <rect x="10" y="2" width="6" height="6" rx="1.5" fill="white" fillOpacity="0.5" />
+        <rect x="2" y="10" width="6" height="6" rx="1.5" fill="white" fillOpacity="0.5" />
         <rect x="10" y="10" width="6" height="6" rx="1.5" fill="white" />
       </svg>
     </div>
@@ -348,14 +358,7 @@ interface NavLinkProps {
   compact?: boolean;
 }
 
-function NavLink({
-  href,
-  icon: Icon,
-  label,
-  active,
-  closed,
-  compact,
-}: NavLinkProps) {
+function NavLink({ href, icon: Icon, label, active, closed, compact }: NavLinkProps) {
   return (
     <Link
       href={href}
@@ -363,38 +366,33 @@ function NavLink({
       className={`
         group relative flex items-center rounded-md no-underline
         transition-colors duration-100 mb-0.5
-        ${
-          closed
-            ? `justify-center py-2.5 px-0 w-full ${
-                active
-                  ? "bg-purple-50 dark:bg-purple-700/10"
-                  : "hover:bg-gray-100 dark:hover:bg-white/4"
-              }`
-            : `gap-2.5 border-l-2 ${compact ? "py-1.5 px-2" : "py-2 px-2"} ${
-                active
-                  ? "bg-purple-50 dark:bg-purple-700/10 border-purple-600 dark:border-[#7c3aed]"
-                  : "border-transparent hover:bg-gray-100 dark:hover:bg-white/4"
-              }`
+        ${closed
+          ? `justify-center py-2.5 px-0 w-full ${active
+            ? "bg-purple-50 dark:bg-purple-700/10"
+            : "hover:bg-gray-100 dark:hover:bg-white/4"
+          }`
+          : `gap-2.5 border-l-2 ${compact ? "py-1.5 px-2" : "py-2 px-2"} ${active
+            ? "bg-purple-50 dark:bg-purple-700/10 border-purple-600 dark:border-[#7c3aed]"
+            : "border-transparent hover:bg-gray-100 dark:hover:bg-white/4"
+          }`
         }
       `}
     >
       <Icon
         size={compact ? 13 : 15}
-        className={`shrink-0 ${
-          active
-            ? "text-purple-600 dark:text-[#7c3aed]"
-            : "text-gray-700 dark:text-[#cfcfcf]"
-        }`}
+        className={`shrink-0 ${active
+          ? "text-purple-600 dark:text-[#7c3aed]"
+          : "text-gray-700 dark:text-[#cfcfcf]"
+          }`}
       />
       {!closed && (
         <span
           className={`
             whitespace-nowrap
             ${compact ? "text-[0.78rem]" : "text-[0.8rem]"}
-            ${
-              active
-                ? "text-gray-900 dark:text-white font-medium"
-                : "text-gray-700 dark:text-[#cfcfcf] font-normal"
+            ${active
+              ? "text-gray-900 dark:text-white font-medium"
+              : "text-gray-700 dark:text-[#cfcfcf] font-normal"
             }
           `}
         >
@@ -415,13 +413,7 @@ interface ModuleRowProps {
   onClick: () => void;
 }
 
-function ModuleRow({
-  module,
-  isOpen,
-  isActive,
-  closed,
-  onClick,
-}: ModuleRowProps) {
+function ModuleRow({ module, isOpen, isActive, closed, onClick }: ModuleRowProps) {
   const Icon = module.icon;
   const soon = module.status === "soon";
 
@@ -432,39 +424,32 @@ function ModuleRow({
         className={`
           w-full flex items-center rounded-md transition-colors duration-100
           ${closed ? "justify-center py-2.5 px-0" : "gap-2.5 px-2 py-2"}
-          ${
-            soon
-              ? "cursor-not-allowed"
-              : isActive
-                ? "bg-purple-50 dark:bg-purple-700/10 cursor-pointer"
-                : "hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer"
+          ${soon
+            ? "cursor-not-allowed"
+            : isActive
+              ? "bg-purple-50 dark:bg-purple-700/10 cursor-pointer"
+              : "hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer"
           }
         `}
-        title={
-          closed
-            ? `${module.label}${soon ? ` — Coming ${module.eta}` : ""}`
-            : undefined
-        }
+        title={closed ? `${module.label}${soon ? ` — Coming ${module.eta}` : ""}` : undefined}
       >
         <Icon
           size={15}
-          className={`shrink-0 ${
-            isActive && !soon
-              ? "text-purple-600 dark:text-[#7c3aed]"
-              : "text-gray-400 dark:text-[#555]"
-          }`}
+          className={`shrink-0 ${isActive && !soon
+            ? "text-purple-600 dark:text-[#7c3aed]"
+            : "text-gray-400 dark:text-[#555]"
+            }`}
         />
         {!closed && (
           <>
             <span
               className={`
                 flex-1 text-left text-[0.8rem]
-                ${
-                  isActive && !soon
-                    ? "text-gray-900 dark:text-white font-medium"
-                    : soon
-                      ? "text-gray-400 dark:text-[#666]"
-                      : "text-gray-500 dark:text-[#ddd] font-normal"
+                ${isActive && !soon
+                  ? "text-gray-900 dark:text-white font-medium"
+                  : soon
+                    ? "text-gray-400 dark:text-[#666]"
+                    : "text-gray-500 dark:text-[#ddd] font-normal"
                 }
               `}
             >
@@ -477,9 +462,8 @@ function ModuleRow({
             ) : (
               <ChevronRight
                 size={12}
-                className={`shrink-0 transition-transform duration-200 text-gray-300 dark:text-[#444] ${
-                  isOpen ? "rotate-90" : ""
-                }`}
+                className={`shrink-0 transition-transform duration-200 text-gray-300 dark:text-[#444] ${isOpen ? "rotate-90" : ""
+                  }`}
               />
             )}
           </>
@@ -516,11 +500,8 @@ function NavTree({
 }) {
   return (
     <div
-      className={`space-y-0.5 ${
-        level > 0
-          ? "ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5"
-          : ""
-      }`}
+      className={`space-y-0.5 ${level > 0 ? "ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5" : ""
+        }`}
     >
       {items.map((item) => {
         if (item.permission && !hasPermission(item.permission)) return null;
@@ -554,9 +535,8 @@ function NavTree({
                       </span>
                       <ChevronRight
                         size={11}
-                        className={`shrink-0 transition-transform duration-200 text-gray-400 dark:text-[#555] ${
-                          isOpen ? "rotate-90" : ""
-                        }`}
+                        className={`shrink-0 transition-transform duration-200 text-gray-400 dark:text-[#555] ${isOpen ? "rotate-90" : ""
+                          }`}
                       />
                     </>
                   )}
@@ -576,9 +556,8 @@ function NavTree({
 
             {hasChildren && !closed && (
               <div
-                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
-                  isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                }`}
+                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                  }`}
               >
                 <div className="overflow-hidden min-h-0">
                   <NavTree
@@ -778,32 +757,6 @@ export default function Sidebar({ orgId }: { orgId: string }) {
           </button>
         </div>
 
-        {/* ── Org switcher ────────────────────────── */}
-        <Link
-          href="/select-organization"
-          className={`
-            flex items-center shrink-0 no-underline
-            border-b border-gray-100 dark:border-white/5
-            hover:bg-gray-100 dark:hover:bg-white/4 transition-colors
-            ${closed ? "justify-center px-2 py-2.5" : "gap-2.5 px-3.5 py-2.5"}
-          `}
-          title={closed ? (currentOrg?.name ?? "Switch workspace") : undefined}
-        >
-          <div className="w-7.5 h-7.5 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-bold font-syne bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
-            {(currentOrg?.name ?? "W")[0].toUpperCase()}
-          </div>
-          {!closed && (
-            <div className="min-w-0">
-              <p className="text-[0.8rem] font-semibold truncate leading-snug text-gray-800 dark:text-[#e0e0e0]">
-                {currentOrg?.name ?? "Workspace"}
-              </p>
-              <p className="text-[0.65rem] text-gray-400 dark:text-[#444]">
-                Switch workspace
-              </p>
-            </div>
-          )}
-        </Link>
-
         {/* ── Scrollable nav ──────────────────────── */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-1.5 py-2 scrollbar-none">
           {/* COMMON */}
@@ -862,9 +815,8 @@ export default function Sidebar({ orgId }: { orgId: string }) {
 
                   {m.status === "live" && !closed && (
                     <div
-                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
-                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                      }`}
+                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                        }`}
                     >
                       <div className="overflow-hidden min-h-0">
                         <NavTree
@@ -904,10 +856,9 @@ export default function Sidebar({ orgId }: { orgId: string }) {
         </nav>
 
         {/* ── Footer — user profile ────────────────── */}
-        <div
-          className={`border-t border-gray-100 dark:border-white/5 shrink-0 ${
-            closed ? "p-1.5" : "p-2"
-          }`}
+        {/* <div
+          className={`border-t border-gray-100 dark:border-white/5 shrink-0 ${closed ? "p-1.5" : "p-2"
+            }`}
         >
           <Link
             href={`/${orgId}/settings/profile`}
@@ -932,7 +883,7 @@ export default function Sidebar({ orgId }: { orgId: string }) {
               </div>
             )}
           </Link>
-        </div>
+        </div> */}
       </aside>
     </>
   );

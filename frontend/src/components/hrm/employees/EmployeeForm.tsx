@@ -9,12 +9,7 @@ import { useDrawer } from "@/contexts/DrawerContext";
 import { listDepartments } from "@/lib/hrm/departments";
 import { listPositions } from "@/lib/hrm/positions";
 import { listEmployees } from "@/lib/hrm/employees";
-import type {
-  Employee,
-  Department,
-  Position,
-  EmployeeStatusModel,
-} from "@/types/hrm";
+import type { Employee, Department, Position, EmployeeStatusModel } from "@/types/hrm";
 
 const GENDERS = [
   { value: "male", label: "Male" },
@@ -29,6 +24,8 @@ const EMPLOYMENT_TYPES = [
   { value: "contractor", label: "Contractor" },
   { value: "intern", label: "Intern" },
 ];
+
+
 
 const schema = z.object({
   first_name: z

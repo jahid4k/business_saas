@@ -27,3 +27,50 @@ export async function getLeadsBySource(orgId: string): Promise<LeadBySource[]> {
   )
   return res.data.data.leads_by_source ?? []
 }
+
+export interface AgendaItem {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  status: string;
+  due_date?: string;
+  occurred_at?: string;
+  related_type?: string;
+  related_id?: string;
+}
+
+export async function getAgenda(orgId: string): Promise<AgendaItem[]> {
+  const res = await api.get<{ success: boolean; data: { items: AgendaItem[] } }>(
+    `${base(orgId)}/agenda`
+  )
+  return res.data.data.items ?? []
+}
+
+export interface RepPerformance {
+  rep_id: string;
+  rep_name: string;
+  calls: number;
+  meetings: number;
+  deals_closed: number;
+  revenue_won: number;
+}
+
+export async function getRepPerformance(orgId: string): Promise<RepPerformance[]> {
+  const res = await api.get<{ success: boolean; data: { rep_performance: RepPerformance[] } }>(
+    `${base(orgId)}/rep-performance`
+  )
+  return res.data.data.rep_performance ?? []
+}
+
+export interface Forecast {
+  total_pipeline_value: number;
+  weighted_forecast: number;
+}
+
+export async function getForecast(orgId: string): Promise<Forecast> {
+  const res = await api.get<{ success: boolean; data: Forecast }>(
+    `${base(orgId)}/forecast`
+  )
+  return res.data.data
+}

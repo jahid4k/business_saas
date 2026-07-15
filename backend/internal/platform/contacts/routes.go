@@ -44,6 +44,9 @@ func RegisterRoutes(
 
 	// Companies
 	companies := crm.Group("/companies")
+
+	companies.Get("/enrich", permFn("crm.companies.view"), handler.EnrichCompany)
+	
 	companies.Get("", permFn("crm.companies.view"), handler.ListCompanies)
 	companies.Post("", permFn("crm.companies.create"), handler.CreateCompany)
 	companies.Get("/:companyId", permFn("crm.companies.view"), handler.GetCompany)
