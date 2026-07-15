@@ -115,6 +115,27 @@ func (s *stubRepo) ExistsByEmployeeNumber(ctx context.Context, orgID, number, ex
 	return false, nil
 }
 
+func (s *stubRepo) GetDefaultStatusID(ctx context.Context, orgID string, category employees.EmployeeStatusCategory) (string, error) {
+	return "status_" + string(category), nil
+}
+
+func (s *stubRepo) ListStatuses(ctx context.Context, orgID string) ([]*employees.EmployeeStatusModel, error) {
+	return nil, nil
+}
+
+func (s *stubRepo) CreateStatus(ctx context.Context, m *employees.EmployeeStatusModel) error {
+	m.ID = "new_status"
+	return nil
+}
+
+func (s *stubRepo) UpdateStatus(ctx context.Context, m *employees.EmployeeStatusModel) error {
+	return nil
+}
+
+func (s *stubRepo) DeleteStatus(ctx context.Context, orgID, statusID string) error {
+	return nil
+}
+
 func ptrStr(s string) *string {
 	return &s
 }
@@ -247,7 +268,7 @@ func TestEmployeesService_Terminate(t *testing.T) {
 		OrgID: "org1",
 		FirstName: "John",
 		HireDate: time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC),
-		Status: employees.EmployeeStatusActive,
+		StatusID: "status_active",
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -258,8 +279,8 @@ func TestEmployeesService_Terminate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if emp.Status != employees.EmployeeStatusTerminated {
-			t.Errorf("expected terminated, got %s", emp.Status)
+		if emp.StatusID != "status_terminated" {
+			t.Errorf("expected terminated, got %s", emp.StatusID)
 		}
 	})
 	

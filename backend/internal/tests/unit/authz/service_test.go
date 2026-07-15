@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/authz"
 )
 
@@ -147,6 +148,19 @@ func (r *stubAuthzRepo) ListMembers(_ context.Context, orgID string) ([]*authz.M
 		})
 	}
 	return out, nil
+}
+
+func (r *stubAuthzRepo) CountActiveMembers(_ context.Context, _ string) (int, error) {
+	return 1, nil
+}
+
+func (r *stubAuthzRepo) GetOrganizationMaxSeats(_ context.Context, _ string) (*int, error) {
+	val := 100
+	return &val, nil
+}
+
+func (r *stubAuthzRepo) SetUserPasswordHash(_ context.Context, _, _ string) error {
+	return nil
 }
 
 func (r *stubAuthzRepo) GetRoleByName(_ context.Context, name string) (*authz.Role, error) {
@@ -356,8 +370,19 @@ func (r *stubAuthzRepo) AcceptInvitation(_ context.Context, _, hash, userID stri
 // ── Service factory ──────────────────────────────────────────────────────────
 // Pass nil redis — service falls back to DB on every permission check.
 
+type mockAudit struct{}
+
+func (m *mockAudit) Log(ctx context.Context, event audit.EventType, userID, businessID, ip, ua string, metadata any) {
+}
+
+type mockRevoker struct{}
+
+func (m *mockRevoker) RevokeAllUserSessions(ctx context.Context, userID string) error {
+	return nil
+}
+
 func newSvc(repo *stubAuthzRepo) authz.Service {
-	return authz.NewService(repo, nil)
+	return authz.NewService(repo, nil, &mockAudit{}, &mockRevoker{})
 }
 
 // ── Can() ────────────────────────────────────────────────────────────────────

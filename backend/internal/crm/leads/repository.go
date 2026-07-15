@@ -24,6 +24,7 @@ type Repository interface {
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 	// UpdateLeadTx writes the final converted state inside an existing transaction.
 	UpdateLeadTx(ctx context.Context, tx pgx.Tx, l *Lead) error
+	GetLastAssignedLeadOwner(ctx context.Context, orgID string) (string, error)
 }
 
 type repoImpl struct {
@@ -192,4 +193,23 @@ func (r *repoImpl) GetLeadsBySource(ctx context.Context, orgID string) ([]*Leads
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+func (r *repoImpl) GetLastAssignedLeadOwner(ctx context.Context, orgID string) (string, error) {
+	const q = `
+		SELECT owner_id
+		FROM crm_leads
+		WHERE org_id = $1 AND owner_id IS NOT NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var ownerID string
+	err := r.db.QueryRow(ctx, q, orgID).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("leads: get last assigned owner: %w", err)
+	}
+	return ownerID, nil
 }

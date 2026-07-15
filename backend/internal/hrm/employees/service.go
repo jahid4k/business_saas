@@ -266,10 +266,12 @@ func (s *serviceImpl) Terminate(ctx context.Context, orgID, ref, actorID string,
 	if e == nil {
 		return nil, ErrEmployeeNotFound
 	}
-	if e.StatusID != "" {
-		// Wait, checking if already terminated requires looking up the category.
-		// Instead of doing a DB lookup, we can trust the frontend, or look it up if needed.
-		// For simplicity, we just assign the terminated status ID.
+	termStatusID, err := s.repo.GetDefaultStatusID(ctx, orgID, EmployeeStatusCategoryTerminated)
+	if err != nil {
+		return nil, fmt.Errorf("employees: Terminate: fetch terminated status: %w", err)
+	}
+	if e.StatusID == termStatusID {
+		return nil, ErrAlreadyTerminated
 	}
 
 	termDateStr := strings.TrimSpace(req.TerminationDate)
@@ -282,11 +284,6 @@ func (s *serviceImpl) Terminate(ctx context.Context, orgID, ref, actorID string,
 	}
 	if termDate.Before(e.HireDate) {
 		return nil, ErrTerminationBeforeHire
-	}
-
-	termStatusID, err := s.repo.GetDefaultStatusID(ctx, orgID, EmployeeStatusCategoryTerminated)
-	if err != nil {
-		return nil, fmt.Errorf("employees: Terminate: fetch terminated status: %w", err)
 	}
 
 	e.StatusID = termStatusID

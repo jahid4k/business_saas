@@ -31,4 +31,7 @@ func RegisterRoutes(
 	reports.Get("/leads/by-source", permFn("crm.reports.view"), handler.GetLeadsBySource)
 	reports.Get("/tasks/overdue", permFn("crm.reports.view"), handler.GetOverdueTasks)
 	reports.Get("/activities/stats", permFn("crm.reports.view"), handler.GetActivityStats)
+	reports.Get("/agenda", permFn("crm.reports.view"), handler.GetAgenda)
+	reports.Get("/rep-performance", permFn("crm.reports.view"), handler.GetRepPerformance)
+	reports.Get("/forecast", permFn("crm.reports.view"), handler.GetForecast)
 }

@@ -1,7 +1,7 @@
 // src/app/(dashboard)/[orgId]/crm/reports/page.tsx
 "use client";
 
-import { use } from "react";
+import { use, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart,
@@ -25,12 +25,16 @@ import {
   Trophy,
   X as XIcon,
   Loader2,
+  Phone,
+  Video,
 } from "lucide-react";
 import { usePermissionStore } from "@/stores/permissionStore";
 import {
   getOverview,
   getDealsByStage,
   getLeadsBySource,
+  getRepPerformance,
+  getForecast,
 } from "@/lib/crm/reports";
 import { queryKeys } from "@/lib/queryKeys";
 import type { DealByStage, LeadBySource } from "@/types/crm";
@@ -49,10 +53,12 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 // ── Helpers ───────────────────────────────────────────
-function formatCurrency(v: number) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${v}`;
+function formatCurrency(value: number, currency = "USD") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function formatDate(iso: string) {
@@ -167,9 +173,6 @@ function PieTooltip({
 }
 
 // ── Inline state for a single chart card (loading / error / empty) ──
-// Each chart owns its own query now, so each gets its own state here —
-// a slow or broken "leads by source" call no longer blocks the
-// "deals by stage" bar chart from rendering.
 function ChartCardState({
   loading,
   error,
@@ -211,28 +214,36 @@ export default function ReportsPage({
   const { hasPermission } = usePermissionStore();
   const canView = hasPermission("crm.reports.view");
 
-  // All three queries are declared unconditionally — Rules of Hooks requires
-  // every render to call the same hooks in the same order. `enabled: canView`
-  // is what actually gates the network call for users without permission;
-  // the original version called useEffect only after an early permission
-  // return, which is a latent "Rendered fewer hooks than expected" crash
-  // waiting for the day permissions change while this page is open.
+  const [activeTab, setActiveTab] = useState<"overview" | "performance" | "forecast">("overview");
+
   const overviewQuery = useQuery({
     queryKey: queryKeys.crm.reports.overview(orgId),
     queryFn: () => getOverview(orgId),
-    enabled: canView,
+    enabled: canView && (activeTab === "overview" || activeTab === "forecast"),
   });
 
   const dealsByStageQuery = useQuery({
     queryKey: queryKeys.crm.reports.dealsByStage(orgId),
     queryFn: () => getDealsByStage(orgId),
-    enabled: canView,
+    enabled: canView && activeTab === "overview",
   });
 
   const leadsBySourceQuery = useQuery({
     queryKey: queryKeys.crm.reports.leadsBySource(orgId),
     queryFn: () => getLeadsBySource(orgId),
-    enabled: canView,
+    enabled: canView && activeTab === "overview",
+  });
+
+  const repPerformanceQuery = useQuery({
+    queryKey: ["crm", "reports", "repPerformance", orgId],
+    queryFn: () => getRepPerformance(orgId),
+    enabled: canView && activeTab === "performance",
+  });
+
+  const forecastQuery = useQuery({
+    queryKey: ["crm", "reports", "forecast", orgId],
+    queryFn: () => getForecast(orgId),
+    enabled: canView && activeTab === "forecast",
   });
 
   if (!canView) {
@@ -246,7 +257,7 @@ export default function ReportsPage({
   // Stat cards, the won/lost row, and the recent-deals list all come from
   // `overview` — that one query is the only thing the page genuinely can't
   // render without, so it's the only one still gating the whole page.
-  if (overviewQuery.isPending) {
+  if (activeTab === "overview" && overviewQuery.isPending) {
     return (
       <div className="flex items-center gap-3 p-8 text-sm text-[var(--text-muted)]">
         <Loader2 size={15} className="animate-spin text-purple-500" />
@@ -255,13 +266,13 @@ export default function ReportsPage({
     );
   }
 
-  if (overviewQuery.isError || !overviewQuery.data) {
+  if (activeTab === "overview" && (overviewQuery.isError || !overviewQuery.data)) {
     return (
       <div className="p-8 text-sm text-red-400">Failed to load reports.</div>
     );
   }
 
-  const { summary, recent_deals: recentDeals } = overviewQuery.data;
+  const { summary, recent_deals: recentDeals } = overviewQuery.data ?? { summary: {} as any, recent_deals: [] };
 
   const stageChartData = (dealsByStageQuery.data ?? []).map(
     (d: DealByStage) => ({
@@ -296,8 +307,43 @@ export default function ReportsPage({
         </p>
       </div>
 
-      {/* ── Row 1: Stat cards ─────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="flex border-b border-[var(--border)] mb-8">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "overview"
+              ? "border-purple-500 text-purple-600 dark:text-purple-400"
+              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+          onClick={() => setActiveTab("overview")}
+        >
+          Overview
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "performance"
+              ? "border-purple-500 text-purple-600 dark:text-purple-400"
+              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+          onClick={() => setActiveTab("performance")}
+        >
+          Rep Performance
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "forecast"
+              ? "border-purple-500 text-purple-600 dark:text-purple-400"
+              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          }`}
+          onClick={() => setActiveTab("forecast")}
+        >
+          Forecast
+        </button>
+      </div>
+
+      {activeTab === "overview" ? (
+        <>
+          {/* ── Row 1: Stat cards ─────────────────── */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatCard
           label="Total leads"
           value={summary.total_leads}
@@ -537,6 +583,98 @@ export default function ReportsPage({
           </div>
         </div>
       )}
+        </>
+      ) : activeTab === "performance" ? (
+        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-[var(--border)]">
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Rep Performance</h2>
+            <p className="text-sm text-[var(--text-secondary)]">Activity and deal metrics by team member</p>
+          </div>
+          
+          {repPerformanceQuery.isPending ? (
+            <div className="flex justify-center p-12">
+              <Loader2 className="animate-spin text-purple-600" size={32} />
+            </div>
+          ) : repPerformanceQuery.isError ? (
+            <div className="p-8 text-center text-red-500">Failed to load performance data</div>
+          ) : repPerformanceQuery.data?.length === 0 ? (
+            <div className="p-12 text-center text-[var(--text-muted)]">No data available</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border)] bg-[var(--bg-canvas)]">
+                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Rep Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Calls</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Meetings</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Deals Closed</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Revenue Won</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {repPerformanceQuery.data?.map((rep) => (
+                    <tr key={rep.rep_id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-6 py-4 text-sm font-medium text-[var(--text-primary)]">{rep.rep_name}</td>
+                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                        <Phone size={14} className="text-blue-500" />
+                        {rep.calls}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">
+                        <div className="flex items-center gap-2">
+                          <Video size={14} className="text-purple-500" />
+                          {rep.meetings}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">{rep.deals_closed}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatCurrency(rep.revenue_won)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : activeTab === "forecast" ? (
+        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm p-8">
+          <div className="mb-8 border-b border-[var(--border)] pb-6">
+            <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Revenue Forecast</h2>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Expected revenue calculated by multiplying open deal values by their pipeline stage probability.
+            </p>
+          </div>
+
+          {forecastQuery.isPending ? (
+            <div className="flex justify-center p-12">
+              <Loader2 className="animate-spin text-purple-600" size={32} />
+            </div>
+          ) : forecastQuery.isError ? (
+            <div className="p-8 text-center text-red-500">Failed to load forecast data</div>
+          ) : !forecastQuery.data ? (
+            <div className="p-12 text-center text-[var(--text-muted)]">No data available</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="p-6 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
+                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">Total Pipeline Value</p>
+                <p className="text-3xl font-bold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}>
+                  {formatCurrency(forecastQuery.data.total_pipeline_value)}
+                </p>
+                <p className="text-xs text-[var(--text-muted)] mt-2">Sum of all open deals</p>
+              </div>
+              
+              <div className="p-6 rounded-xl border border-purple-500/30 bg-purple-500/5 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-16 bg-purple-500/20 blur-[50px] rounded-full" />
+                <p className="text-sm font-medium text-purple-400 mb-2">Weighted Forecast</p>
+                <p className="text-4xl font-bold text-purple-300 relative z-10" style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}>
+                  {formatCurrency(forecastQuery.data.weighted_forecast)}
+                </p>
+                <p className="text-xs text-purple-500/70 mt-2 relative z-10">Adjusted by win probability</p>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

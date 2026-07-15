@@ -144,12 +144,37 @@ type UpdateCompanyRequest struct {
 	OwnerID  *string `json:"owner_id"`
 }
 
-// CompanyListResponse is the paginated companies list returned by the API.
+type ListCompaniesQuery struct {
+	Search *string
+	Status *string
+	Sort   *string
+	Order  *string
+	Limit  int
+	Offset int
+}
+
 type CompanyListResponse struct {
 	Companies []*Company      `json:"companies"`
 	Meta      pagination.Meta `json:"meta"`
 	// Total is kept for backwards compatibility; prefer Meta.Total.
 	Total int `json:"total"`
+}
+
+// ============================================================
+// Enrichment
+// ============================================================
+
+type EnrichedCompanyData struct {
+	Name          string `json:"name"`
+	Domain        string `json:"domain"`
+	Industry      string `json:"industry"`
+	Logo          string `json:"logo"`
+	EmployeeCount int    `json:"employee_count"`
+	EstimatedRev  string `json:"estimated_revenue"`
+	Location      string `json:"location"`
+	LinkedIn      string `json:"linkedin"`
+	Twitter       string `json:"twitter"`
+	Description   string `json:"description"`
 }
 
 // ============================================================

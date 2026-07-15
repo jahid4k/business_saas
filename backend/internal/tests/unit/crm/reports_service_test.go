@@ -22,6 +22,14 @@ func (r *stubReportsRepo) GetSummary(ctx context.Context, orgID string) (*report
 	return r.summary, nil
 }
 
+func (r *stubReportsRepo) GetRepPerformance(ctx context.Context, orgID string) ([]*reports.RepPerformance, error) {
+	return []*reports.RepPerformance{}, nil
+}
+
+func (r *stubReportsRepo) GetForecast(ctx context.Context, orgID string) (*reports.Forecast, error) {
+	return &reports.Forecast{}, nil
+}
+
 type stubDealsSvc struct {
 	deals.Service
 	dealsByStage []*deals.DealsByStage
@@ -62,6 +70,10 @@ func (s *stubEngagementSvc) GetOverdueTasks(ctx context.Context, orgID string) (
 
 func (s *stubEngagementSvc) GetActivityCountByType(ctx context.Context, orgID string) (map[string]int, error) {
 	return s.activityStats, nil
+}
+
+func (s *stubEngagementSvc) CreateNote(ctx context.Context, orgID, userID, relatedType string, req engagement.CreateNoteRequest) (*engagement.Note, error) {
+	return &engagement.Note{}, nil
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────

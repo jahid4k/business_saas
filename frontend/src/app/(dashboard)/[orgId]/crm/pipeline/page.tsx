@@ -440,11 +440,16 @@ function KanbanColumn({
             className="text-sm font-semibold text-[var(--text-primary)]"
             style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
           >
-            {stage.name}
+            {stage.name} <span className="text-xs text-[var(--text-muted)] font-normal ml-1">({stage.probability}%)</span>
           </p>
           <p className="text-xs text-[var(--text-muted)]">
             {orderedDeals.length} deal{orderedDeals.length !== 1 ? "s" : ""}
             {totalValue > 0 && ` · ${formatCurrency(totalValue)}`}
+            {totalValue > 0 && stage.probability > 0 && stage.probability < 100 && (
+              <span className="text-purple-400">
+                {` · Expected: ${formatCurrency(totalValue * (stage.probability / 100))}`}
+              </span>
+            )}
           </p>
         </div>
         {canCreate && (

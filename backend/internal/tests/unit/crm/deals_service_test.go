@@ -11,6 +11,7 @@ import (
 	"github.com/mridha/businesssaas/internal/crm/deals"
 	"github.com/mridha/businesssaas/internal/crm/leads"
 	"github.com/mridha/businesssaas/internal/crm/pipeline"
+
 )
 
 // ── Stub Deals Repository ───────────────────────────────────────────────────
@@ -169,12 +170,14 @@ func (s *stubPipelineSvc) GetPipeline(_ context.Context, orgID, pipelineID strin
 	return p, nil
 }
 
+// ── Stub Engagement Service ─────────────────────────────────────────────────
+
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 func TestCreateDeal_Success(t *testing.T) {
 	repo := newStubDealRepo()
 	pipeSvc := &stubPipelineSvc{}
-	svc := deals.NewService(repo, pipeSvc)
+	svc := deals.NewService(repo, pipeSvc, &stubEngagementSvc{})
 
 	req := deals.CreateDealRequest{
 		Title:      "New Deal",
@@ -200,7 +203,7 @@ func TestCreateDeal_Success(t *testing.T) {
 }
 
 func TestCreateDeal_MissingFields(t *testing.T) {
-	svc := deals.NewService(newStubDealRepo(), &stubPipelineSvc{})
+	svc := deals.NewService(newStubDealRepo(), &stubPipelineSvc{}, &stubEngagementSvc{})
 
 	_, err := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{Title: ""})
 	if !errors.Is(err, deals.ErrTitleRequired) {
@@ -220,7 +223,7 @@ func TestCreateDeal_MissingFields(t *testing.T) {
 
 func TestGetDeal_CrossOrgReturnsNotFound(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal 1", PipelineID: "p1", StageID: "s1",
@@ -234,7 +237,7 @@ func TestGetDeal_CrossOrgReturnsNotFound(t *testing.T) {
 
 func TestUpdateDeal_Success(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Old Title", PipelineID: "p1", StageID: "s1",
@@ -265,7 +268,7 @@ func TestMoveDealStage_Success(t *testing.T) {
 			"s2": {ID: "s2", OrgID: "org-1", PipelineID: "p1"},
 		},
 	}
-	svc := deals.NewService(repo, pipeSvc)
+	svc := deals.NewService(repo, pipeSvc, &stubEngagementSvc{})
 
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal", PipelineID: "p1", StageID: "s1",
@@ -288,7 +291,7 @@ func TestMoveDealStage_WrongPipeline(t *testing.T) {
 			"s2": {ID: "s2", OrgID: "org-1", PipelineID: "p2"}, // Different pipeline
 		},
 	}
-	svc := deals.NewService(repo, pipeSvc)
+	svc := deals.NewService(repo, pipeSvc, &stubEngagementSvc{})
 
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal", PipelineID: "p1", StageID: "s1",
@@ -302,7 +305,7 @@ func TestMoveDealStage_WrongPipeline(t *testing.T) {
 
 func TestMarkDealWon(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal", PipelineID: "p1", StageID: "s1",
@@ -322,7 +325,7 @@ func TestMarkDealWon(t *testing.T) {
 
 func TestMarkDealLost(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal", PipelineID: "p1", StageID: "s1",
@@ -346,7 +349,7 @@ func TestMarkDealLost(t *testing.T) {
 
 func TestDeleteDeal_CrossOrgIsError(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	d, _ := svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{
 		Title: "Deal", PipelineID: "p1", StageID: "s1",
@@ -360,7 +363,7 @@ func TestDeleteDeal_CrossOrgIsError(t *testing.T) {
 
 func TestListDeals(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 	
 	svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{Title: "D1", PipelineID: "p1", StageID: "s1"})
 	svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{Title: "D2", PipelineID: "p1", StageID: "s1"})
@@ -382,7 +385,7 @@ func TestListDeals(t *testing.T) {
 
 func TestCreateDealFromLeadTx(t *testing.T) {
 	repo := newStubDealRepo()
-	svc := deals.NewService(repo, &stubPipelineSvc{})
+	svc := deals.NewService(repo, &stubPipelineSvc{}, &stubEngagementSvc{})
 
 	lead := &leads.Lead{
 		ID:        "lead-1",
@@ -429,7 +432,7 @@ func TestGetPipelineBoard(t *testing.T) {
 			},
 		},
 	}
-	svc := deals.NewService(repo, pipeSvc)
+	svc := deals.NewService(repo, pipeSvc, &stubEngagementSvc{})
 
 	svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{Title: "D1", PipelineID: "p1", StageID: "s1"})
 	svc.CreateDeal(context.Background(), "org-1", "user-1", deals.CreateDealRequest{Title: "D2", PipelineID: "p1", StageID: "s2"})

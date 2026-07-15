@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mridha/businesssaas/internal/platform/contacts"
+	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 )
 
 // ContactCreator is the subset of contacts.Service needed by lead conversion.
@@ -39,19 +40,23 @@ type Service interface {
 	GetLeadsBySource(ctx context.Context, orgID string) ([]*LeadsBySource, error)
 }
 
+type SettingsService interface {
+	GetSettings(ctx context.Context, orgID string) (*crmsettings.CRMSettings, error)
+}
+
 type serviceImpl struct {
 	repo           Repository
 	contactCreator ContactCreator
-	dealCreator    DealCreator // may be nil if deal creation is not wired
+	dealCreator    DealCreator
+	settingsSvc    SettingsService
 }
 
-// NewService creates a new leads service.
-// contactCreator and dealCreator may be nil — conversion will skip those steps.
-func NewService(repo Repository, contactCreator ContactCreator, dealCreator DealCreator) Service {
+func NewService(repo Repository, contactCreator ContactCreator, dealCreator DealCreator, settingsSvc SettingsService) Service {
 	return &serviceImpl{
 		repo:           repo,
 		contactCreator: contactCreator,
 		dealCreator:    dealCreator,
+		settingsSvc:    settingsSvc,
 	}
 }
 
@@ -85,6 +90,27 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 	if strings.TrimSpace(req.FirstName) == "" {
 		return nil, ErrFirstNameRequired
 	}
+
+	ownerID := req.OwnerID
+	if ownerID == nil && s.settingsSvc != nil {
+		settings, err := s.settingsSvc.GetSettings(ctx, orgID)
+		if err == nil && settings != nil && settings.LeadRoutingEnabled && len(settings.RoundRobinAssignees) > 0 {
+			lastOwner, _ := s.repo.GetLastAssignedLeadOwner(ctx, orgID)
+			nextOwner := settings.RoundRobinAssignees[0]
+			if lastOwner != "" {
+				for i, id := range settings.RoundRobinAssignees {
+					if id == lastOwner {
+						if i+1 < len(settings.RoundRobinAssignees) {
+							nextOwner = settings.RoundRobinAssignees[i+1]
+						}
+						break
+					}
+				}
+			}
+			ownerID = &nextOwner
+		}
+	}
+
 	l := &Lead{
 		OrgID:       orgID,
 		FirstName:   strings.TrimSpace(req.FirstName),
@@ -95,7 +121,7 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 		Title:       req.Title,
 		Source:      req.Source,
 		Status:      LeadStatusNew,
-		OwnerID:     req.OwnerID,
+		OwnerID:     ownerID,
 		CreatedBy:   userID,
 	}
 	if err := s.repo.CreateLead(ctx, l); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mridha/businesssaas/internal/crm/leads"
+	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 )
 
@@ -102,6 +103,10 @@ func (r *stubLeadRepo) GetLeadsBySource(_ context.Context, _ string) ([]*leads.L
 	return []*leads.LeadsBySource{}, nil
 }
 
+func (r *stubLeadRepo) GetLastAssignedLeadOwner(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
 func (r *stubLeadRepo) BeginTx(_ context.Context) (pgx.Tx, error) {
 	return &fakeTx{}, nil
 }
@@ -149,10 +154,18 @@ func (d *noopDealCreator) CreateDealFromLeadTx(_ context.Context, _ pgx.Tx, _, _
 	return "deal_new", nil
 }
 
+// ── Noop settings ─────────────────────────────────────────────────────────────
+
+type noopSettingsSvc struct{}
+
+func (s *noopSettingsSvc) GetSettings(ctx context.Context, orgID string) (*crmsettings.CRMSettings, error) {
+	return &crmsettings.CRMSettings{}, nil
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 func newSvc(repo leads.Repository) leads.Service {
-	return leads.NewService(repo, &noopContactCreator{}, &noopDealCreator{})
+	return leads.NewService(repo, &noopContactCreator{}, &noopDealCreator{}, &noopSettingsSvc{})
 }
 
 func sptr(s string) *string { return &s }
