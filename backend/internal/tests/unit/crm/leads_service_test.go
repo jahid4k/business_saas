@@ -12,6 +12,7 @@ import (
 	"github.com/mridha/businesssaas/internal/crm/leads"
 	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
+	"github.com/mridha/businesssaas/internal/platform/engagement"
 )
 
 // ── Stub lead repo ────────────────────────────────────────────────────────────
@@ -66,6 +67,18 @@ func (r *stubLeadRepo) FindLeadByID(_ context.Context, orgID, leadID string) (*l
 		return nil, nil
 	}
 	return l, nil
+}
+
+func (r *stubLeadRepo) FindLeadByEmail(_ context.Context, orgID, email string) (*leads.Lead, error) {
+	if r.forceErr != nil {
+		return nil, r.forceErr
+	}
+	for _, l := range r.leads {
+		if l.OrgID == orgID && l.Email != nil && *l.Email == email {
+			return l, nil
+		}
+	}
+	return nil, nil
 }
 
 func (r *stubLeadRepo) CreateLead(_ context.Context, l *leads.Lead) error {
@@ -154,7 +167,7 @@ func (d *noopDealCreator) CreateDealFromLeadTx(_ context.Context, _ pgx.Tx, _, _
 	return "deal_new", nil
 }
 
-// ── Noop settings ─────────────────────────────────────────────────────────────
+// ── Noop settings and engagement ──────────────────────────────────────────────
 
 type noopSettingsSvc struct{}
 
@@ -162,10 +175,25 @@ func (s *noopSettingsSvc) GetSettings(ctx context.Context, orgID string) (*crmse
 	return &crmsettings.CRMSettings{}, nil
 }
 
+type stubEngagementCreator struct {
+	createdNotes []engagement.CreateNoteRequest
+}
+
+func (c *stubEngagementCreator) CreateNote(_ context.Context, _, _, _ string, req engagement.CreateNoteRequest) (*engagement.Note, error) {
+	c.createdNotes = append(c.createdNotes, req)
+	return &engagement.Note{ID: "note_new"}, nil
+}
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
-func newSvc(repo leads.Repository) leads.Service {
-	return leads.NewService(repo, &noopContactCreator{}, &noopDealCreator{}, &noopSettingsSvc{})
+func newSvc(repo leads.Repository, engagementSvc ...leads.EngagementCreator) leads.Service {
+	var eSvc leads.EngagementCreator
+	if len(engagementSvc) > 0 {
+		eSvc = engagementSvc[0]
+	} else {
+		eSvc = &stubEngagementCreator{}
+	}
+	return leads.NewService(repo, &noopContactCreator{}, &noopDealCreator{}, &noopSettingsSvc{}, eSvc)
 }
 
 func sptr(s string) *string { return &s }
@@ -206,6 +234,44 @@ func TestCreateLead_WhitespaceFirstNameRejected(t *testing.T) {
 	})
 	if !errors.Is(err, leads.ErrFirstNameRequired) {
 		t.Fatalf("expected ErrFirstNameRequired for whitespace name, got %v", err)
+	}
+}
+
+func TestCreateLead_DuplicateEmail_AppendsNote(t *testing.T) {
+	repo := newStubLeadRepo()
+	engStub := &stubEngagementCreator{}
+	svc := newSvc(repo, engStub)
+
+	email := "test@example.com"
+	captureSource := "web_form"
+	// Create first lead
+	created1, _ := svc.CreateLead(context.Background(), "org-1", "user-1", leads.CreateLeadRequest{
+		FirstName: "Original",
+		Email:     &email,
+	})
+
+	// Attempt duplicate create
+	created2, err := svc.CreateLead(context.Background(), "org-1", "user-1", leads.CreateLeadRequest{
+		FirstName:     "Duplicate",
+		Email:         &email,
+		CaptureSource: &captureSource,
+	})
+	if err != nil {
+		t.Fatalf("expected no error on duplicate email (dedup handled), got %v", err)
+	}
+
+	// Should return the original lead
+	if created2.ID != created1.ID {
+		t.Fatalf("expected duplicate creation to return original lead ID %s, got %s", created1.ID, created2.ID)
+	}
+
+	// Check that a note was appended
+	if len(engStub.createdNotes) != 1 {
+		t.Fatalf("expected 1 note created for deduplication, got %d", len(engStub.createdNotes))
+	}
+	note := engStub.createdNotes[0]
+	if note.RelatedType != "lead" || note.RelatedID != created1.ID {
+		t.Errorf("note has wrong related entity: %v", note)
 	}
 }
 

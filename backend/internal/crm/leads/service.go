@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mridha/businesssaas/internal/platform/contacts"
+	"github.com/mridha/businesssaas/internal/platform/engagement"
 	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 )
 
@@ -27,6 +28,10 @@ type ContactCreator interface {
 // insert participates in the same transaction as contact and lead updates.
 type DealCreator interface {
 	CreateDealFromLeadTx(ctx context.Context, tx pgx.Tx, orgID, userID string, lead *Lead, req ConvertLeadRequest) (string, error)
+}
+
+type EngagementCreator interface {
+	CreateNote(ctx context.Context, orgID, userID, module string, req engagement.CreateNoteRequest) (*engagement.Note, error)
 }
 
 // Service defines the business logic for CRM leads.
@@ -49,14 +54,16 @@ type serviceImpl struct {
 	contactCreator ContactCreator
 	dealCreator    DealCreator
 	settingsSvc    SettingsService
+	engagementSvc  EngagementCreator
 }
 
-func NewService(repo Repository, contactCreator ContactCreator, dealCreator DealCreator, settingsSvc SettingsService) Service {
+func NewService(repo Repository, contactCreator ContactCreator, dealCreator DealCreator, settingsSvc SettingsService, engagementSvc EngagementCreator) Service {
 	return &serviceImpl{
 		repo:           repo,
 		contactCreator: contactCreator,
 		dealCreator:    dealCreator,
 		settingsSvc:    settingsSvc,
+		engagementSvc:  engagementSvc,
 	}
 }
 
@@ -91,6 +98,40 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 		return nil, ErrFirstNameRequired
 	}
 
+	// Check if email exists
+	if req.Email != nil && strings.TrimSpace(*req.Email) != "" {
+		email := strings.TrimSpace(*req.Email)
+		existing, err := s.repo.FindLeadByEmail(ctx, orgID, email)
+		if err != nil {
+			return nil, fmt.Errorf("leads: CreateLead: check email: %w", err)
+		}
+		if existing != nil {
+			// Append note to existing lead instead of creating duplicate
+			if s.engagementSvc != nil {
+				lastName := ""
+				if req.LastName != nil {
+					lastName = *req.LastName
+				}
+				company := ""
+				if req.CompanyName != nil {
+					company = *req.CompanyName
+				}
+				source := "unknown"
+				if req.CaptureSource != nil {
+					source = *req.CaptureSource
+				}
+				
+				noteReq := engagement.CreateNoteRequest{
+					RelatedType: "lead",
+					RelatedID:   existing.ID,
+					Content:     fmt.Sprintf("Duplicate lead capture attempt via %s. Name: %s %s, Company: %s", source, req.FirstName, lastName, company),
+				}
+				_, _ = s.engagementSvc.CreateNote(ctx, orgID, userID, "crm_leads", noteReq)
+			}
+			return existing, nil // Or return a new ErrDuplicateEmail if the client needs to know. But task says "instead of creating a duplicate row", so returning existing is good.
+		}
+	}
+
 	ownerID := req.OwnerID
 	if ownerID == nil && s.settingsSvc != nil {
 		settings, err := s.settingsSvc.GetSettings(ctx, orgID)
@@ -112,17 +153,20 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 	}
 
 	l := &Lead{
-		OrgID:       orgID,
-		FirstName:   strings.TrimSpace(req.FirstName),
-		LastName:    req.LastName,
-		Email:       req.Email,
-		Phone:       req.Phone,
-		CompanyName: req.CompanyName,
-		Title:       req.Title,
-		Source:      req.Source,
-		Status:      LeadStatusNew,
-		OwnerID:     ownerID,
-		CreatedBy:   userID,
+		OrgID:           orgID,
+		FirstName:       strings.TrimSpace(req.FirstName),
+		LastName:        req.LastName,
+		Email:           req.Email,
+		Phone:           req.Phone,
+		CompanyName:     req.CompanyName,
+		Title:           req.Title,
+		Source:          req.Source,
+		Status:          LeadStatusNew,
+		OwnerID:         ownerID,
+		CreatedBy:       userID,
+		CustomFields:    req.CustomFields,
+		CaptureSource:   req.CaptureSource,
+		CaptureMetadata: req.CaptureMetadata,
 	}
 	if err := s.repo.CreateLead(ctx, l); err != nil {
 		return nil, fmt.Errorf("leads: CreateLead: %w", err)

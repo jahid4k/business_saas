@@ -5,14 +5,16 @@ import { use, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
-  ChevronRight,
-  ChevronDown,
   Mail,
   Phone,
   Briefcase,
   Loader2,
   Search,
   ArrowRightLeft,
+  CalendarDays,
+  MoreVertical,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import gsap from "gsap";
 import { usePermissionStore } from "@/stores/permissionStore";
@@ -87,12 +89,226 @@ function formatDate(iso: string) {
 }
 
 function LeadAvatar({ name }: { name: string }) {
+  const initial = name ? name.charAt(0).toUpperCase() : "?";
   return (
-    <div
-      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-      style={{ background: "linear-gradient(135deg, #7c3aed, #a855f7)" }}
-    >
-      {name[0]?.toUpperCase() ?? "?"}
+    <div className="w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xs font-bold flex-shrink-0">
+      {initial}
+    </div>
+  );
+}
+
+interface LeadCardProps {
+  lead: Lead;
+  canUpdate: boolean;
+  canConvert: boolean;
+  canDelete: boolean;
+  deleteId: string | null;
+  setDeleteId: (id: string | null) => void;
+  deletingId: string | null;
+  handleDelete: (id: string) => void;
+  openEdit: (lead: Lead) => void;
+  openConvert: (lead: Lead) => void;
+}
+
+function LeadCard({
+  lead,
+  canUpdate,
+  canConvert,
+  canDelete,
+  deleteId,
+  setDeleteId,
+  deletingId,
+  handleDelete,
+  openEdit,
+  openConvert,
+}: LeadCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [menuOpen]);
+
+  const confirming = deleteId === lead.id;
+  const deleting = deletingId === lead.id;
+  const status = STATUS_STYLE[lead.status as LeadStatus];
+  const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
+  const isConverted = lead.status === "converted";
+
+  return (
+    <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--text-muted)]/30 transition-colors relative flex flex-col h-full shadow-sm">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <LeadAvatar name={lead.first_name} />
+          <div>
+            <h3
+              className="text-sm font-semibold text-[var(--text-primary)]"
+              style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
+            >
+              {fullName}
+            </h3>
+            <p className="text-xs text-[var(--text-muted)]">
+              {lead.company_name ?? "No company"}
+            </p>
+          </div>
+        </div>
+
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(!menuOpen);
+            }}
+            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          >
+            <MoreVertical size={16} />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 mt-1 w-36 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg shadow-xl z-20 py-1 overflow-hidden">
+              {canUpdate && !isConverted && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openEdit(lead);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-2"
+                >
+                  <Pencil size={13} />
+                  Edit
+                </button>
+              )}
+              {canConvert && !isConverted && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openConvert(lead);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/10 transition-colors flex items-center gap-2"
+                >
+                  <ArrowRightLeft size={13} />
+                  Convert
+                </button>
+              )}
+              {canDelete && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setDeleteId(lead.id);
+                  }}
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
+                >
+                  <Trash2 size={13} />
+                  Delete
+                </button>
+              )}
+              {!canUpdate && !canConvert && !canDelete && (
+                <div className="px-3 py-2 text-xs text-[var(--text-muted)] text-center">
+                  No actions
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span
+          className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full ${status.cls}`}
+        >
+          {status.label}
+        </span>
+        <span className="text-[0.65rem] font-medium border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)] px-2 py-0.5 rounded-full">
+          {lead.source ? (SOURCE_LABELS[lead.source] ?? lead.source) : "Direct"}
+        </span>
+      </div>
+
+      <div className="space-y-3 flex-1 mb-5">
+        {lead.email && (
+          <div className="flex items-center gap-2.5">
+            <Mail
+              size={14}
+              className="text-[var(--text-muted)] flex-shrink-0"
+            />
+            <span className="text-xs text-[var(--text-secondary)] truncate">
+              {lead.email}
+            </span>
+          </div>
+        )}
+        {lead.phone && (
+          <div className="flex items-center gap-2.5">
+            <Phone
+              size={14}
+              className="text-[var(--text-muted)] flex-shrink-0"
+            />
+            <span className="text-xs text-[var(--text-secondary)] truncate">
+              {lead.phone}
+            </span>
+          </div>
+        )}
+        {lead.title && (
+          <div className="flex items-center gap-2.5">
+            <Briefcase
+              size={14}
+              className="text-[var(--text-muted)] flex-shrink-0"
+            />
+            <span className="text-xs text-[var(--text-secondary)] truncate">
+              {lead.title}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-3 border-t border-[var(--border)]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+            <CalendarDays size={12} />
+            <span>Added {new Date(lead.created_at).toLocaleDateString()}</span>
+          </div>
+          {isConverted && lead.converted_at && (
+            <div className="flex items-center gap-1.5 text-xs text-purple-400">
+              <ArrowRightLeft size={12} />
+              <span>{new Date(lead.converted_at).toLocaleDateString()}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {confirming && (
+        <div className="absolute inset-0 bg-[var(--bg-surface)]/90 backdrop-blur-sm rounded-xl border border-red-500/30 flex flex-col items-center justify-center p-4 text-center z-10 animate-in fade-in">
+          <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+            Delete Lead?
+          </p>
+          <p className="text-xs text-[var(--text-muted)] mb-4">
+            This action cannot be undone.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDeleteId(null)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] bg-[var(--bg-elevated)] hover:bg-[var(--border)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleDelete(lead.id)}
+              disabled={deleting}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-red-500 hover:bg-red-400 transition-colors disabled:opacity-50"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -110,7 +326,6 @@ export default function LeadsPage({
   const [activeStatus, setActiveStatus] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("");
   const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -121,7 +336,6 @@ export default function LeadsPage({
   const canDelete = hasPermission("crm.leads.delete");
   const canConvert = hasPermission("crm.leads.convert");
 
-  // ── Query ─────────────────────────────────────────────────────────────────
   const leadsKey = queryKeys.crm.leads.list(orgId);
   const leadsQuery = useQuery({
     queryKey: leadsKey,
@@ -129,18 +343,17 @@ export default function LeadsPage({
   });
   const leads = leadsQuery.data ?? [];
 
-  // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (leadsQuery.isPending || !listRef.current) return;
-    const rows = listRef.current.querySelectorAll(".lead-row");
-    if (rows.length) {
+    const cards = listRef.current.children;
+    if (cards.length) {
       gsap.fromTo(
-        rows,
-        { opacity: 0, y: 6 },
-        { opacity: 1, y: 0, duration: 0.3, stagger: 0.035, ease: "power2.out" },
+        cards,
+        { opacity: 0, y: 10 },
+        { opacity: 1, y: 0, duration: 0.3, stagger: 0.03, ease: "power2.out" },
       );
     }
-  }, [leadsQuery.isPending]);
+  }, [leadsQuery.isPending, leads.length]);
 
   const filtered = leads.filter((l) => {
     if (activeStatus !== "all" && l.status !== activeStatus) return false;
@@ -160,7 +373,6 @@ export default function LeadsPage({
 
   const sources = getSources(leads);
 
-  // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     openDrawer({
       title: "New lead",
@@ -246,7 +458,6 @@ export default function LeadsPage({
       queryClient.setQueryData<Lead[]>(leadsKey, (old) =>
         (old ?? []).filter((l) => l.id !== leadId),
       );
-      if (expandedId === leadId) setExpandedId(null);
       toast.success("Lead deleted.");
     } catch {
       toast.error("Failed to delete lead.");
@@ -256,9 +467,8 @@ export default function LeadsPage({
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 md:p-8 max-w-6xl">
+    <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
@@ -385,186 +595,25 @@ export default function LeadsPage({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 px-4 py-2 mb-1">
-            {["Name", "Company", "Status", "Source", "Created", ""].map((h) => (
-              <span
-                key={h}
-                className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider"
-                style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
-              >
-                {h}
-              </span>
+          <div
+            ref={listRef}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4"
+          >
+            {filtered.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                canUpdate={canUpdate}
+                canConvert={canConvert}
+                canDelete={canDelete}
+                deleteId={deleteId}
+                setDeleteId={setDeleteId}
+                deletingId={deletingId}
+                handleDelete={handleDelete}
+                openEdit={openEdit}
+                openConvert={openConvert}
+              />
             ))}
-          </div>
-
-          <div ref={listRef} className="space-y-1">
-            {filtered.map((lead) => {
-              const expanded = expandedId === lead.id;
-              const confirming = deleteId === lead.id;
-              const deleting = deletingId === lead.id;
-              const status = STATUS_STYLE[lead.status];
-              const fullName = [lead.first_name, lead.last_name]
-                .filter(Boolean)
-                .join(" ");
-              const isConverted = lead.status === "converted";
-
-              return (
-                <div key={lead.id} className="lead-row">
-                  <div
-                    className={`grid grid-cols-[1fr_1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 rounded-xl border transition-all duration-150 cursor-pointer ${
-                      expanded
-                        ? "bg-[var(--bg-elevated)] border-purple-500/25 rounded-b-none border-b-0"
-                        : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]/20"
-                    }`}
-                    onClick={() => setExpandedId(expanded ? null : lead.id)}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <LeadAvatar name={lead.first_name} />
-                      <span
-                        className="text-sm font-medium text-[var(--text-primary)] truncate"
-                        style={{
-                          fontFamily: "var(--font-inter, Inter, sans-serif)",
-                        }}
-                      >
-                        {fullName}
-                      </span>
-                    </div>
-                    <span className="text-sm text-[var(--text-muted)] truncate">
-                      {lead.company_name ?? "—"}
-                    </span>
-                    <span
-                      className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${status.cls}`}
-                    >
-                      {status.label}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
-                      {lead.source
-                        ? (SOURCE_LABELS[lead.source] ?? lead.source)
-                        : "—"}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
-                      {formatDate(lead.created_at)}
-                    </span>
-                    <div className="flex items-center justify-end">
-                      {expanded ? (
-                        <ChevronDown
-                          size={14}
-                          className="text-[var(--text-muted)]"
-                        />
-                      ) : (
-                        <ChevronRight
-                          size={14}
-                          className="text-[var(--text-muted)]"
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  {expanded && (
-                    <div
-                      className="px-5 py-4 bg-[var(--bg-elevated)] border border-purple-500/25 border-t-0 rounded-b-xl"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-start justify-between gap-6">
-                        <div className="grid grid-cols-3 gap-x-8 gap-y-3 flex-1">
-                          {lead.email && (
-                            <div className="flex items-center gap-2">
-                              <Mail
-                                size={12}
-                                className="text-[var(--text-muted)] flex-shrink-0"
-                              />
-                              <span className="text-xs text-[var(--text-secondary)]">
-                                {lead.email}
-                              </span>
-                            </div>
-                          )}
-                          {lead.phone && (
-                            <div className="flex items-center gap-2">
-                              <Phone
-                                size={12}
-                                className="text-[var(--text-muted)] flex-shrink-0"
-                              />
-                              <span className="text-xs text-[var(--text-secondary)]">
-                                {lead.phone}
-                              </span>
-                            </div>
-                          )}
-                          {lead.title && (
-                            <div className="flex items-center gap-2">
-                              <Briefcase
-                                size={12}
-                                className="text-[var(--text-muted)] flex-shrink-0"
-                              />
-                              <span className="text-xs text-[var(--text-secondary)]">
-                                {lead.title}
-                              </span>
-                            </div>
-                          )}
-                          {isConverted && lead.converted_at && (
-                            <div className="flex items-center gap-2 col-span-3">
-                              <ArrowRightLeft
-                                size={12}
-                                className="text-purple-400 flex-shrink-0"
-                              />
-                              <span className="text-xs text-purple-400">
-                                Converted on {formatDate(lead.converted_at)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        {confirming ? (
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-xs text-[var(--text-muted)]">
-                              Delete?
-                            </span>
-                            <button
-                              onClick={() => handleDelete(lead.id)}
-                              disabled={deleting}
-                              className="px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-red-500 hover:bg-red-400 transition-colors disabled:opacity-50"
-                            >
-                              {deleting ? "…" : "Yes"}
-                            </button>
-                            <button
-                              onClick={() => setDeleteId(null)}
-                              className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
-                            >
-                              No
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {canUpdate && !isConverted && (
-                              <button
-                                onClick={() => openEdit(lead)}
-                                className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors"
-                              >
-                                Edit
-                              </button>
-                            )}
-                            {canConvert && !isConverted && (
-                              <button
-                                onClick={() => openConvert(lead)}
-                                className="px-3 py-1.5 rounded-md text-xs font-medium text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 transition-colors"
-                              >
-                                Convert
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={() => setDeleteId(lead.id)}
-                                className="px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-muted)] border border-[var(--border)] hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 transition-colors"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </div>
           <p className="mt-4 text-xs text-[var(--text-muted)]">
             Showing {filtered.length} of {leads.length} leads

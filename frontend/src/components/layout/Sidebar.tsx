@@ -37,6 +37,10 @@ import {
   ListTree,
   Settings,
   Route,
+  Key,
+  Webhook,
+  UserCheck,
+  Globe,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -82,6 +86,12 @@ function buildModules(orgId: string): Module[] {
           href: `/${orgId}/crm/leads`,
           icon: Funnel,
           permission: "crm.leads.view",
+        },
+        {
+          label: "Web Visitors",
+          href: `/${orgId}/crm/visitors`,
+          icon: Globe,
+          permission: "crm.view",
         },
         {
           label: "Pipeline",
@@ -291,6 +301,18 @@ const SETTINGS: NavItem[] = [
     href: "settings/roles",
     icon: Shield,
     permission: "roles.view",
+  },
+  {
+    label: "API Keys",
+    href: "settings/apikeys",
+    icon: Key,
+    permission: "settings.view", // or apikeys.view if that exists, but settings is safe
+  },
+  {
+    label: "Integrations",
+    href: "settings/integrations",
+    icon: Webhook,
+    permission: "settings.view",
   },
   {
     label: "Security",

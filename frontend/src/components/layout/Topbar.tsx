@@ -19,8 +19,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useUiStore } from "@/stores/uiStore";
+import { useCommandStore } from "@/stores/commandStore";
 import { logout } from "@/lib/auth";
 import { setToken } from "@/lib/token";
+import CommandMenu from "@/components/ui/CommandMenu";
 
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
 const FONT_SYNE = "var(--font-syne, Syne, sans-serif)";
@@ -52,6 +54,7 @@ export default function Topbar({ orgId }: { orgId: string }) {
   // `resolvedTheme` is always the actual applied value after mount.
   const { resolvedTheme, setTheme } = useTheme();
   const { setUiTheme, toggleMobileMenu } = useUiStore();
+  const { setOpen: setCommandOpen } = useCommandStore();
   const { user, reset: resetAuth } = useAuthStore();
   const { reset: resetPerms } = usePermissionStore();
   const queryClient = useQueryClient();
@@ -136,26 +139,63 @@ export default function Topbar({ orgId }: { orgId: string }) {
           zIndex: 10,
         }}
       >
-        {/* ── Hamburger (mobile only) + page title ─ */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <TopbarBtn
-            className="lg:hidden"
-            onClick={toggleMobileMenu}
-            title="Open menu"
-          >
-            <Menu size={18} style={{ color: "var(--text-muted)" }} />
-          </TopbarBtn>
-          <span
-            style={{
-              fontFamily: FONT_INTER,
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--text-secondary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {pageTitle}
-          </span>
+        <div
+          style={{ display: "flex", alignItems: "center", flex: 1, gap: 24 }}
+        >
+          {/* ── Hamburger (mobile only) + page title ─ */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <TopbarBtn
+              className="lg:hidden"
+              onClick={toggleMobileMenu}
+              title="Open menu"
+            >
+              <Menu size={18} style={{ color: "var(--text-muted)" }} />
+            </TopbarBtn>
+            <span
+              style={{
+                fontFamily: FONT_INTER,
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--text-secondary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {pageTitle}
+            </span>
+          </div>
+
+          {/* ── Left-aligned Search & Quick Actions Trigger ─ */}
+          <div className="hidden sm:flex items-center gap-2">
+            <button
+              onClick={() => setCommandOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors text-sm text-[var(--text-muted)] w-48 lg:w-64"
+            >
+              <span className="flex-1 text-left">Quick actions...</span>
+              <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-base)] px-1.5 font-mono text-[10px] font-medium text-[var(--text-muted)]">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </button>
+            <button
+              onClick={() => setCommandOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors text-[var(--text-muted)]"
+              title="Search (/)"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* ── Right actions ───────────────── */}
@@ -337,6 +377,9 @@ export default function Topbar({ orgId }: { orgId: string }) {
           </div>
         </div>
       </header>
+
+      {/* Command Menu Modal */}
+      <CommandMenu />
     </>
   );
 }
