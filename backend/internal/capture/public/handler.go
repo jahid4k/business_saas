@@ -34,8 +34,9 @@ func (h *Handler) CaptureLead(c fiber.Ctx) error {
 
 	var req leads.CreateLeadRequest
 	req.CustomFields = make(map[string]any)
-	source := "web_form"
+	source := "website"
 	req.CaptureSource = &source
+	req.Source = &source
 
 	// Map raw fields
 	for k, v := range raw {

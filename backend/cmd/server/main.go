@@ -454,6 +454,9 @@ func main() {
 	app.Use(middleware.Logger())
 	app.Use(middleware.SecurityHeaders(cfg.App.IsProduction()))
 	app.Use(cors.New(cors.Config{
+		Next: func(c fiber.Ctx) bool {
+			return strings.HasPrefix(c.Path(), "/api/v1/pub")
+		},
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID", "X-API-Key"},
