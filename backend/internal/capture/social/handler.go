@@ -27,9 +27,9 @@ func (h *Handler) HandleWebhook(c fiber.Ctx) error {
 		mode := c.Query("hub.mode")
 		token := c.Query("hub.verify_token")
 		challenge := c.Query("hub.challenge")
-		
-		// In a real app we'd verify the token against our config
-		if mode == "subscribe" && token != "" {
+
+		verifyToken := h.service.GetWebhookVerifyToken(platform)
+		if mode == "subscribe" && token == verifyToken && verifyToken != "" {
 			return c.SendString(challenge)
 		}
 		return response.BadRequest(c, "BAD_REQUEST", "Invalid verification request")
@@ -90,4 +90,41 @@ func (h *Handler) DeleteOrgSocial(c fiber.Ctx) error {
 		return response.InternalServerError(c)
 	}
 	return response.OK(c, nil, "Social integration deleted")
+}
+
+func (h *Handler) InitOAuth(c fiber.Ctx) error {
+	platform := c.Params("platform")
+	orgID := c.Query("orgId")
+	log := logger.FromCtx(c)
+
+	if orgID == "" {
+		return response.BadRequest(c, "BAD_REQUEST", "orgId query parameter is required")
+	}
+
+	authURL, err := h.service.GetOAuthInitURL(c.Context(), orgID, platform)
+	if err != nil {
+		log.Error("social: GetOAuthInitURL", slog.Any("error", err))
+		return response.BadRequest(c, "BAD_REQUEST", err.Error())
+	}
+
+	return c.Redirect().To(authURL)
+}
+
+func (h *Handler) OAuthCallback(c fiber.Ctx) error {
+	platform := c.Params("platform")
+	code := c.Query("code")
+	orgID := c.Query("state") // Assuming we pass orgId in the state parameter
+	log := logger.FromCtx(c)
+
+	if code == "" || orgID == "" {
+		return response.BadRequest(c, "BAD_REQUEST", "code and state are required")
+	}
+
+	if err := h.service.HandleOAuthCallback(c.Context(), orgID, platform, code); err != nil {
+		log.Error("social: HandleOAuthCallback", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	// Redirect back to frontend settings page
+	return c.Redirect().To("/" + orgID + "/settings/integrations?social_connected=true")
 }

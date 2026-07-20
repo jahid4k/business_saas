@@ -47,31 +47,31 @@ function CreateEmailForm({
   return (
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div className="mb-2">
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Any emails forwarded to this address will automatically create a Lead
           in your CRM.
         </p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label className="block text-sm font-medium text-(--text-primary) mb-1.5">
           Inbound Email Address
         </label>
         <input
           required
           type="email"
           placeholder="e.g. leads@yourcompany.com"
-          className="w-full px-3 py-2 bg-transparent border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500"
+          className="w-full px-3 py-2 bg-transparent border border-(--border) rounded-lg text-sm text-(--text-primary) placeholder-(--text-muted) focus:outline-none focus:border-purple-500"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
         />
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border)]">
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-(--border)">
         <button
           type="button"
           onClick={() => closeDrawer()}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>
@@ -98,7 +98,7 @@ function ConnectSocialModal({ orgId }: { orgId: string }) {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-4">
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Select a platform to connect. You will be redirected to authorize
           BusinessSAAS to access your pages and leads.
         </p>
@@ -107,50 +107,50 @@ function ConnectSocialModal({ orgId }: { orgId: string }) {
       <div className="space-y-3">
         <button
           onClick={() => handleConnect("facebook")}
-          className="w-full flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-blue-500/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 rounded-xl border border-(--border) bg-(--bg-surface) hover:border-blue-500/50 transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
               <Share2 size={18} />
             </div>
             <div className="text-left">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">
+              <p className="text-sm font-semibold text-(--text-primary)">
                 Facebook Lead Ads
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-(--text-muted)">
                 Connect Meta Business Pages
               </p>
             </div>
           </div>
-          <Plus size={16} className="text-[var(--text-muted)]" />
+          <Plus size={16} className="text-(--text-muted)" />
         </button>
 
         <button
           onClick={() => handleConnect("linkedin")}
-          className="w-full flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-blue-600/50 transition-colors"
+          className="w-full flex items-center justify-between p-4 rounded-xl border border-(--border) bg-(--bg-surface) hover:border-blue-600/50 transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-600/10 text-blue-600 flex items-center justify-center">
               <Share2 size={18} />
             </div>
             <div className="text-left">
-              <p className="text-sm font-semibold text-[var(--text-primary)]">
+              <p className="text-sm font-semibold text-(--text-primary)">
                 LinkedIn Lead Gen Forms
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-(--text-muted)">
                 Connect LinkedIn Company Pages
               </p>
             </div>
           </div>
-          <Plus size={16} className="text-[var(--text-muted)]" />
+          <Plus size={16} className="text-(--text-muted)" />
         </button>
       </div>
 
-      <div className="flex justify-end pt-4 border-t border-[var(--border)] mt-6">
+      <div className="flex justify-end pt-4 border-t border-(--border) mt-6">
         <button
           type="button"
           onClick={() => closeDrawer()}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>
@@ -235,7 +235,7 @@ export default function IntegrationsPage() {
     <div className="p-6 md:p-8 max-w-4xl space-y-12">
       <div>
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+          className="text-2xl font-bold text-[(--text-primary)] mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -243,7 +243,7 @@ export default function IntegrationsPage() {
         >
           Integrations
         </h1>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-[(--text-muted)]">
           Manage omnichannel capture settings for email and social media
           platforms.
         </p>
@@ -253,10 +253,10 @@ export default function IntegrationsPage() {
       <section>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">
+            <h2 className="text-lg font-semibold text-[(--text-primary)] mb-1">
               Inbound Email Parsing
             </h2>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-[(--text-muted)]">
               Automatically create leads when emails are sent to these
               addresses.
             </p>
@@ -264,7 +264,7 @@ export default function IntegrationsPage() {
           {canEdit && (
             <button
               onClick={handleAddEmail}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-[var(--text-primary)] bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--text-muted)] transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-[(--text-primary)] bg-[(--bg-elevated)] border border-[(--border)] hover:border-[(--text-muted)] transition-colors"
             >
               <Plus size={15} />
               Add Address
@@ -273,19 +273,19 @@ export default function IntegrationsPage() {
         </div>
 
         {emailsQuery.isPending ? (
-          <div className="py-8 flex items-center justify-center text-sm text-[var(--text-muted)]">
+          <div className="py-8 flex items-center justify-center text-sm text-[(--text-muted)]">
             <Loader2 size={15} className="animate-spin mr-2" /> Loading...
           </div>
         ) : emails.length === 0 ? (
-          <div className="py-10 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-surface)]">
+          <div className="py-10 text-center border border-dashed border-[(--border)] rounded-xl bg-[(--bg-surface)]">
             <Mail
               size={30}
-              className="mx-auto text-[var(--text-muted)] mb-3 opacity-50"
+              className="mx-auto text-[(--text-muted)] mb-3 opacity-50"
             />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
+            <p className="text-sm font-semibold text-[(--text-primary)]">
               No emails configured
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
+            <p className="text-xs text-[(--text-muted)] mt-1">
               Add an email address to start capturing leads from your inbox.
             </p>
           </div>
@@ -294,17 +294,17 @@ export default function IntegrationsPage() {
             {emails.map((e) => (
               <div
                 key={e.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors"
+                className="flex items-center justify-between p-4 rounded-xl border border-[(--border)] bg-[(--bg-surface)] hover:border-[(--text-muted)]/30 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
-                    <Mail size={15} className="text-[var(--text-muted)]" />
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[(--bg-elevated)] border border-[(--border)]">
+                    <Mail size={15} className="text-[(--text-muted)]" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                    <p className="text-sm font-medium text-[(--text-primary)]">
                       {e.address}
                     </p>
-                    <p className="text-xs text-[var(--text-muted)]">
+                    <p className="text-xs text-[(--text-muted)]">
                       Active since {new Date(e.created_at).toLocaleDateString()}
                     </p>
                   </div>
@@ -312,7 +312,7 @@ export default function IntegrationsPage() {
                 {canEdit && (
                   <button
                     onClick={() => handleDeleteEmail(e.id)}
-                    className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                    className="p-1.5 text-[(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -327,17 +327,17 @@ export default function IntegrationsPage() {
       <section>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">
+            <h2 className="text-lg font-semibold text-[(--text-primary)] mb-1">
               Social Lead Ads
             </h2>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-[(--text-muted)]">
               Map Facebook and LinkedIn lead ad campaigns to this CRM.
             </p>
           </div>
           {canEdit && (
             <button
               onClick={handleAddSocial}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-[var(--text-primary)] bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--text-muted)] transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-[(--text-primary)] bg-[(--bg-elevated)] border border-[(--border)] hover:border-[(--text-muted)] transition-colors"
             >
               <Plus size={15} />
               Connect Page
@@ -346,19 +346,19 @@ export default function IntegrationsPage() {
         </div>
 
         {socialsQuery.isPending ? (
-          <div className="py-8 flex items-center justify-center text-sm text-[var(--text-muted)]">
+          <div className="py-8 flex items-center justify-center text-sm text-[(--text-muted)]">
             <Loader2 size={15} className="animate-spin mr-2" /> Loading...
           </div>
         ) : socials.length === 0 ? (
-          <div className="py-10 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-surface)]">
+          <div className="py-10 text-center border border-dashed border-[(--border)] rounded-xl bg-[(--bg-surface)]">
             <Share2
               size={30}
-              className="mx-auto text-[var(--text-muted)] mb-3 opacity-50"
+              className="mx-auto text-[(--text-muted)] mb-3 opacity-50"
             />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
+            <p className="text-sm font-semibold text-[(--text-primary)]">
               No social accounts connected
             </p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">
+            <p className="text-xs text-[(--text-muted)] mt-1">
               Connect a page to start syncing forms automatically.
             </p>
           </div>
@@ -367,7 +367,7 @@ export default function IntegrationsPage() {
             {socials.map((s) => (
               <div
                 key={s.id}
-                className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors"
+                className="flex items-center justify-between p-4 rounded-xl border border-[(--border)] bg-[(--bg-surface)] hover:border-[(--text-muted)]/30 transition-colors"
               >
                 <div className="flex items-center gap-4">
                   <div
@@ -376,11 +376,11 @@ export default function IntegrationsPage() {
                     <Share2 size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)] capitalize">
+                    <p className="text-sm font-medium text-[(--text-primary)] capitalize">
                       {s.platform} Page
                     </p>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs text-[var(--text-muted)]">
+                      <code className="text-xs text-[(--text-muted)]">
                         ID: {s.page_id}
                       </code>
                       <span className="text-[10px] uppercase tracking-wider font-semibold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
@@ -392,7 +392,7 @@ export default function IntegrationsPage() {
                 {canEdit && (
                   <button
                     onClick={() => handleDeleteSocial(s.id)}
-                    className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                    className="p-1.5 text-[(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>

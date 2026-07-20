@@ -294,7 +294,7 @@ func main() {
 	// ── Capture ───────────────────────────────────────────────────────────────
 	apikeysSvc := apikeys.NewService(apikeysRepo)
 	emailSvc := email.NewService(emailRepo, leadsSvc)
-	socialSvc := social.NewService(socialRepo, leadsSvc)
+	socialSvc := social.NewService(socialRepo, leadsSvc, cfg.Social)
 	visitorsSvc := visitors.NewService(visitorsRepo, leadsSvc)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
