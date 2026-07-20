@@ -34,10 +34,11 @@ type AgendaItem struct {
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
 	Status      string  `json:"status"`
-	DueDate     *string `json:"due_date,omitempty"` // for tasks
+	DueDate     *string `json:"due_date,omitempty"`    // for tasks
 	OccurredAt  *string `json:"occurred_at,omitempty"` // for activities
 	RelatedType string  `json:"related_type,omitempty"`
 	RelatedID   string  `json:"related_id,omitempty"`
+	UpdatedAt   string  `json:"updated_at,omitempty"`
 }
 
 // Agenda is the response for the Smart Task Dashboard view.
@@ -47,12 +48,12 @@ type Agenda struct {
 
 // RepPerformance represents the activity and deal metrics for a single sales rep.
 type RepPerformance struct {
-	RepID        string  `json:"rep_id"`
-	RepName      string  `json:"rep_name"`
-	Calls        int     `json:"calls"`
-	Meetings     int     `json:"meetings"`
-	DealsClosed  int     `json:"deals_closed"`
-	RevenueWon   float64 `json:"revenue_won"`
+	RepID       string  `json:"rep_id"`
+	RepName     string  `json:"rep_name"`
+	Calls       int     `json:"calls"`
+	Meetings    int     `json:"meetings"`
+	DealsClosed int     `json:"deals_closed"`
+	RevenueWon  float64 `json:"revenue_won"`
 }
 
 // Forecast represents the revenue forecast based on deal stages.
@@ -60,4 +61,3 @@ type Forecast struct {
 	TotalPipelineValue float64 `json:"total_pipeline_value"`
 	WeightedForecast   float64 `json:"weighted_forecast"`
 }
-
