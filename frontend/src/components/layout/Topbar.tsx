@@ -22,6 +22,7 @@ import { useUiStore } from "@/stores/uiStore";
 import { useCommandStore } from "@/stores/commandStore";
 import { logout } from "@/lib/auth";
 import { setToken } from "@/lib/token";
+import { resolveAssetUrl } from "@/lib/constants";
 import CommandMenu from "@/components/ui/CommandMenu";
 
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
@@ -53,7 +54,7 @@ export default function Topbar({ orgId }: { orgId: string }) {
   // `theme` can be undefined during SSR / before hydration.
   // `resolvedTheme` is always the actual applied value after mount.
   const { resolvedTheme, setTheme } = useTheme();
-  const { setUiTheme, toggleMobileMenu } = useUiStore();
+  const { setUiTheme } = useUiStore();
   const { setOpen: setCommandOpen } = useCommandStore();
   const { user, reset: resetAuth } = useAuthStore();
   const { reset: resetPerms } = usePermissionStore();
@@ -144,13 +145,6 @@ export default function Topbar({ orgId }: { orgId: string }) {
         >
           {/* ── Hamburger (mobile only) + page title ─ */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <TopbarBtn
-              className="lg:hidden"
-              onClick={toggleMobileMenu}
-              title="Open menu"
-            >
-              <Menu size={18} style={{ color: "var(--text-muted)" }} />
-            </TopbarBtn>
             <span
               style={{
                 fontFamily: FONT_INTER,
@@ -163,9 +157,12 @@ export default function Topbar({ orgId }: { orgId: string }) {
               {pageTitle}
             </span>
           </div>
+        </div>
 
-          {/* ── Left-aligned Search & Quick Actions Trigger ─ */}
-          <div className="hidden sm:flex items-center gap-2">
+        {/* ── Right actions ───────────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {/* ── Search & Quick Actions Trigger ─ */}
+          <div className="hidden sm:flex items-center gap-2 mr-2">
             <button
               onClick={() => setCommandOpen(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors text-sm text-[var(--text-muted)] w-48 lg:w-64"
@@ -196,10 +193,7 @@ export default function Topbar({ orgId }: { orgId: string }) {
               </svg>
             </button>
           </div>
-        </div>
 
-        {/* ── Right actions ───────────────── */}
-        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           {/* Notifications placeholder */}
           <TopbarBtn title="Notifications">
             <Bell size={15} style={{ color: "var(--text-muted)" }} />
@@ -263,9 +257,22 @@ export default function Topbar({ orgId }: { orgId: string }) {
                   fontSize: "0.72rem",
                   fontWeight: 700,
                   color: "white",
+                  overflow: "hidden",
                 }}
               >
-                {initial}
+                {user?.photoURL ? (
+                  <img
+                    src={resolveAssetUrl(user.photoURL) || ""}
+                    alt={user?.displayName || "Profile"}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  initial
+                )}
               </div>
               <ChevronDown
                 size={12}

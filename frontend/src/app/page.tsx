@@ -6,8 +6,15 @@
 // Dark-first · Purple accent · Inter headings · GSAP entrance
 // ═══════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import Link from "next/link";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 import {
   ArrowRight,
   Shield,
@@ -424,14 +431,10 @@ export default function HomePage() {
   const ctaRef = useRef<HTMLDivElement>(null);
   const visualRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     let revert: (() => void) | undefined;
 
-    (async () => {
-      const gsap = (await import("gsap")).default;
-      const { ScrollTrigger } = await import("gsap/ScrollTrigger");
-      gsap.registerPlugin(ScrollTrigger);
-
+    (() => {
       const ctx = gsap.context(() => {
         const ease = "power2.out";
         // play on enter · reverse when scrolled back above trigger → re-plays on next scroll down

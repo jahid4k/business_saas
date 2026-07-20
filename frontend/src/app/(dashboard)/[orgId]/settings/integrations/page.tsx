@@ -13,7 +13,6 @@ import {
   createOrgEmail,
   deleteOrgEmail,
   listOrgSocials,
-  createOrgSocial,
   deleteOrgSocial,
   OrgInboundEmail,
   SocialIntegration,
@@ -49,7 +48,8 @@ function CreateEmailForm({
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div className="mb-2">
         <p className="text-sm text-[var(--text-muted)]">
-          Any emails forwarded to this address will automatically create a Lead in your CRM.
+          Any emails forwarded to this address will automatically create a Lead
+          in your CRM.
         </p>
       </div>
 
@@ -88,70 +88,65 @@ function CreateEmailForm({
   );
 }
 
-function CreateSocialForm({
-  orgId,
-  onSave,
-}: {
-  orgId: string;
-  onSave: () => void;
-}) {
+function ConnectSocialModal({ orgId }: { orgId: string }) {
   const { closeDrawer } = useDrawer();
-  const [platform, setPlatform] = useState("facebook");
-  const [pageId, setPageId] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await createOrgSocial(orgId, platform, pageId);
-      toast.success("Social page configured.");
-      onSave();
-      closeDrawer();
-    } catch {
-      toast.error("Failed to configure social page");
-    } finally {
-      setLoading(false);
-    }
+  const handleConnect = (platform: string) => {
+    window.location.href = `/api/v1/pub/social/auth/${platform}?orgId=${orgId}`;
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 space-y-6">
-      <div className="mb-2">
+    <div className="p-6 space-y-6">
+      <div className="mb-4">
         <p className="text-sm text-[var(--text-muted)]">
-          Connect your social media pages to automatically sync Lead Ads directly into your CRM.
+          Select a platform to connect. You will be redirected to authorize
+          BusinessSAAS to access your pages and leads.
         </p>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-          Platform
-        </label>
-        <select
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-          className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] focus:outline-none focus:border-purple-500"
+      <div className="space-y-3">
+        <button
+          onClick={() => handleConnect("facebook")}
+          className="w-full flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-blue-500/50 transition-colors"
         >
-          <option value="facebook">Facebook Lead Ads</option>
-          <option value="linkedin">LinkedIn Lead Gen Forms</option>
-        </select>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+              <Share2 size={18} />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                Facebook Lead Ads
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Connect Meta Business Pages
+              </p>
+            </div>
+          </div>
+          <Plus size={16} className="text-[var(--text-muted)]" />
+        </button>
+
+        <button
+          onClick={() => handleConnect("linkedin")}
+          className="w-full flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-blue-600/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-600/10 text-blue-600 flex items-center justify-center">
+              <Share2 size={18} />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-[var(--text-primary)]">
+                LinkedIn Lead Gen Forms
+              </p>
+              <p className="text-xs text-[var(--text-muted)]">
+                Connect LinkedIn Company Pages
+              </p>
+            </div>
+          </div>
+          <Plus size={16} className="text-[var(--text-muted)]" />
+        </button>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
-          Page ID
-        </label>
-        <input
-          required
-          type="text"
-          placeholder="e.g. 104938291039"
-          className="w-full px-3 py-2 bg-transparent border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500"
-          value={pageId}
-          onChange={(e) => setPageId(e.target.value)}
-        />
-      </div>
-
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border)]">
+      <div className="flex justify-end pt-4 border-t border-[var(--border)] mt-6">
         <button
           type="button"
           onClick={() => closeDrawer()}
@@ -159,16 +154,8 @@ function CreateSocialForm({
         >
           Cancel
         </button>
-        <button
-          type="submit"
-          disabled={loading || !pageId.trim()}
-          className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-50 transition-colors flex items-center gap-2"
-        >
-          {loading && <Loader2 size={16} className="animate-spin" />}
-          Add Page
-        </button>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -200,7 +187,11 @@ export default function IntegrationsPage() {
       content: (
         <CreateEmailForm
           orgId={orgId}
-          onSave={() => queryClient.invalidateQueries({ queryKey: ["integrations", "email", orgId] })}
+          onSave={() =>
+            queryClient.invalidateQueries({
+              queryKey: ["integrations", "email", orgId],
+            })
+          }
         />
       ),
     });
@@ -209,8 +200,9 @@ export default function IntegrationsPage() {
   const handleDeleteEmail = async (id: string) => {
     try {
       await deleteOrgEmail(orgId, id);
-      queryClient.setQueryData<OrgInboundEmail[]>(["integrations", "email", orgId], (old) =>
-        (old ?? []).filter((e) => e.id !== id),
+      queryClient.setQueryData<OrgInboundEmail[]>(
+        ["integrations", "email", orgId],
+        (old) => (old ?? []).filter((e) => e.id !== id),
       );
       toast.success("Email address removed.");
     } catch {
@@ -222,20 +214,16 @@ export default function IntegrationsPage() {
     openDrawer({
       title: "Connect Social Page",
       width: "md",
-      content: (
-        <CreateSocialForm
-          orgId={orgId}
-          onSave={() => queryClient.invalidateQueries({ queryKey: ["integrations", "social", orgId] })}
-        />
-      ),
+      content: <ConnectSocialModal orgId={orgId} />,
     });
   };
 
   const handleDeleteSocial = async (id: string) => {
     try {
       await deleteOrgSocial(orgId, id);
-      queryClient.setQueryData<SocialIntegration[]>(["integrations", "social", orgId], (old) =>
-        (old ?? []).filter((s) => s.id !== id),
+      queryClient.setQueryData<SocialIntegration[]>(
+        ["integrations", "social", orgId],
+        (old) => (old ?? []).filter((s) => s.id !== id),
       );
       toast.success("Social integration removed.");
     } catch {
@@ -248,12 +236,16 @@ export default function IntegrationsPage() {
       <div>
         <h1
           className="text-2xl font-bold text-[var(--text-primary)] mb-1"
-          style={{ fontFamily: "var(--font-syne, Syne, sans-serif)", letterSpacing: "-0.02em" }}
+          style={{
+            fontFamily: "var(--font-syne, Syne, sans-serif)",
+            letterSpacing: "-0.02em",
+          }}
         >
           Integrations
         </h1>
         <p className="text-sm text-[var(--text-muted)]">
-          Manage omnichannel capture settings for email and social media platforms.
+          Manage omnichannel capture settings for email and social media
+          platforms.
         </p>
       </div>
 
@@ -261,9 +253,12 @@ export default function IntegrationsPage() {
       <section>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">Inbound Email Parsing</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">
+              Inbound Email Parsing
+            </h2>
             <p className="text-sm text-[var(--text-muted)]">
-              Automatically create leads when emails are sent to these addresses.
+              Automatically create leads when emails are sent to these
+              addresses.
             </p>
           </div>
           {canEdit && (
@@ -283,25 +278,42 @@ export default function IntegrationsPage() {
           </div>
         ) : emails.length === 0 ? (
           <div className="py-10 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-surface)]">
-            <Mail size={30} className="mx-auto text-[var(--text-muted)] mb-3 opacity-50" />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">No emails configured</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Add an email address to start capturing leads from your inbox.</p>
+            <Mail
+              size={30}
+              className="mx-auto text-[var(--text-muted)] mb-3 opacity-50"
+            />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              No emails configured
+            </p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Add an email address to start capturing leads from your inbox.
+            </p>
           </div>
         ) : (
           <div className="space-y-2.5">
             {emails.map((e) => (
-              <div key={e.id} className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors">
+              <div
+                key={e.id}
+                className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors"
+              >
                 <div className="flex items-center gap-4">
                   <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
                     <Mail size={15} className="text-[var(--text-muted)]" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{e.address}</p>
-                    <p className="text-xs text-[var(--text-muted)]">Active since {new Date(e.created_at).toLocaleDateString()}</p>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {e.address}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Active since {new Date(e.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
                 {canEdit && (
-                  <button onClick={() => handleDeleteEmail(e.id)} className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors">
+                  <button
+                    onClick={() => handleDeleteEmail(e.id)}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                  >
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -315,7 +327,9 @@ export default function IntegrationsPage() {
       <section>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">Social Lead Ads</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">
+              Social Lead Ads
+            </h2>
             <p className="text-sm text-[var(--text-muted)]">
               Map Facebook and LinkedIn lead ad campaigns to this CRM.
             </p>
@@ -337,27 +351,49 @@ export default function IntegrationsPage() {
           </div>
         ) : socials.length === 0 ? (
           <div className="py-10 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-surface)]">
-            <Share2 size={30} className="mx-auto text-[var(--text-muted)] mb-3 opacity-50" />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">No social accounts connected</p>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Connect a page to start syncing forms automatically.</p>
+            <Share2
+              size={30}
+              className="mx-auto text-[var(--text-muted)] mb-3 opacity-50"
+            />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              No social accounts connected
+            </p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Connect a page to start syncing forms automatically.
+            </p>
           </div>
         ) : (
           <div className="space-y-2.5">
             {socials.map((s) => (
-              <div key={s.id} className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors">
+              <div
+                key={s.id}
+                className="flex items-center justify-between p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/30 transition-colors"
+              >
                 <div className="flex items-center gap-4">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${s.platform === 'facebook' ? 'bg-blue-500/10 border-blue-500/20 text-blue-500' : 'bg-blue-600/10 border-blue-600/20 text-blue-600'}`}>
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center border ${s.platform === "facebook" ? "bg-blue-500/10 border-blue-500/20 text-blue-500" : "bg-blue-600/10 border-blue-600/20 text-blue-600"}`}
+                  >
                     <Share2 size={16} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[var(--text-primary)] capitalize">{s.platform} Page</p>
+                    <p className="text-sm font-medium text-[var(--text-primary)] capitalize">
+                      {s.platform} Page
+                    </p>
                     <div className="flex items-center gap-2">
-                      <code className="text-xs text-[var(--text-muted)]">ID: {s.page_id}</code>
+                      <code className="text-xs text-[var(--text-muted)]">
+                        ID: {s.page_id}
+                      </code>
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded">
+                        Connected
+                      </span>
                     </div>
                   </div>
                 </div>
                 {canEdit && (
-                  <button onClick={() => handleDeleteSocial(s.id)} className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors">
+                  <button
+                    onClick={() => handleDeleteSocial(s.id)}
+                    className="p-1.5 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
+                  >
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -366,7 +402,6 @@ export default function IntegrationsPage() {
           </div>
         )}
       </section>
-
     </div>
   );
 }
