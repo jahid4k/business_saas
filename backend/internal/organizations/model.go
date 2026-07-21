@@ -42,3 +42,15 @@ type MembershipWithRole struct {
 	Role     string    `json:"role"`
 	MemberID string    `json:"membershipId"`
 }
+
+type UpdateBusinessRequest struct {
+	Name      string `json:"name"`
+	LegalName string `json:"legalName"`
+	Type      string `json:"type"`
+	Industry  string `json:"industry"`
+	Website   string `json:"website"`
+	LogoURL   string `json:"logoURL"`
+	Country   string `json:"country"`
+	Timezone  string `json:"timezone"`
+	Currency  string `json:"currency"`
+}

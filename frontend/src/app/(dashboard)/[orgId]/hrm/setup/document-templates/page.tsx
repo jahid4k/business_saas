@@ -111,7 +111,7 @@ export default function DocumentTemplatesPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -119,7 +119,7 @@ export default function DocumentTemplatesPage({
           >
             Document Templates
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             {items.length} {items.length === 1 ? "template" : "templates"}
           </p>
         </div>
@@ -135,16 +135,16 @@ export default function DocumentTemplatesPage({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <FileText size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <FileText size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No document templates yet
           </p>
         </div>
@@ -155,16 +155,16 @@ export default function DocumentTemplatesPage({
             return (
               <div
                 key={t.id}
-                className={`group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <FileText size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                  <p className="text-sm font-medium text-(--text-primary)">
                     {t.name}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {t.document_type.replace("_", " ")}
                     {t.available_variables.length > 0
                       ? ` · ${t.available_variables.length} variables`
@@ -182,8 +182,8 @@ export default function DocumentTemplatesPage({
                   </span>
                 </div>
                 {deleteConfirm === t.id ? (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -194,24 +194,24 @@ export default function DocumentTemplatesPage({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                      className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                     >
                       No
                     </button>
                   </div>
                 ) : (
-                  <div className="relative flex-shrink-0">
+                  <div className="relative shrink-0">
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : t.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         <button
                           onClick={() => openPreview(t)}
-                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                         >
                           <Eye size={13} />
                           Preview
@@ -220,7 +220,7 @@ export default function DocumentTemplatesPage({
                           <>
                             <button
                               onClick={() => openEdit(t)}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                             >
                               <Pencil size={13} />
                               Edit

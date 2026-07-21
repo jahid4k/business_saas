@@ -80,6 +80,40 @@ func (h *Handler) Get(c fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"organization": org}, "OK")
 }
 
+func (h *Handler) Update(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
+	organizationID := c.Params("id")
+	if organizationID == "" {
+		return response.BadRequest(c, "MISSING_ID", "Organization ID is required")
+	}
+	var req UpdateBusinessRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	org, err := h.service.Update(c.Context(), organizationID, userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return response.NotFound(c, "ORGANIZATION_NOT_FOUND", "Organization not found")
+		case errors.Is(err, ErrNotMember):
+			return response.Forbidden(c, "NOT_A_MEMBER", "You are not a member of this organization")
+		case err.Error() == "insufficient permissions to update organization":
+			return response.Forbidden(c, "INSUFFICIENT_PERMISSIONS", "You do not have permission to update this organization")
+		case errors.Is(err, ErrInvalidName):
+			return response.BadRequest(c, "INVALID_NAME", "Organization name must be between 2 and 100 characters")
+		default:
+			log.Error("organization: Update error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+	return response.OK(c, fiber.Map{"organization": org}, "Organization updated successfully")
+}
+
 func (h *Handler) Switch(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := c.Locals("user_id").(string)

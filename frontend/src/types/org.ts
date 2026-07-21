@@ -54,3 +54,15 @@ export interface CreateOrgRequest {
   timezone?: string;
   currency?: string;
 }
+
+export interface UpdateOrgRequest {
+  name: string;
+  legalName?: string;
+  type?: string;
+  industry?: string;
+  website?: string;
+  logoURL?: string;
+  country?: string;
+  timezone?: string;
+  currency?: string;
+}

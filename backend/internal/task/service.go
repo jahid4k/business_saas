@@ -92,6 +92,8 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 		Description: description,
 		Status:      status,
 		DueDate:     dueDate,
+		RelatedType: req.RelatedType,
+		RelatedID:   req.RelatedID,
 	}
 	if createdBy != "" {
 		t.CreatedBy = &createdBy
@@ -160,6 +162,13 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, taskRef string, req Upd
 			return nil, err
 		}
 		t.DueDate = dueDate // "" -> nil (cleared); RFC3339 string -> set
+	}
+
+	if req.RelatedType != nil {
+		t.RelatedType = req.RelatedType
+	}
+	if req.RelatedID != nil {
+		t.RelatedID = req.RelatedID
 	}
 
 	if req.AssignedTo != nil {

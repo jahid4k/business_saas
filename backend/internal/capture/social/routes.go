@@ -10,10 +10,14 @@ func RegisterRoutes(
 	requireOrgMatch fiber.Handler,
 ) {
 	pub := router.Group("/pub/social")
-	
+
 	// Unauthenticated inbound webhook endpoint (e.g. for Facebook Lead Ads).
 	// We handle the hub.challenge (GET) and payload parsing (POST) here.
 	pub.All("/:platform/webhook", handler.HandleWebhook)
+
+	// OAuth flow routes
+	pub.Get("/auth/:platform", handler.InitOAuth)
+	pub.Get("/auth/:platform/callback", handler.OAuthCallback)
 
 	// Authenticated settings routes
 	org := router.Group("/organizations/:orgId/capture/social", requireAuth, requireOrgMatch, permFn("settings.view"))

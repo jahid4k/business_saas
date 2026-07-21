@@ -81,7 +81,7 @@ export default function PayrollPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -89,13 +89,13 @@ export default function PayrollPage({
           >
             Payroll
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Monthly runs and employee payslips
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["runs", "payslips"] as TabKey[]).map((key) => (
           <button
             key={key}
@@ -103,7 +103,7 @@ export default function PayrollPage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "runs" ? "Runs" : "Payslips"}
@@ -230,16 +230,16 @@ function RunsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Receipt size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Receipt size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No payroll runs yet
           </p>
         </div>
@@ -250,17 +250,17 @@ function RunsView({
             return (
               <div
                 key={run.id}
-                className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+                className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <Receipt size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                  <p className="text-sm font-medium text-(--text-primary)">
                     {MONTHS[run.period_month - 1]} {run.period_year}
                     {run.description ? ` — ${run.description}` : ""}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {run.total_employees} employees · Gross{" "}
                     {run.total_gross_pay} · Deductions {run.total_deductions} ·
                     Net {run.total_net_pay} {run.currency}
@@ -271,7 +271,7 @@ function RunsView({
                     {run.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   {canCompute && run.status === "draft" && (
                     <button
                       disabled={busy}
@@ -359,7 +359,7 @@ function PayslipsView({
         <select
           value={runFilter}
           onChange={(e) => setRunFilter(e.target.value)}
-          className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+          className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
         >
           <option value="">All runs</option>
           {runs.map((r) => (
@@ -375,16 +375,16 @@ function PayslipsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <FileSpreadsheet size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <FileSpreadsheet size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             {runFilter
               ? "No payslips for this run yet — compute it first."
               : "No payslips yet"}
@@ -397,29 +397,29 @@ function PayslipsView({
             return (
               <div
                 key={p.id}
-                className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] overflow-hidden"
+                className="rounded-xl bg-(--bg-surface) border border-(--border) overflow-hidden"
               >
                 <button
                   onClick={() => setExpandedId(expanded ? null : p.id)}
-                  className="w-full flex items-start gap-3.5 px-4 py-3.5 text-left hover:bg-[var(--bg-elevated)]/40 transition-colors"
+                  className="w-full flex items-start gap-3.5 px-4 py-3.5 text-left hover:bg-(--bg-elevated)/40 transition-colors"
                 >
                   <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                     <FileSpreadsheet size={15} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                    <p className="text-sm font-medium text-(--text-primary)">
                       {empName(p.employee_id)}
                     </p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-xs text-(--text-muted) mt-0.5">
                       {MONTHS[p.period_month - 1]} {p.period_year}
                       {p.salary_structure_name
                         ? ` · ${p.salary_structure_name}`
                         : ""}{" "}
                       · {p.present_days}/{p.work_days} days
                     </p>
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                    <p className="text-xs text-(--text-muted) mt-0.5">
                       Gross {p.gross_pay} · Deductions {p.total_deductions} ·{" "}
-                      <span className="text-[var(--text-primary)] font-medium">
+                      <span className="text-(--text-primary) font-medium">
                         Net {p.net_pay}
                       </span>{" "}
                       {p.currency}
@@ -428,19 +428,19 @@ function PayslipsView({
                   {expanded ? (
                     <ChevronUp
                       size={15}
-                      className="text-[var(--text-muted)] flex-shrink-0 mt-1"
+                      className="text-(--text-muted) shrink-0 mt-1"
                     />
                   ) : (
                     <ChevronDown
                       size={15}
-                      className="text-[var(--text-muted)] flex-shrink-0 mt-1"
+                      className="text-(--text-muted) shrink-0 mt-1"
                     />
                   )}
                 </button>
                 {expanded && (
-                  <div className="px-4 pb-4 pt-1 border-t border-[var(--border)]">
+                  <div className="px-4 pb-4 pt-1 border-t border-(--border)">
                     {(p.lines ?? []).length === 0 ? (
-                      <p className="text-xs text-[var(--text-muted)] py-2">
+                      <p className="text-xs text-(--text-muted) py-2">
                         No component lines — this employee had no salary
                         structure assigned for this run.
                       </p>
@@ -454,9 +454,9 @@ function PayslipsView({
                               key={line.id}
                               className="flex items-center justify-between text-xs py-1"
                             >
-                              <span className="text-[var(--text-secondary)]">
+                              <span className="text-(--text-secondary)">
                                 {line.component_name}{" "}
-                                <span className="text-[var(--text-muted)]">
+                                <span className="text-(--text-muted)">
                                   ({line.component_type})
                                 </span>
                               </span>
@@ -464,7 +464,7 @@ function PayslipsView({
                                 className={
                                   line.component_type === "deduction"
                                     ? "text-red-400"
-                                    : "text-[var(--text-primary)]"
+                                    : "text-(--text-primary)"
                                 }
                               >
                                 {line.component_type === "deduction" ? "-" : ""}

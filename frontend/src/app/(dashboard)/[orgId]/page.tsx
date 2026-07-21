@@ -4,6 +4,9 @@ import { use, type ElementType } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
+import { getDashboardMetrics } from "@/lib/dashboard";
 import {
   // CRM
   Users,
@@ -20,6 +23,8 @@ import {
   Clock,
   Target,
   DollarSign,
+  Loader2,
+  Building2,
 } from "lucide-react";
 
 // --- Data Structures ---
@@ -88,6 +93,11 @@ export default function OrgDashboardPage({
   const { currentOrg, user } = useAuthStore();
   const { hasPermission } = usePermissionStore();
 
+  const { data: dashboard, isLoading } = useQuery({
+    queryKey: queryKeys.dashboard.metrics(orgId),
+    queryFn: () => getDashboardMetrics(orgId),
+  });
+
   const firstName = user?.firstName ?? user?.displayName ?? "there";
   const orgName = currentOrg?.name ?? "your workspace";
 
@@ -110,30 +120,40 @@ export default function OrgDashboardPage({
       </div>
 
       {/* ── KPI Pulse Check ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
-        <KPICard
-          title="Active Pipeline"
-          value="$124,500"
-          trend="+12% from last month"
-          icon={DollarSign}
-          color="blue"
-        />
-        <KPICard
-          title="Total Headcount"
-          value="42"
-          trend="+3 this quarter"
-          icon={Users}
-          color="purple"
-        />
-        <KPICard
-          title="Pending Approvals"
-          value="5"
-          trend="3 Leave, 2 Payroll"
-          icon={Bell}
-          color="orange"
-          alert
-        />
-      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+          <KPICard
+            title="Active Pipeline"
+            value={new Intl.NumberFormat("en-US", {
+              style: "currency",
+              currency: "USD",
+              maximumFractionDigits: 0,
+            }).format(dashboard?.kpis.active_pipeline_value || 0)}
+            trend="Current Open Deals"
+            icon={DollarSign}
+            color="blue"
+          />
+          <KPICard
+            title="Total Headcount"
+            value={(dashboard?.kpis.total_headcount || 0).toString()}
+            trend="Active Employees"
+            icon={Users}
+            color="purple"
+          />
+          <KPICard
+            title="Pending Approvals"
+            value={(dashboard?.kpis.pending_approvals || 0).toString()}
+            trend="Requires Action"
+            icon={Bell}
+            color="orange"
+            alert={(dashboard?.kpis.pending_approvals || 0) > 0}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* ── Main Content Area (Quick Links) ── */}
@@ -183,8 +203,52 @@ export default function OrgDashboardPage({
           </section>
         </div>
 
-        {/* ── Sidebar (Action Center) ── */}
+        {/* ── Sidebar (Action Center & Workspace Info) ── */}
         <div className="space-y-6">
+          {/* Workspace Info Card */}
+          <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-[#0f0f0f] p-5 shadow-sm">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+              <Building2 size={16} className="text-indigo-500" />
+              Workspace Info
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-[#888]">
+                  Legal Name
+                </span>
+                <span className="text-gray-900 dark:text-[#eee] font-medium">
+                  {currentOrg?.legalName || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-[#888]">Industry</span>
+                <span className="text-gray-900 dark:text-[#eee] font-medium">
+                  {currentOrg?.industry || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-[#888]">Type</span>
+                <span className="text-gray-900 dark:text-[#eee] font-medium">
+                  {currentOrg?.type || "—"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500 dark:text-[#888]">Timezone</span>
+                <span className="text-gray-900 dark:text-[#eee] font-medium">
+                  {currentOrg?.timezone || "UTC"}
+                </span>
+              </div>
+            </div>
+
+            <Link
+              href={`/${orgId}/settings/workspace`}
+              className="w-full flex justify-center items-center mt-5 py-2.5 rounded-lg text-sm font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors no-underline"
+            >
+              Manage Workspace
+            </Link>
+          </div>
+
           <div className="rounded-2xl border border-gray-200 dark:border-white/8 bg-white dark:bg-[#0f0f0f] p-5 shadow-sm">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
               <CheckSquare size={16} className="text-green-500" />
@@ -192,21 +256,26 @@ export default function OrgDashboardPage({
             </h3>
 
             <div className="space-y-3">
-              <ActionItem
-                title="Review Leave Request"
-                desc="Sarah Jenkins (3 days)"
-                time="2 hours ago"
-              />
-              <ActionItem
-                title="Stagnant Deal Alert"
-                desc="Acme Corp ($15k) no activity for 7 days"
-                time="Today"
-              />
-              <ActionItem
-                title="Payroll Sign-off"
-                desc="Due by Friday 5 PM"
-                time="Yesterday"
-              />
+              {isLoading ? (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+                </div>
+              ) : dashboard?.action_items &&
+                dashboard.action_items.length > 0 ? (
+                dashboard.action_items.map((item) => (
+                  <ActionItem
+                    key={item.id}
+                    title={item.title}
+                    desc={item.description}
+                    time={formatTimeAgo(item.timestamp)}
+                    actionUrl={`/${orgId}/${item.action_url}`}
+                  />
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No pending action items.
+                </p>
+              )}
             </div>
 
             <button className="w-full mt-5 py-2.5 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-white/4 hover:bg-gray-100 dark:hover:bg-white/8 transition-colors border border-gray-200 dark:border-white/5">
@@ -299,16 +368,16 @@ function QuickLinkCard({ link, orgId, color }: QuickLinkCardProps) {
   const Icon = link.icon;
 
   const hoverColors: Record<string, string> = {
-    blue: "hover:border-blue-400/40 dark:hover:border-blue-500/30 hover:bg-blue-50/60 dark:hover:bg-blue-500/[0.06] text-blue-600 dark:text-blue-400 group-hover:text-blue-500",
+    blue: "hover:border-blue-400/40 dark:hover:border-blue-500/30 hover:bg-blue-50/60 dark:hover:bg-blue-500/6 text-blue-600 dark:text-blue-400 group-hover:text-blue-500",
     purple:
-      "hover:border-purple-400/40 dark:hover:border-purple-500/30 hover:bg-purple-50/60 dark:hover:bg-purple-500/[0.06] text-purple-600 dark:text-purple-400 group-hover:text-purple-500",
+      "hover:border-purple-400/40 dark:hover:border-purple-500/30 hover:bg-purple-50/60 dark:hover:bg-purple-500/6 text-purple-600 dark:text-purple-400 group-hover:text-purple-500",
   };
   const activeHover = hoverColors[color] || "";
 
   const iconBg =
     color === "blue"
-      ? "bg-blue-100 dark:bg-blue-500/[0.12]"
-      : "bg-purple-100 dark:bg-purple-500/[0.12]";
+      ? "bg-blue-100 dark:bg-blue-500/12"
+      : "bg-purple-100 dark:bg-purple-500/12";
 
   return (
     <Link
@@ -353,11 +422,12 @@ interface ActionItemProps {
   title: string;
   desc: string;
   time: string;
+  actionUrl?: string;
 }
 
-function ActionItem({ title, desc, time }: ActionItemProps) {
-  return (
-    <div className="group flex gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/3 transition-colors cursor-pointer border border-transparent hover:border-gray-100 dark:hover:border-white/5">
+function ActionItem({ title, desc, time, actionUrl }: ActionItemProps) {
+  const content = (
+    <>
       <div className="w-2 h-2 mt-2 rounded-full bg-orange-500 shrink-0" />
       <div>
         <p className="text-sm font-medium text-gray-800 dark:text-[#ddd] mb-0.5">
@@ -368,8 +438,21 @@ function ActionItem({ title, desc, time }: ActionItemProps) {
           {time}
         </p>
       </div>
-    </div>
+    </>
   );
+
+  const cls =
+    "group flex gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-white/3 transition-colors cursor-pointer border border-transparent hover:border-gray-100 dark:hover:border-white/5 no-underline";
+
+  if (actionUrl) {
+    return (
+      <Link href={actionUrl} className={cls}>
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={cls}>{content}</div>;
 }
 
 function timeGreeting() {
@@ -377,4 +460,20 @@ function timeGreeting() {
   if (h < 12) return "morning";
   if (h < 17) return "afternoon";
   return "evening";
+}
+
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return date.toLocaleDateString();
 }

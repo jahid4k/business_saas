@@ -70,11 +70,11 @@ function formatDate(iso?: string) {
 
 function dueDateColor(iso?: string, status?: TaskStatus) {
   if (!iso || status === "done" || status === "cancelled")
-    return "text-[var(--text-muted)]";
+    return "text-(--text-muted)";
   const daysLeft = (new Date(iso).getTime() - Date.now()) / 86_400_000;
   if (daysLeft < 0) return "text-red-400";
   if (daysLeft < 3) return "text-amber-400";
-  return "text-[var(--text-muted)]";
+  return "text-(--text-muted)";
 }
 
 // ── Page ──────────────────────────────────────────────────
@@ -224,7 +224,7 @@ export default function TasksPage({
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1
-              className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+              className="text-2xl font-bold text-(--text-primary) mb-1"
               style={{
                 fontFamily: "var(--font-syne, Syne, sans-serif)",
                 letterSpacing: "-0.02em",
@@ -232,7 +232,7 @@ export default function TasksPage({
             >
               Tasks
             </h1>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-(--text-muted)">
               {tasks.length} {tasks.length === 1 ? "task" : "tasks"} total
             </p>
           </div>
@@ -257,7 +257,7 @@ export default function TasksPage({
         )}
 
         {/* Filter tabs */}
-        <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 mb-6 border-b border-(--border)">
           {FILTER_TABS.map((tab) => {
             const count =
               tab.key === "all"
@@ -274,7 +274,7 @@ export default function TasksPage({
                   ${
                     active
                       ? "text-purple-400 border-purple-500"
-                      : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                      : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                   }
                 `}
               >
@@ -286,7 +286,7 @@ export default function TasksPage({
                     ${
                       active
                         ? "bg-purple-500/15 text-purple-400"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+                        : "bg-(--bg-elevated) text-(--text-muted)"
                     }
                   `}
                   >
@@ -301,7 +301,7 @@ export default function TasksPage({
         {/* Loading */}
         {tasksQuery.isPending ? (
           <div className="flex items-center justify-center py-20">
-            <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
+            <div className="flex items-center gap-3 text-sm text-(--text-muted)">
               <Loader2 size={16} className="animate-spin text-purple-500" />
               Loading tasks…
             </div>
@@ -309,15 +309,15 @@ export default function TasksPage({
         ) : /* Empty state */
         filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-              <CheckCircle2 size={20} className="text-[var(--text-muted)]" />
+            <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+              <CheckCircle2 size={20} className="text-(--text-muted)" />
             </div>
-            <p className="text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <p className="text-sm font-medium text-(--text-secondary) mb-1">
               {activeFilter === "all"
                 ? "No tasks yet"
                 : `No ${STATUS_STYLE[activeFilter as TaskStatus]?.label.toLowerCase()} tasks`}
             </p>
-            <p className="text-xs text-[var(--text-muted)] mb-4">
+            <p className="text-xs text-(--text-muted) mb-4">
               {canCreate && activeFilter === "all"
                 ? "Create your first task to get started."
                 : "Nothing here for this filter."}
@@ -343,11 +343,11 @@ export default function TasksPage({
               return (
                 <div
                   key={task.id}
-                  className="task-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150"
+                  className="task-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150"
                 >
                   {/* Status dot */}
                   <div
-                    className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${s.dot}`}
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${s.dot}`}
                   />
 
                   {/* Main content */}
@@ -355,14 +355,14 @@ export default function TasksPage({
                     <p
                       className={`text-sm font-medium leading-snug ${
                         task.status === "done" || task.status === "cancelled"
-                          ? "line-through text-[var(--text-muted)]"
-                          : "text-[var(--text-primary)]"
+                          ? "line-through text-(--text-muted)"
+                          : "text-(--text-primary)"
                       }`}
                     >
                       {task.title}
                     </p>
                     {task.description && (
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                         {task.description}
                       </p>
                     )}
@@ -385,8 +385,8 @@ export default function TasksPage({
 
                   {/* Right: delete confirm OR action menu */}
                   {confirming ? (
-                    <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                      <span className="text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -397,7 +397,7 @@ export default function TasksPage({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                        className="px-2.5 py-1 rounded-md text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                       >
                         No
                       </button>
@@ -405,7 +405,7 @@ export default function TasksPage({
                   ) : (
                     (canUpdate || canDelete) && (
                       <div
-                        className="relative flex-shrink-0"
+                        className="relative shrink-0"
                         ref={(el) => {
                           if (el) menuRefs.current.set(task.id, el);
                           else menuRefs.current.delete(task.id);
@@ -415,17 +415,17 @@ export default function TasksPage({
                           onClick={() =>
                             setOpenMenuId(menuOpen ? null : task.id)
                           }
-                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                         >
                           <MoreHorizontal size={15} />
                         </button>
 
                         {menuOpen && (
-                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                             {canUpdate && (
                               <button
                                 onClick={() => openEdit(task)}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                               >
                                 <Pencil size={13} />
                                 Edit
@@ -456,7 +456,7 @@ export default function TasksPage({
 
         {/* Footer count */}
         {!tasksQuery.isPending && filtered.length > 0 && (
-          <p className="mt-5 text-xs text-[var(--text-muted)]">
+          <p className="mt-5 text-xs text-(--text-muted)">
             Showing {filtered.length} of {tasks.length}{" "}
             {tasks.length === 1 ? "task" : "tasks"}
           </p>

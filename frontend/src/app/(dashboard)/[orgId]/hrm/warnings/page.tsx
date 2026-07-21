@@ -236,7 +236,7 @@ export default function WarningsPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -244,7 +244,7 @@ export default function WarningsPage({
           >
             Warnings
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             {items.length} {items.length === 1 ? "warning" : "warnings"} total
           </p>
         </div>
@@ -259,7 +259,7 @@ export default function WarningsPage({
         )}
       </div>
 
-      <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)] flex-wrap">
+      <div className="flex items-center gap-0.5 mb-6 border-b border-(--border) flex-wrap">
         {STATUS_TABS.map((key) => {
           const count =
             key === "all"
@@ -273,7 +273,7 @@ export default function WarningsPage({
               className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                 active
                   ? "text-purple-400 border-purple-500"
-                  : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                  : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
               }`}
             >
               {key === "all" ? "All" : key}
@@ -284,13 +284,13 @@ export default function WarningsPage({
       </div>
 
       {appealId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <textarea
             value={appealReason}
             onChange={(e) => setAppealReason(e.target.value)}
             rows={2}
             placeholder="Reason for appeal"
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button
@@ -301,7 +301,7 @@ export default function WarningsPage({
             </button>
             <button
               onClick={() => setAppealId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -310,7 +310,7 @@ export default function WarningsPage({
       )}
 
       {closeId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <textarea
             value={closeResolution}
             onChange={(e) => setCloseResolution(e.target.value)}
@@ -320,7 +320,7 @@ export default function WarningsPage({
                 ? "Appeal resolution (required)"
                 : "Closing note (optional)"
             }
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button
@@ -331,7 +331,7 @@ export default function WarningsPage({
             </button>
             <button
               onClick={() => setCloseId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -340,16 +340,16 @@ export default function WarningsPage({
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <ShieldAlert size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <ShieldAlert size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             {statusFilter === "all"
               ? "No warnings yet"
               : `No ${statusFilter} warnings`}
@@ -371,20 +371,20 @@ export default function WarningsPage({
             return (
               <div
                 key={w.id}
-                className={`wn-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`wn-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <ShieldAlert size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {w.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {empName(w.employee_id)} · {w.warning_type_name} (severity{" "}
                     {w.severity_level}) · Incident {fmtDate(w.incident_date)}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                  <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                     {w.description}
                   </p>
                   {w.response_deadline && w.status === "issued" && (
@@ -403,7 +403,7 @@ export default function WarningsPage({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(w.id, el);
                       else menuRefs.current.delete(w.id);
@@ -411,12 +411,12 @@ export default function WarningsPage({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : w.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {w.approval_instance_id && (
                           <button
                             onClick={() => {
@@ -431,7 +431,7 @@ export default function WarningsPage({
                               });
                               setOpenMenuId(null);
                             }}
-                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                           >
                             View approval
                           </button>
@@ -475,7 +475,7 @@ export default function WarningsPage({
                                 setCloseId(w.id);
                                 setOpenMenuId(null);
                               }}
-                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                             >
                               Close
                             </button>

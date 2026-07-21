@@ -57,6 +57,7 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
@@ -202,6 +203,7 @@ func main() {
 	avatarRepo := user.NewAvatarRepository(pgPool)
 	authzRepo := authz.NewRepository(pgPool)
 	businessRepo := organizations.NewRepository(pgPool)
+	dashboardRepo := dashboard.NewRepository(pgPool)
 	auditRepo := audit.NewRepository(pgPool)
 	securityRepo := security.NewRepository(pgPool)
 	taskRepo := task.NewRepository(pgPool)
@@ -276,6 +278,7 @@ func main() {
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
+	dashboardSvc := dashboard.NewService(dashboardRepo)
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
@@ -294,7 +297,7 @@ func main() {
 	// ── Capture ───────────────────────────────────────────────────────────────
 	apikeysSvc := apikeys.NewService(apikeysRepo)
 	emailSvc := email.NewService(emailRepo, leadsSvc)
-	socialSvc := social.NewService(socialRepo, leadsSvc)
+	socialSvc := social.NewService(socialRepo, leadsSvc, cfg.Social)
 	visitorsSvc := visitors.NewService(visitorsRepo, leadsSvc)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
@@ -367,8 +370,9 @@ func main() {
 	userHandler := user.NewHandler(userSvc, avatarSvc)
 	authzHandler := authz.NewHandler(authzSvc)
 	businessHandler := organizations.NewHandler(businessSvc)
+	dashboardHandler := dashboard.NewHandler(dashboardSvc)
 	securityHandler := security.NewHandler(securitySvc)
-	taskHandler := task.NewHandler(taskSvc)
+	taskHandler := task.NewHandler(taskSvc, authzSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsHandler := contacts.NewHandler(contactsSvc)
@@ -458,7 +462,7 @@ func main() {
 			return strings.HasPrefix(c.Path(), "/api/v1/pub")
 		},
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID", "X-API-Key"},
 		AllowCredentials: true,
 		MaxAge:           86400,
@@ -484,6 +488,8 @@ func main() {
 	requireBusiness := middleware.RequireBusiness()
 	requireOrgParam := middleware.RequireOrganizationParam("orgId")
 	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
+
+	dashboard.RegisterRoutes(api, dashboardHandler, requireAuth, requireOrgMatch)
 
 	permFn := func(perm string) fiber.Handler {
 		return middleware.RequirePermission(authzSvc, perm)

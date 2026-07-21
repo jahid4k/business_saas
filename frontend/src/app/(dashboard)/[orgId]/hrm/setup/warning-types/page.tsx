@@ -50,7 +50,7 @@ function WarningTypesContent({ orgId }: { orgId: string }) {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -58,13 +58,13 @@ function WarningTypesContent({ orgId }: { orgId: string }) {
           >
             Warning Types
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Categories and escalation rules for disciplinary warnings
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["types", "escalations"] as TabKey[]).map((key) => (
           <button
             key={key}
@@ -72,7 +72,7 @@ function WarningTypesContent({ orgId }: { orgId: string }) {
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "types" ? "Warning Types" : "Escalation Rules"}
@@ -175,19 +175,19 @@ function TypesView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <ShieldAlert size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <ShieldAlert size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No warning types yet
           </p>
-          <p className="text-xs text-[var(--text-muted)] mt-1">
+          <p className="text-xs text-(--text-muted) mt-1">
             Once created, Warnings can be issued referencing these types.
           </p>
         </div>
@@ -198,16 +198,16 @@ function TypesView({
             return (
               <div
                 key={wt.id}
-                className={`group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <ShieldAlert size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
+                  <p className="text-sm font-medium text-(--text-primary)">
                     {wt.name}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     Severity {wt.severity_level} ·{" "}
                     {wt.can_be_issued_by.join(", ") || "any role"}
                     {wt.requires_hr_approval ? " · HR approval required" : ""}
@@ -227,8 +227,8 @@ function TypesView({
                 </div>
                 {canManage &&
                   (deleteConfirm === wt.id ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -239,24 +239,24 @@ function TypesView({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                       >
                         No
                       </button>
                     </div>
                   ) : (
-                    <div className="relative flex-shrink-0">
+                    <div className="relative shrink-0">
                       <button
                         onClick={() => setOpenMenuId(menuOpen ? null : wt.id)}
-                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                       >
                         <MoreHorizontal size={15} />
                       </button>
                       {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                           <button
                             onClick={() => openEdit(wt)}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                           >
                             <Pencil size={13} />
                             Edit
@@ -362,22 +362,22 @@ function EscalationsView({
       </div>
 
       {warningTypes.length === 0 && !typesQuery.isPending && (
-        <p className="text-sm text-[var(--text-muted)] mb-5">
+        <p className="text-sm text-(--text-muted) mb-5">
           Create a warning type first — escalation rules need one to trigger on.
         </p>
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Bell size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Bell size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No escalation rules yet
           </p>
         </div>
@@ -386,27 +386,27 @@ function EscalationsView({
           {items.map((r) => (
             <div
               key={r.id}
-              className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <Bell size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {r.trigger_count}× {typeName(r.trigger_warning_type_id)}
                   {r.within_days > 0
                     ? ` within ${r.within_days} days`
                     : " (all-time)"}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {ACTION_LABEL[r.action]} · notifies{" "}
                   {r.notification_roles.join(", ") || "no one configured"}
                 </p>
               </div>
               {canManage &&
                 (deleteConfirm === r.id ? (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -417,7 +417,7 @@ function EscalationsView({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                      className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                     >
                       No
                     </button>
@@ -425,7 +425,7 @@ function EscalationsView({
                 ) : (
                   <button
                     onClick={() => setDeleteConfirm(r.id)}
-                    className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 flex-shrink-0"
+                    className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 shrink-0"
                   >
                     <Trash2 size={14} />
                   </button>

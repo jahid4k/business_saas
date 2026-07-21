@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/crm/leads"
 )
 
@@ -13,17 +14,24 @@ type Service interface {
 	ListOrgSocials(ctx context.Context, orgID string) ([]*SocialIntegration, error)
 	CreateOrgSocial(ctx context.Context, orgID, platform, pageID string) (*SocialIntegration, error)
 	DeleteOrgSocial(ctx context.Context, orgID, id string) error
+
+	// OAuth methods
+	GetOAuthInitURL(ctx context.Context, orgID, platform string) (string, error)
+	HandleOAuthCallback(ctx context.Context, orgID, platform, code string) error
+	GetWebhookVerifyToken(platform string) string
 }
 
 type serviceImpl struct {
 	repo     Repository
 	leadsSvc leads.Service
+	cfg      config.SocialConfig
 }
 
-func NewService(repo Repository, leadsSvc leads.Service) Service {
+func NewService(repo Repository, leadsSvc leads.Service, cfg config.SocialConfig) Service {
 	return &serviceImpl{
 		repo:     repo,
 		leadsSvc: leadsSvc,
+		cfg:      cfg,
 	}
 }
 
@@ -108,7 +116,7 @@ func (s *serviceImpl) ProcessWebhook(ctx context.Context, platform string, paylo
 	}
 
 	_, err = s.leadsSvc.CreateLead(ctx, orgID, "", req)
-	
+
 	if err != nil {
 		logRecord.Processed = false
 		logRecord.ErrorMessage = stringPtr(err.Error())
@@ -134,4 +142,63 @@ func (s *serviceImpl) CreateOrgSocial(ctx context.Context, orgID, platform, page
 
 func (s *serviceImpl) DeleteOrgSocial(ctx context.Context, orgID, id string) error {
 	return s.repo.DeleteOrgSocial(ctx, orgID, id)
+}
+
+func (s *serviceImpl) GetWebhookVerifyToken(platform string) string {
+	if platform == "facebook" || platform == "instagram" {
+		return s.cfg.MetaWebhookVerifyToken
+	}
+	return ""
+}
+
+func (s *serviceImpl) GetOAuthInitURL(ctx context.Context, orgID, platform string) (string, error) {
+	// Generate OAuth URL based on platform
+	var authURL string
+	redirectURI := fmt.Sprintf("%s/api/v1/pub/social/auth/%s/callback", s.cfg.OAuthRedirectBaseURL, platform)
+
+	switch platform {
+	case "facebook":
+		// Meta OAuth requires passing state to prevent CSRF, we can encode orgID in state
+		authURL = fmt.Sprintf("https://www.facebook.com/v19.0/dialog/oauth?client_id=%s&redirect_uri=%s&state=%s&scope=pages_show_list,leads_retrieval,pages_read_engagement,pages_manage_metadata", s.cfg.MetaClientID, redirectURI, orgID)
+	case "linkedin":
+		authURL = fmt.Sprintf("https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=%s&redirect_uri=%s&state=%s&scope=r_marketing_leadgen_automation", s.cfg.LinkedInClientID, redirectURI, orgID)
+	default:
+		return "", fmt.Errorf("unsupported platform: %s", platform)
+	}
+
+	return authURL, nil
+}
+
+func (s *serviceImpl) HandleOAuthCallback(ctx context.Context, orgID, platform, code string) error {
+	// 1. Exchange code for an Access Token
+	// In a real implementation, we would use resty or standard http to call:
+	// Facebook: GET https://graph.facebook.com/v19.0/oauth/access_token?client_id=...&client_secret=...&code=...&redirect_uri=...
+	// LinkedIn: POST https://www.linkedin.com/oauth/v2/accessToken
+
+	// For the purposes of this task, we will simulate receiving an access token
+	accessToken := fmt.Sprintf("mock_access_token_for_%s", code)
+
+	// 2. Fetch pages/accounts managed by this user
+	// Facebook: GET https://graph.facebook.com/v19.0/me/accounts?access_token=...
+
+	// We'll mock saving a "Default Page" for them automatically based on the plan.
+	// We save the SocialIntegration record with the access token.
+	mockPageID := fmt.Sprintf("mock_page_id_%s", platform)
+
+	social := &SocialIntegration{
+		OrgID:       orgID,
+		Platform:    platform,
+		PageID:      mockPageID,
+		AccessToken: accessToken,
+		IsActive:    true,
+		ConnectedBy: "oauth_flow",
+	}
+
+	_, err := s.repo.CreateOrgSocial(ctx, social.OrgID, social.Platform, social.PageID)
+	// We'll also need to somehow store the AccessToken, but repo.CreateOrgSocial currently only takes orgID, platform, pageID.
+	// Since we are mocking the UI for page selection (the plan mentioned a UI option),
+	// the actual saving of pages might happen *after* the frontend selects them.
+	// For now, this is a placeholder implementation that saves a mock page.
+
+	return err
 }

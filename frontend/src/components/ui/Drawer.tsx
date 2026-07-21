@@ -86,21 +86,21 @@ export default function Drawer({
         className={`
           absolute right-0 top-0 h-full w-full pointer-events-auto
           flex flex-col
-          bg-[var(--bg-surface)] border-l border-[var(--border)] shadow-2xl
+          bg-(--bg-surface) border-l border-(--border) shadow-2xl
           ${WIDTH[width]}
         `}
       >
         {/* Header — title + close button. Always the same. */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-(--border) shrink-0">
           <h2
-            className="text-base font-semibold text-[var(--text-primary)]"
+            className="text-base font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             {title}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
           >
             <X size={16} />
           </button>

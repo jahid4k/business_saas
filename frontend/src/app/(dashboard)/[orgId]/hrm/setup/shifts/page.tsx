@@ -63,7 +63,7 @@ export default function ShiftsPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -71,13 +71,13 @@ export default function ShiftsPage({
           >
             Shifts
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Work schedules and assignments
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["shifts", "assignments"] as TabKey[]).map((key) => (
           <button
             key={key}
@@ -85,7 +85,7 @@ export default function ShiftsPage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "shifts" ? "Shifts" : "Assignments"}
@@ -191,16 +191,16 @@ function ShiftsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Clock3 size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Clock3 size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No shifts yet
           </p>
         </div>
@@ -209,13 +209,13 @@ function ShiftsView({
           {items.map((s) => (
             <div
               key={s.id}
-              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <Clock3 size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {s.name}{" "}
                   {s.is_default && (
                     <span className="text-xs text-purple-400 ml-1">
@@ -223,7 +223,7 @@ function ShiftsView({
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {s.shift_type === "fixed"
                     ? `${s.start_time} – ${s.end_time}`
                     : `${s.weekly_hours_target}h/week flexible`}
@@ -233,8 +233,8 @@ function ShiftsView({
               </div>
               {canManage &&
                 (deleteConfirm === s.id ? (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -245,16 +245,16 @@ function ShiftsView({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                      className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                     >
                       No
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={() => openEdit(s)}
-                      className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+                      className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated)"
                     >
                       <Pencil size={14} />
                     </button>
@@ -361,16 +361,16 @@ function AssignmentsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Users size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Users size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No shift assignments yet
           </p>
         </div>
@@ -379,16 +379,16 @@ function AssignmentsView({
           {items.map((a) => (
             <div
               key={a.id}
-              className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <Users size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {shiftName(a.shift_id)} → {label(a)}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   From{" "}
                   {new Date(a.effective_date).toLocaleDateString("en-US", {
                     month: "short",
@@ -403,7 +403,7 @@ function AssignmentsView({
               {canManage && (
                 <button
                   onClick={() => handleRemove(a.id)}
-                  className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 flex-shrink-0"
+                  className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 shrink-0"
                 >
                   <Trash2 size={14} />
                 </button>

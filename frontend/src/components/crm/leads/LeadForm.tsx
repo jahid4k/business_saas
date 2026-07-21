@@ -48,8 +48,8 @@ interface LeadFormProps {
 // ── Shared input class ─────────────────────────────────
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -109,7 +109,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
         {/* Name row */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               First name <span className="text-red-400">*</span>
             </label>
             <input
@@ -125,7 +125,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Last name
             </label>
             <input
@@ -138,7 +138,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
 
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Email
           </label>
           <input
@@ -154,7 +154,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
 
         {/* Phone */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Phone
           </label>
           <input
@@ -168,7 +168,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
         {/* Company + Title row */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Company
             </label>
             <input
@@ -178,7 +178,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Job title
             </label>
             <input
@@ -191,7 +191,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
 
         {/* Source */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Source
           </label>
           <select {...register("source")} className={inputCls}>
@@ -211,7 +211,7 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
         {/* Status — only in edit mode */}
         {isEdit && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Status
             </label>
             <select {...register("status")} className={inputCls}>
@@ -230,11 +230,11 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
       </form>
 
       {/* Footer */}
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

@@ -59,7 +59,7 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
             Status Name
           </label>
           <input
@@ -69,17 +69,17 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
             onChange={(e) => setName(e.target.value)}
             disabled={isDefault}
             placeholder="e.g. Sabbatical"
-            className="w-full px-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
+            className="w-full px-3.5 py-2.5 bg-(--bg-surface) border border-(--border) rounded-lg text-(--text-primary) focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
           />
           {isDefault && (
-            <p className="text-xs text-[var(--text-muted)] mt-1.5">
+            <p className="text-xs text-(--text-muted) mt-1.5">
               The name of this system-default status cannot be changed.
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
             System Category
           </label>
           <div className="space-y-2">
@@ -89,7 +89,7 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
                 className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                   category === cat.value
                     ? "bg-purple-500/5 border-purple-500/30"
-                    : "bg-[var(--bg-surface)] border-[var(--border)] hover:border-[var(--text-muted)]"
+                    : "bg-(--bg-surface) border-(--border) hover:border-(--text-muted)"
                 } ${isDefault && category !== cat.value ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <div className="flex items-center h-5">
@@ -100,14 +100,14 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
                     checked={category === cat.value}
                     onChange={() => !isDefault && setCategory(cat.value)}
                     disabled={isDefault && category !== cat.value}
-                    className="w-4 h-4 text-purple-500 bg-transparent border-[var(--border)] focus:ring-purple-500 focus:ring-offset-[var(--bg-base)]"
+                    className="w-4 h-4 text-purple-500 bg-transparent border-(--border) focus:ring-purple-500 focus:ring-offset-(--bg-base)"
                   />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-[var(--text-primary)]">
+                  <div className="text-sm font-medium text-(--text-primary)">
                     {cat.label}
                   </div>
-                  <div className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <div className="text-xs text-(--text-muted) mt-0.5">
                     {cat.desc}
                   </div>
                 </div>
@@ -115,14 +115,14 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
             ))}
           </div>
           {isDefault && (
-            <p className="text-xs text-[var(--text-muted)] mt-1.5">
+            <p className="text-xs text-(--text-muted) mt-1.5">
               The system category of this default status cannot be changed.
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-2">
             Badge Color
           </label>
           <div className="flex flex-wrap gap-3 mb-4">
@@ -132,7 +132,7 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
                 type="button"
                 onClick={() => setColor(c)}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform ${
-                  color === c ? "ring-2 ring-offset-2 ring-offset-[var(--bg-base)] ring-[currentcolor] scale-110" : "hover:scale-110"
+                  color === c ? "ring-2 ring-offset-2 ring-offset-(--bg-base) ring-current scale-110" : "hover:scale-110"
                 }`}
                 style={{ backgroundColor: c, color: c }}
               />
@@ -143,19 +143,19 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
               type="color"
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className="h-9 w-16 p-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg cursor-pointer"
+              className="h-9 w-16 p-1 bg-(--bg-surface) border border-(--border) rounded-lg cursor-pointer"
             />
             <input
               type="text"
               value={color}
               onChange={(e) => setColor(e.target.value)}
               pattern="^#[0-9a-fA-F]{6}$"
-              className="flex-1 px-3.5 py-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] font-mono focus:outline-none focus:border-purple-500 transition-colors uppercase"
+              className="flex-1 px-3.5 py-2 bg-(--bg-surface) border border-(--border) rounded-lg text-(--text-primary) font-mono focus:outline-none focus:border-purple-500 transition-colors uppercase"
             />
           </div>
           
-          <div className="mt-6 p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)]">
-            <div className="text-xs font-medium text-[var(--text-muted)] mb-3">PREVIEW</div>
+          <div className="mt-6 p-4 rounded-xl border border-(--border) bg-(--bg-surface)">
+            <div className="text-xs font-medium text-(--text-muted) mb-3">PREVIEW</div>
             <div className="flex gap-2 items-center">
               <span
                 className="inline-flex px-2.5 py-1 rounded-md text-xs font-semibold"
@@ -171,12 +171,12 @@ export default function StatusForm({ initialData, onSave, onCancel }: StatusForm
         </div>
       </div>
 
-      <div className="p-6 border-t border-[var(--border)] bg-[var(--bg-elevated)] flex gap-3">
+      <div className="p-6 border-t border-(--border) bg-(--bg-elevated) flex gap-3">
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+          className="flex-1 px-4 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) hover:bg-(--bg-surface) transition-colors disabled:opacity-50"
         >
           Cancel
         </button>

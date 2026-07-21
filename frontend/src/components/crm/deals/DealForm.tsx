@@ -33,8 +33,8 @@ interface DealFormProps {
 
 const cls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -137,7 +137,7 @@ export default function DealForm({
 
         {/* Title */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Title <span className="text-red-400">*</span>
           </label>
           <input
@@ -154,11 +154,11 @@ export default function DealForm({
         {/* Value + Currency */}
         <div className="grid grid-cols-3 gap-3">
           <div className="col-span-2 space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Value <span className="text-red-400">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-[var(--text-muted)]">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-(--text-muted)">
                 $
               </span>
               <input
@@ -175,7 +175,7 @@ export default function DealForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Currency
             </label>
             <input
@@ -188,7 +188,7 @@ export default function DealForm({
 
         {/* Pipeline */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Pipeline <span className="text-red-400">*</span>
           </label>
           <select {...register("pipeline_id")} className={cls}>
@@ -211,7 +211,7 @@ export default function DealForm({
 
         {/* Stage */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Stage <span className="text-red-400">*</span>
           </label>
           <select
@@ -239,9 +239,9 @@ export default function DealForm({
 
         {/* Contact */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Contact
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-xs font-normal text-(--text-muted)">
               optional
             </span>
           </label>
@@ -261,9 +261,9 @@ export default function DealForm({
 
         {/* Company */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Company
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-xs font-normal text-(--text-muted)">
               optional
             </span>
           </label>
@@ -283,9 +283,9 @@ export default function DealForm({
 
         {/* Close date */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Close date
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-xs font-normal text-(--text-muted)">
               optional
             </span>
           </label>
@@ -293,11 +293,11 @@ export default function DealForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

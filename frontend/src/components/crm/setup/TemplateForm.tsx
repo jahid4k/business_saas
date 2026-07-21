@@ -41,7 +41,7 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
     <form onSubmit={handleSubmit} className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
             Template Name
           </label>
           <input
@@ -50,12 +50,12 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Initial Outreach"
-            className="w-full px-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors"
+            className="w-full px-3.5 py-2.5 bg-(--bg-surface) border border-(--border) rounded-lg text-(--text-primary) focus:outline-none focus:border-purple-500 transition-colors"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
             Template Type
           </label>
           <div className="flex gap-4">
@@ -69,7 +69,7 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
                 disabled={!!initialData} // don't allow changing type after creation
                 className="accent-purple-500"
               />
-              <span className="text-sm text-[var(--text-primary)]">Email</span>
+              <span className="text-sm text-(--text-primary)">Email</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -81,14 +81,14 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
                 disabled={!!initialData}
                 className="accent-purple-500"
               />
-              <span className="text-sm text-[var(--text-primary)]">Note</span>
+              <span className="text-sm text-(--text-primary)">Note</span>
             </label>
           </div>
         </div>
 
         {type === "email" && (
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+            <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
               Subject Line
             </label>
             <input
@@ -97,13 +97,13 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="e.g. Following up on our conversation"
-              className="w-full px-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors"
+              className="w-full px-3.5 py-2.5 bg-(--bg-surface) border border-(--border) rounded-lg text-(--text-primary) focus:outline-none focus:border-purple-500 transition-colors"
             />
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+          <label className="block text-sm font-medium text-(--text-secondary) mb-1.5">
             Body Content
           </label>
           <textarea
@@ -112,20 +112,20 @@ export default function TemplateForm({ initialData, onSave, onCancel }: Template
             onChange={(e) => setBody(e.target.value)}
             placeholder="Hi {{first_name}},\n\n..."
             rows={8}
-            className="w-full px-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors resize-none"
+            className="w-full px-3.5 py-2.5 bg-(--bg-surface) border border-(--border) rounded-lg text-(--text-primary) focus:outline-none focus:border-purple-500 transition-colors resize-none"
           />
-          <p className="text-xs text-[var(--text-muted)] mt-1.5">
+          <p className="text-xs text-(--text-muted) mt-1.5">
             You can use placeholders like {"{{first_name}}"}, {"{{company_name}}"}, etc.
           </p>
         </div>
       </div>
 
-      <div className="p-4 border-t border-[var(--border)] bg-[var(--bg-canvas)] flex justify-end gap-3 shrink-0 rounded-b-xl">
+      <div className="p-4 border-t border-(--border) bg-(--bg-canvas) flex justify-end gap-3 shrink-0 rounded-b-xl">
         <button
           type="button"
           onClick={onCancel}
           disabled={loading}
-          className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] border border-transparent hover:border-[var(--border)] rounded-lg transition-colors"
+          className="px-4 py-2 text-sm font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-surface) border border-transparent hover:border-(--border) rounded-lg transition-colors"
         >
           Cancel
         </button>

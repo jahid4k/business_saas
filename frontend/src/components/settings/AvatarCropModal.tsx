@@ -84,7 +84,7 @@ export default function AvatarCropModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-100 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Crop avatar"
@@ -99,7 +99,7 @@ export default function AvatarCropModal({
       <div className="relative w-full max-w-md rounded-2xl border border-(--border) bg-(--bg-surface) shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-(--border)">
           <p
-            className="text-sm font-semibold text-[var(--text-primary)]"
+            className="text-sm font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             Crop your photo
@@ -107,7 +107,7 @@ export default function AvatarCropModal({
           <button
             onClick={onCancel}
             disabled={processing}
-            className="p-1.5 rounded-md text-(--text-muted) hover:text-[var(--text-primary)] hover:bg-(--bg-elevated) transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors disabled:opacity-50"
           >
             <X size={16} />
           </button>
@@ -132,7 +132,7 @@ export default function AvatarCropModal({
 
         {/* Zoom control */}
         <div className="flex items-center gap-3 px-5 py-4">
-          <ZoomIn size={15} className="text-(--text-muted) flex-shrink-0" />
+          <ZoomIn size={15} className="text-(--text-muted) shrink-0" />
           <input
             type="range"
             min={1}
@@ -150,7 +150,7 @@ export default function AvatarCropModal({
           <button
             onClick={onCancel}
             disabled={processing}
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-(--border) hover:bg-(--bg-elevated) transition-colors disabled:opacity-50"
+            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors disabled:opacity-50"
           >
             Cancel
           </button>

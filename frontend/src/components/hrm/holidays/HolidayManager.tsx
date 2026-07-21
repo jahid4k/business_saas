@@ -17,8 +17,8 @@ const HOLIDAY_TYPES = [
 
 const inputCls = `
   px-3 py-2 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -83,12 +83,12 @@ export default function HolidayManager({
   return (
     <div className="px-6 py-5 space-y-4">
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-10 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-10 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           No holidays in this calendar yet.
         </p>
       ) : (
@@ -96,11 +96,11 @@ export default function HolidayManager({
           {items.map((h) => (
             <div
               key={h.id}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+              className="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-(--bg-elevated) border border-(--border)"
             >
               <div>
-                <p className="text-sm text-[var(--text-primary)]">{h.name}</p>
-                <p className="text-xs text-[var(--text-muted)]">
+                <p className="text-sm text-(--text-primary)">{h.name}</p>
+                <p className="text-xs text-(--text-muted)">
                   {new Date(h.date).toLocaleDateString("en-US", {
                     month: "short",
                     day: "numeric",
@@ -121,8 +121,8 @@ export default function HolidayManager({
         </div>
       )}
 
-      <div className="pt-3 border-t border-[var(--border)] space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+      <div className="pt-3 border-t border-(--border) space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-(--text-muted)">
           Add holiday
         </p>
         <div className="grid grid-cols-2 gap-2">
@@ -157,7 +157,7 @@ export default function HolidayManager({
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+          <label className="flex items-center gap-1.5 text-xs text-(--text-secondary)">
             <input
               type="checkbox"
               checked={isPaid}
@@ -166,7 +166,7 @@ export default function HolidayManager({
             />
             Paid
           </label>
-          <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+          <label className="flex items-center gap-1.5 text-xs text-(--text-secondary)">
             <input
               type="checkbox"
               checked={repeatYearly}

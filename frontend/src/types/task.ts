@@ -12,6 +12,8 @@ export interface Task {
   dueDate?: string; // ISO 8601, nullable
   assignedTo?: string; // user UUID
   createdBy: string;
+  relatedType?: string;
+  relatedId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +32,8 @@ export interface CreateTaskRequest {
   status?: TaskStatus;
   dueDate?: string;
   assignedTo?: string;
+  relatedType?: string;
+  relatedId?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -38,4 +42,6 @@ export interface UpdateTaskRequest {
   status?: TaskStatus;
   dueDate?: string | null; // null = clear the date
   assignedTo?: string | null;
+  relatedType?: string | null;
+  relatedId?: string | null;
 }

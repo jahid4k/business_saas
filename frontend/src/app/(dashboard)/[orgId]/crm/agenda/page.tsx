@@ -15,9 +15,9 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { getAgenda, type AgendaItem } from "@/lib/crm/reports";
-import { updateTask, createTask } from "@/lib/tasks";
-import type { UpdateTaskRequest } from "@/types/task";
+import { listTasks, updateTask, createTask } from "@/lib/tasks";
+import type { Task, UpdateTaskRequest } from "@/types/task";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function AgendaPage({
   params,
@@ -28,9 +28,18 @@ export default function AgendaPage({
   const queryClient = useQueryClient();
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
+  const { user } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<"my" | "delegated">("my");
+
   const query = useQuery({
-    queryKey: ["crm", "agenda", orgId],
-    queryFn: () => getAgenda(orgId),
+    queryKey: ["tasks", orgId, activeTab],
+    queryFn: () =>
+      listTasks(orgId, {
+        assignedTo: activeTab === "my" ? user?.id : undefined,
+        // For delegated, we could ideally filter by createdBy = user?.id && assignedTo != user?.id
+        // But for now, we'll just fetch all and filter client-side for delegated if needed,
+        // or just let the backend handle the default list if they aren't admin.
+      }),
   });
 
   const createMutation = useMutation({
@@ -39,10 +48,11 @@ export default function AgendaPage({
         title,
         status: "todo",
         dueDate: new Date().toISOString(),
+        assignedTo: user?.id,
       }),
     onSuccess: () => {
       setNewTaskTitle("");
-      queryClient.invalidateQueries({ queryKey: ["crm", "agenda", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", orgId] });
     },
   });
 
@@ -50,7 +60,7 @@ export default function AgendaPage({
     mutationFn: ({ id, updates }: { id: string; updates: UpdateTaskRequest }) =>
       updateTask(orgId, id, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["crm", "agenda", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", orgId] });
     },
   });
 
@@ -60,7 +70,13 @@ export default function AgendaPage({
     }
   };
 
-  const items = query.data ?? [];
+  const allItems = query.data?.tasks ?? [];
+  const items =
+    activeTab === "delegated"
+      ? allItems.filter(
+          (t) => t.createdBy === user?.id && t.assignedTo !== user?.id,
+        )
+      : allItems;
 
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
@@ -75,19 +91,18 @@ export default function AgendaPage({
   );
 
   const overdueItems = openItems.filter(
-    (i) =>
-      i.due_date && new Date(i.due_date).getTime() < startOfToday.getTime(),
+    (i) => i.dueDate && new Date(i.dueDate).getTime() < startOfToday.getTime(),
   );
 
   const todayItems = openItems.filter(
     (i) =>
-      !i.due_date ||
-      (new Date(i.due_date).getTime() >= startOfToday.getTime() &&
-        new Date(i.due_date).getTime() <= endOfToday.getTime()),
+      !i.dueDate ||
+      (new Date(i.dueDate).getTime() >= startOfToday.getTime() &&
+        new Date(i.dueDate).getTime() <= endOfToday.getTime()),
   );
 
   const upcomingItems = openItems.filter(
-    (i) => i.due_date && new Date(i.due_date).getTime() > endOfToday.getTime(),
+    (i) => i.dueDate && new Date(i.dueDate).getTime() > endOfToday.getTime(),
   );
 
   const totalToday =
@@ -97,25 +112,47 @@ export default function AgendaPage({
     totalToday === 0 ? 0 : Math.round((completedCount / totalToday) * 100);
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-canvas)]">
-      <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-surface)] px-8 py-6">
+    <div className="flex flex-col h-full bg-(--bg-canvas)">
+      <div className="shrink-0 border-b border-(--border) bg-(--bg-surface) px-8 py-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold text-[var(--text-primary)]">
+            <h1 className="text-xl font-semibold text-(--text-primary)">
               Today&apos;s Agenda
             </h1>
-            <p className="mt-1.5 text-sm text-[var(--text-secondary)] max-w-2xl">
+            <p className="mt-1.5 text-sm text-(--text-secondary) max-w-2xl">
               Your high-priority tasks and overdue activities to focus on today.
             </p>
+            <div className="flex items-center gap-4 mt-6">
+              <button
+                onClick={() => setActiveTab("my")}
+                className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                  activeTab === "my"
+                    ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                    : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
+                }`}
+              >
+                My Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab("delegated")}
+                className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                  activeTab === "delegated"
+                    ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                    : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
+                }`}
+              >
+                Delegated Tasks
+              </button>
+            </div>
           </div>
 
           {/* Progress Indicator */}
           <div className="flex flex-col items-end gap-2 w-48">
             <div className="flex items-center justify-between w-full">
-              <span className="text-sm font-medium text-[var(--text-secondary)]">
+              <span className="text-sm font-medium text-(--text-secondary)">
                 Daily Progress
               </span>
-              <span className="text-sm font-bold text-[var(--text-primary)]">
+              <span className="text-sm font-bold text-(--text-primary)">
                 {completedCount} / {totalToday}
               </span>
             </div>
@@ -134,7 +171,7 @@ export default function AgendaPage({
           {/* Add Task Input */}
           <div className="relative">
             <Plus
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-(--text-muted)"
               size={20}
             />
             <input
@@ -144,7 +181,7 @@ export default function AgendaPage({
               onChange={(e) => setNewTaskTitle(e.target.value)}
               onKeyDown={handleCreateTask}
               disabled={createMutation.isPending}
-              className="w-full pl-12 pr-4 py-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl text-sm placeholder:text-[var(--text-muted)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-sm"
+              className="w-full pl-12 pr-4 py-3 bg-(--bg-surface) border border-(--border) rounded-xl text-sm placeholder:text-(--text-muted) text-(--text-primary) focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-sm"
             />
           </div>
 
@@ -153,17 +190,17 @@ export default function AgendaPage({
               <Loader2 className="animate-spin text-purple-600" size={32} />
             </div>
           ) : totalToday === 0 && upcomingItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-16 text-center bg-[var(--bg-surface)] rounded-xl border border-[var(--border)] border-dashed">
+            <div className="flex flex-col items-center justify-center p-16 text-center bg-(--bg-surface) rounded-xl border border-(--border) border-dashed">
               <div className="h-12 w-12 rounded-full bg-purple-50 dark:bg-purple-500/10 flex items-center justify-center mb-4">
                 <CalendarCheck2
                   className="text-purple-600 dark:text-purple-400"
                   size={24}
                 />
               </div>
-              <h3 className="text-base font-medium text-[var(--text-primary)] mb-1">
+              <h3 className="text-base font-medium text-(--text-primary) mb-1">
                 You&apos;re all caught up!
               </h3>
-              <p className="text-sm text-[var(--text-secondary)] max-w-sm">
+              <p className="text-sm text-(--text-secondary) max-w-sm">
                 There are no tasks or activities scheduled.
               </p>
             </div>
@@ -175,7 +212,7 @@ export default function AgendaPage({
                     <AlertCircle size={18} />
                     Overdue
                   </h2>
-                  <div className="bg-[var(--bg-surface)] border border-red-200 dark:border-red-500/20 rounded-xl overflow-hidden shadow-sm divide-y divide-[var(--border)]">
+                  <div className="bg-(--bg-surface) border border-red-200 dark:border-red-500/20 rounded-xl overflow-hidden shadow-sm divide-y divide-(--border)">
                     {overdueItems.map((item) => (
                       <AgendaItemRow
                         key={item.id}
@@ -192,14 +229,14 @@ export default function AgendaPage({
 
               {(todayItems.length > 0 || completedTodayItems.length > 0) && (
                 <section>
-                  <h2 className="text-lg font-medium text-[var(--text-primary)] mb-4 flex items-center gap-2">
+                  <h2 className="text-lg font-medium text-(--text-primary) mb-4 flex items-center gap-2">
                     <Clock
                       size={18}
                       className="text-purple-600 dark:text-purple-400"
                     />
                     Today
                   </h2>
-                  <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm divide-y divide-[var(--border)]">
+                  <div className="bg-(--bg-surface) border border-(--border) rounded-xl overflow-hidden shadow-sm divide-y divide-(--border)">
                     {todayItems.map((item) => (
                       <AgendaItemRow
                         key={item.id}
@@ -226,11 +263,11 @@ export default function AgendaPage({
 
               {upcomingItems.length > 0 && (
                 <section>
-                  <h2 className="text-lg font-medium text-[var(--text-primary)] mb-4 flex items-center gap-2 mt-8">
+                  <h2 className="text-lg font-medium text-(--text-primary) mb-4 flex items-center gap-2 mt-8">
                     <CalendarClock size={18} className="text-gray-500" />
                     Upcoming
                   </h2>
-                  <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm divide-y divide-[var(--border)]">
+                  <div className="bg-(--bg-surface) border border-(--border) rounded-xl overflow-hidden shadow-sm divide-y divide-(--border)">
                     {upcomingItems.map((item) => (
                       <AgendaItemRow
                         key={item.id}
@@ -257,19 +294,19 @@ function AgendaItemRow({
   orgId,
   onUpdate,
 }: {
-  item: AgendaItem;
+  item: Task;
   orgId: string;
   onUpdate: (updates: UpdateTaskRequest) => void;
 }) {
   const isDone = item.status === "done";
 
   const getEntityUrl = () => {
-    if (!item.related_type || !item.related_id) return "#";
-    const type = item.related_type.toLowerCase();
-    if (type === "lead") return `/${orgId}/crm/leads/${item.related_id}`;
-    if (type === "contact") return `/${orgId}/crm/contacts/${item.related_id}`;
+    if (!item.relatedType || !item.relatedId) return "#";
+    const type = item.relatedType.toLowerCase();
+    if (type === "lead") return `/${orgId}/crm/leads/${item.relatedId}`;
+    if (type === "contact") return `/${orgId}/crm/contacts/${item.relatedId}`;
     if (type === "deal") return `/${orgId}/crm/pipeline`; // Specific deal deep-link usually handled via query params in pipelines
-    if (type === "company") return `/${orgId}/crm/companies/${item.related_id}`;
+    if (type === "company") return `/${orgId}/crm/companies/${item.relatedId}`;
     return "#";
   };
 
@@ -281,11 +318,11 @@ function AgendaItemRow({
 
   return (
     <div
-      className={`group flex items-start gap-4 p-4 hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors ${isDone ? "opacity-60" : ""}`}
+      className={`group flex items-start gap-4 p-4 hover:bg-gray-50/50 dark:hover:bg-white/2 transition-colors ${isDone ? "opacity-60" : ""}`}
     >
       <button
         onClick={() => onUpdate({ status: isDone ? "todo" : "done" })}
-        className="pt-0.5 shrink-0 text-[var(--text-muted)] hover:text-purple-600 transition-colors focus:outline-none"
+        className="pt-0.5 shrink-0 text-(--text-muted) hover:text-purple-600 transition-colors focus:outline-none"
       >
         {isDone ? (
           <CheckCircle2 size={20} className="text-emerald-500" />
@@ -299,14 +336,14 @@ function AgendaItemRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-4 mb-1">
           <h4
-            className={`font-medium text-[var(--text-primary)] truncate transition-all ${isDone ? "line-through text-[var(--text-muted)]" : ""}`}
+            className={`font-medium text-(--text-primary) truncate transition-all ${isDone ? "line-through text-(--text-muted)" : ""}`}
           >
             {item.title}
           </h4>
           <div className="flex items-center gap-3">
-            {item.due_date && (
-              <span className="shrink-0 text-xs font-medium text-[var(--text-secondary)] bg-gray-100 dark:bg-white/5 px-2 py-1 rounded-md">
-                {new Date(item.due_date).toLocaleDateString("en-US", {
+            {item.dueDate && (
+              <span className="shrink-0 text-xs font-medium text-(--text-secondary) bg-gray-100 dark:bg-white/5 px-2 py-1 rounded-md">
+                {new Date(item.dueDate).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
                 })}
@@ -317,7 +354,7 @@ function AgendaItemRow({
             {!isDone && (
               <button
                 onClick={handleSnooze}
-                className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[var(--text-muted)] hover:text-purple-600 focus:outline-none bg-gray-100 dark:bg-white/10 rounded px-2 py-1 text-xs font-medium"
+                className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-(--text-muted) hover:text-purple-600 focus:outline-none bg-gray-100 dark:bg-white/10 rounded px-2 py-1 text-xs font-medium"
                 title="Snooze to Tomorrow"
               >
                 Snooze
@@ -327,19 +364,19 @@ function AgendaItemRow({
         </div>
 
         {item.description && (
-          <p className="text-sm text-[var(--text-secondary)] line-clamp-2 mb-2">
+          <p className="text-sm text-(--text-secondary) line-clamp-2 mb-2">
             {item.description}
           </p>
         )}
 
-        {item.related_type && (
+        {item.relatedType && (
           <div className="flex items-center gap-2 mt-2">
             <Link
               href={getEntityUrl()}
               className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
             >
               <LinkIcon size={10} />
-              {item.related_type}
+              {item.relatedType}
             </Link>
           </div>
         )}

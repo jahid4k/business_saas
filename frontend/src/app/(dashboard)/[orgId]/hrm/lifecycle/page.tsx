@@ -197,7 +197,7 @@ export default function LifecyclePage({
   if (TABS.length === 0) {
     return (
       <div className="p-6 md:p-8 max-w-5xl">
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           You don&apos;t have access to any lifecycle records.
         </p>
       </div>
@@ -209,7 +209,7 @@ export default function LifecyclePage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -217,13 +217,13 @@ export default function LifecyclePage({
           >
             Lifecycle
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Promotions, transfers, resignations, terminations
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit flex-wrap">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit flex-wrap">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -231,7 +231,7 @@ export default function LifecyclePage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === t.key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {t.label}
@@ -389,7 +389,7 @@ function PromotionsView({
   return (
     <>
       <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -403,7 +403,7 @@ function PromotionsView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : (STATUS_META[key]?.label ?? key)}
@@ -424,7 +424,7 @@ function PromotionsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
@@ -445,24 +445,24 @@ function PromotionsView({
             return (
               <div
                 key={item.id}
-                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <TrendingUp size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(item.employee_id)} →{" "}
                     {posTitle(item.to_position_id)}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     Effective {fmtDate(item.effective_date)}
                     {item.new_basic_pay
                       ? ` · New pay ${item.new_basic_pay}`
                       : ""}
                   </p>
                   {item.reason && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       {item.reason}
                     </p>
                   )}
@@ -473,7 +473,7 @@ function PromotionsView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(item.id, el);
                       else menuRefs.current.delete(item.id);
@@ -481,12 +481,12 @@ function PromotionsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : item.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {item.approval_instance_id && (
                           <MenuItem
                             onClick={() => {
@@ -645,7 +645,7 @@ function TransfersView({
   return (
     <>
       <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -659,7 +659,7 @@ function TransfersView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : (STATUS_META[key]?.label ?? key)}
@@ -680,7 +680,7 @@ function TransfersView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
@@ -704,21 +704,21 @@ function TransfersView({
             return (
               <div
                 key={item.id}
-                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <ArrowRightLeft size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(item.employee_id)} {toLabel ? `→ ${toLabel}` : ""}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {item.transfer_type} · Effective{" "}
                     {fmtDate(item.effective_date)}
                   </p>
                   {item.reason && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       {item.reason}
                     </p>
                   )}
@@ -729,7 +729,7 @@ function TransfersView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(item.id, el);
                       else menuRefs.current.delete(item.id);
@@ -737,12 +737,12 @@ function TransfersView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : item.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {item.approval_instance_id && (
                           <MenuItem
                             onClick={() => {
@@ -897,7 +897,7 @@ function ResignationsView({
   return (
     <>
       <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -911,7 +911,7 @@ function ResignationsView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : (STATUS_META[key]?.label ?? key)}
@@ -932,7 +932,7 @@ function ResignationsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
@@ -948,16 +948,16 @@ function ResignationsView({
             return (
               <div
                 key={item.id}
-                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <LogOut size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(item.employee_id)}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     Resigned {fmtDate(item.resignation_date)} · Last day{" "}
                     {fmtDate(item.last_working_date)}
                     {item.is_notice_waived ? " · Notice waived" : ""}
@@ -965,12 +965,12 @@ function ResignationsView({
                   <div className="flex items-center gap-3 mt-2 flex-wrap">
                     <StatusBadge status={item.status} />
                     {item.exit_interview_completed && (
-                      <span className="text-xs text-[var(--text-muted)]">
+                      <span className="text-xs text-(--text-muted)">
                         Exit interview done
                       </span>
                     )}
                     {item.exit_clearance_completed && (
-                      <span className="text-xs text-[var(--text-muted)]">
+                      <span className="text-xs text-(--text-muted)">
                         Clearance done
                       </span>
                     )}
@@ -992,7 +992,7 @@ function ResignationsView({
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {canProcess && (
                           <MenuItem
                             onClick={() => runAction(item, "accept")}
@@ -1126,7 +1126,7 @@ function TerminationsView({
   return (
     <>
       <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -1140,7 +1140,7 @@ function TerminationsView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : (STATUS_META[key]?.label ?? key)}
@@ -1161,7 +1161,7 @@ function TerminationsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
@@ -1182,16 +1182,16 @@ function TerminationsView({
             return (
               <div
                 key={item.id}
-                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`lc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <UserX size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(item.employee_id)}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {item.termination_type} · Last day{" "}
                     {fmtDate(item.last_working_date)}
                     {item.severance_amount
@@ -1199,7 +1199,7 @@ function TerminationsView({
                       : ""}
                   </p>
                   {item.reason && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       {item.reason}
                     </p>
                   )}
@@ -1210,7 +1210,7 @@ function TerminationsView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(item.id, el);
                       else menuRefs.current.delete(item.id);
@@ -1218,12 +1218,12 @@ function TerminationsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : item.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {item.approval_instance_id && (
                           <MenuItem
                             onClick={() => {
@@ -1289,10 +1289,10 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-        <Icon size={20} className="text-[var(--text-muted)]" />
+      <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+        <Icon size={20} className="text-(--text-muted)" />
       </div>
-      <p className="text-sm font-medium text-[var(--text-secondary)]">
+      <p className="text-sm font-medium text-(--text-secondary)">
         {label}
       </p>
     </div>
@@ -1313,7 +1313,7 @@ function MenuItem({
       ? "text-emerald-400 hover:bg-emerald-500/10"
       : tone === "red"
         ? "text-red-400 hover:bg-red-500/10"
-        : "text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)]";
+        : "text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary)";
   return (
     <button
       onClick={onClick}

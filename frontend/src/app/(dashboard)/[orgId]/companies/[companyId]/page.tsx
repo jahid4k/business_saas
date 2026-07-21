@@ -47,7 +47,7 @@ function formatDate(iso: string) {
 function ContactAvatar({ name }: { name: string }) {
   return (
     <div
-      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
       style={{ background: "linear-gradient(135deg, #5b21b6, #7c3aed)" }}
     >
       {name[0]?.toUpperCase() ?? "?"}
@@ -215,7 +215,7 @@ export default function CompanyDetailPage({
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 p-8 text-sm text-[var(--text-muted)]">
+      <div className="flex items-center gap-3 p-8 text-sm text-(--text-muted)">
         <Loader2 size={15} className="animate-spin text-purple-500" />
         Loading company…
       </div>
@@ -243,7 +243,7 @@ export default function CompanyDetailPage({
       {/* Back */}
       <button
         onClick={() => router.push(`/${orgId}/companies`)}
-        className="flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors mb-8"
+        className="flex items-center gap-2 text-sm text-(--text-muted) hover:text-(--text-secondary) transition-colors mb-8"
       >
         <ArrowLeft size={14} />
         Back to companies
@@ -256,12 +256,12 @@ export default function CompanyDetailPage({
       )}
 
       {/* ── Company header ─────────────────────── */}
-      <div className="rounded-xl p-6 mb-6 border border-[var(--border)] bg-[var(--bg-surface)]">
+      <div className="rounded-xl p-6 mb-6 border border-(--border) bg-(--bg-surface)">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             {/* Avatar */}
             <div
-              className="w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center text-xl font-bold text-white"
+              className="w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center text-xl font-bold text-white"
               style={{
                 background: "linear-gradient(135deg, #7c3aed, #a855f7)",
               }}
@@ -272,7 +272,7 @@ export default function CompanyDetailPage({
             {/* Info */}
             <div>
               <h1
-                className="text-xl font-bold text-[var(--text-primary)] mb-0.5"
+                className="text-xl font-bold text-(--text-primary) mb-0.5"
                 style={{
                   fontFamily: "var(--font-syne, Syne, sans-serif)",
                   letterSpacing: "-0.02em",
@@ -281,7 +281,7 @@ export default function CompanyDetailPage({
                 {company.name}
               </h1>
               {company.industry && (
-                <p className="text-sm text-[var(--text-muted)] mb-3">
+                <p className="text-sm text-(--text-muted) mb-3">
                   {company.industry}
                 </p>
               )}
@@ -301,13 +301,13 @@ export default function CompanyDetailPage({
                   </a>
                 )}
                 {company.phone && (
-                  <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                  <span className="flex items-center gap-1.5 text-xs text-(--text-muted)">
                     <Phone size={12} />
                     {company.phone}
                   </span>
                 )}
                 {company.domain && (
-                  <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                  <span className="flex items-center gap-1.5 text-xs text-(--text-muted)">
                     <Building2 size={12} />
                     {company.domain}
                   </span>
@@ -317,7 +317,7 @@ export default function CompanyDetailPage({
           </div>
 
           {/* Edit / Delete / Enrich */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {canUpdateCompany && (
               <>
                 <button
@@ -330,7 +330,7 @@ export default function CompanyDetailPage({
                 </button>
                 <button
                   onClick={openEditCompany}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
                 >
                   <Pencil size={12} />
                   Edit
@@ -354,11 +354,11 @@ export default function CompanyDetailPage({
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2
-            className="text-base font-semibold text-[var(--text-primary)]"
+            className="text-base font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             Contacts
-            <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-sm font-normal text-(--text-muted)">
               ({contacts.length})
             </span>
           </h2>
@@ -374,8 +374,8 @@ export default function CompanyDetailPage({
         </div>
 
         {contacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 rounded-xl border border-dashed border-[var(--border)] text-center">
-            <p className="text-sm text-[var(--text-muted)] mb-3">
+          <div className="flex flex-col items-center justify-center py-12 rounded-xl border border-dashed border-(--border) text-center">
+            <p className="text-sm text-(--text-muted) mb-3">
               No contacts linked to this company yet
             </p>
             {canCreateContact && (
@@ -391,7 +391,7 @@ export default function CompanyDetailPage({
         ) : (
           <div
             ref={contactListRef}
-            className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]"
+            className="rounded-xl border border-(--border) overflow-hidden divide-y divide-(--border)"
           >
             {contacts.map((contact) => {
               const fullName = [contact.first_name, contact.last_name]
@@ -402,41 +402,41 @@ export default function CompanyDetailPage({
               return (
                 <div
                   key={contact.id}
-                  className="contact-row flex items-center gap-4 px-4 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors group"
+                  className="contact-row flex items-center gap-4 px-4 py-3.5 bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors group"
                 >
                   <ContactAvatar name={contact.first_name} />
 
                   <div className="flex-1 min-w-0">
                     <p
-                      className="text-sm font-medium text-[var(--text-primary)] truncate"
+                      className="text-sm font-medium text-(--text-primary) truncate"
                       style={{
                         fontFamily: "var(--font-inter, Inter, sans-serif)",
                       }}
                     >
                       {fullName}
                     </p>
-                    <p className="text-xs text-[var(--text-muted)] truncate">
+                    <p className="text-xs text-(--text-muted) truncate">
                       {contact.title ?? contact.email ?? ""}
                     </p>
                   </div>
 
                   {contact.email && (
-                    <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hidden sm:flex">
+                    <div className="flex items-center gap-1.5 text-xs text-(--text-muted) hidden sm:flex">
                       <Mail size={11} />
                       {contact.email}
                     </div>
                   )}
 
                   {contact.title && (
-                    <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hidden md:flex">
+                    <div className="flex items-center gap-1.5 text-xs text-(--text-muted) hidden md:flex">
                       <Briefcase size={11} />
                       {contact.title}
                     </div>
                   )}
 
                   {confirming ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -447,17 +447,17 @@ export default function CompanyDetailPage({
                       </button>
                       <button
                         onClick={() => setDeleteContactId(null)}
-                        className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                       >
                         No
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       {canUpdateContact && (
                         <button
                           onClick={() => openEditContact(contact)}
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                          className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
                           title="Edit contact"
                         >
                           <Pencil size={13} />
@@ -466,7 +466,7 @@ export default function CompanyDetailPage({
                       {canDeleteContact && (
                         <button
                           onClick={() => setDeleteContactId(contact.id)}
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Delete contact"
                         >
                           <Trash2 size={13} />

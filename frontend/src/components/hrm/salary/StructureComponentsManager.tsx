@@ -21,8 +21,8 @@ interface StructureComponentsManagerProps {
 
 const inputCls = `
   px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -78,7 +78,7 @@ export default function StructureComponentsManager({
 
   if (detailQuery.isPending) {
     return (
-      <div className="flex items-center justify-center py-10 text-sm text-[var(--text-muted)] gap-3">
+      <div className="flex items-center justify-center py-10 text-sm text-(--text-muted) gap-3">
         <Loader2 size={16} className="animate-spin text-purple-500" /> Loading…
       </div>
     );
@@ -98,7 +98,7 @@ export default function StructureComponentsManager({
     <div className="px-6 py-5 space-y-4">
       <div className="space-y-2">
         {(structure?.components ?? []).length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             No components in this structure yet.
           </p>
         ) : (
@@ -108,13 +108,13 @@ export default function StructureComponentsManager({
             .map((sc) => (
               <div
                 key={sc.component_id}
-                className="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+                className="flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-(--bg-elevated) border border-(--border)"
               >
                 <div>
-                  <p className="text-sm text-[var(--text-primary)]">
+                  <p className="text-sm text-(--text-primary)">
                     {sc.component?.name ?? sc.component_id}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-(--text-muted)">
                     {sc.component?.component_type} · {sc.component?.calc_method}
                     {sc.override_value !== undefined
                       ? ` · override: ${sc.override_value}`
@@ -132,9 +132,9 @@ export default function StructureComponentsManager({
         )}
       </div>
 
-      <div className="flex items-end gap-2 pt-2 border-t border-[var(--border)]">
+      <div className="flex items-end gap-2 pt-2 border-t border-(--border)">
         <div className="flex-1 space-y-1.5">
-          <label className="block text-xs font-medium text-[var(--text-secondary)]">
+          <label className="block text-xs font-medium text-(--text-secondary)">
             Add component
           </label>
           <select
@@ -155,7 +155,7 @@ export default function StructureComponentsManager({
           </select>
         </div>
         <div className="w-28 space-y-1.5">
-          <label className="block text-xs font-medium text-[var(--text-secondary)]">
+          <label className="block text-xs font-medium text-(--text-secondary)">
             Override
           </label>
           <input

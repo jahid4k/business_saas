@@ -75,7 +75,7 @@ export default function ApprovalInstanceView({
 
   if (instQuery.isPending) {
     return (
-      <div className="flex items-center justify-center py-10 text-sm text-[var(--text-muted)] gap-3">
+      <div className="flex items-center justify-center py-10 text-sm text-(--text-muted) gap-3">
         <Loader2 size={16} className="animate-spin text-purple-500" /> Loading…
       </div>
     );
@@ -103,7 +103,7 @@ export default function ApprovalInstanceView({
         >
           {inst.overall_status}
         </span>
-        <span className="text-xs text-[var(--text-muted)]">
+        <span className="text-xs text-(--text-muted)">
           Level {inst.current_level} of {levels.length}
         </span>
       </div>
@@ -120,11 +120,11 @@ export default function ApprovalInstanceView({
               className={`p-3 rounded-lg border ${
                 isCurrent
                   ? "border-purple-500/40 bg-purple-500/5"
-                  : "border-[var(--border)] bg-[var(--bg-elevated)]"
+                  : "border-(--border) bg-(--bg-elevated)"
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-[var(--text-primary)]">
+                <span className="text-sm font-medium text-(--text-primary)">
                   Level {lvl.level} —{" "}
                   {APPROVER_LABEL[lvl.approver_type] ?? lvl.approver_type}
                 </span>
@@ -143,11 +143,11 @@ export default function ApprovalInstanceView({
                     <Clock size={12} /> Waiting
                   </span>
                 ) : (
-                  <span className="text-xs text-[var(--text-muted)]">—</span>
+                  <span className="text-xs text-(--text-muted)">—</span>
                 )}
               </div>
               {decision?.note && (
-                <p className="text-xs text-[var(--text-muted)] mt-1.5">
+                <p className="text-xs text-(--text-muted) mt-1.5">
                   &quot;{decision.note}&quot;
                 </p>
               )}
@@ -157,13 +157,13 @@ export default function ApprovalInstanceView({
       </div>
 
       {inst.overall_status === "pending" && canAct && (
-        <div className="pt-3 border-t border-[var(--border)] space-y-2">
+        <div className="pt-3 border-t border-(--border) space-y-2">
           <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={2}
             placeholder="Optional note"
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button

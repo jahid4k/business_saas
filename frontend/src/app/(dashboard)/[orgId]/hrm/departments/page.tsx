@@ -159,7 +159,7 @@ export default function DepartmentsPage({
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1
-              className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+              className="text-2xl font-bold text-(--text-primary) mb-1"
               style={{
                 fontFamily: "var(--font-syne, Syne, sans-serif)",
                 letterSpacing: "-0.02em",
@@ -167,7 +167,7 @@ export default function DepartmentsPage({
             >
               Departments
             </h1>
-            <p className="text-sm text-[var(--text-muted)]">
+            <p className="text-sm text-(--text-muted)">
               {departments.length}{" "}
               {departments.length === 1 ? "department" : "departments"} total
             </p>
@@ -189,7 +189,7 @@ export default function DepartmentsPage({
           </div>
         )}
 
-        <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 mb-6 border-b border-(--border)">
           {(["all", "active", "inactive"] as FilterKey[]).map((key) => {
             const count =
               key === "all"
@@ -205,7 +205,7 @@ export default function DepartmentsPage({
                 className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all"
@@ -218,7 +218,7 @@ export default function DepartmentsPage({
                     className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
                       active
                         ? "bg-purple-500/15 text-purple-400"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+                        : "bg-(--bg-elevated) text-(--text-muted)"
                     }`}
                   >
                     {count}
@@ -231,22 +231,22 @@ export default function DepartmentsPage({
 
         {deptQuery.isPending ? (
           <div className="flex items-center justify-center py-20">
-            <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
+            <div className="flex items-center gap-3 text-sm text-(--text-muted)">
               <Loader2 size={16} className="animate-spin text-purple-500" />
               Loading departments…
             </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-              <Building2 size={20} className="text-[var(--text-muted)]" />
+            <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+              <Building2 size={20} className="text-(--text-muted)" />
             </div>
-            <p className="text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <p className="text-sm font-medium text-(--text-secondary) mb-1">
               {activeFilter === "all"
                 ? "No departments yet"
                 : `No ${activeFilter} departments`}
             </p>
-            <p className="text-xs text-[var(--text-muted)] mb-4">
+            <p className="text-xs text-(--text-muted) mb-4">
               {canCreate && activeFilter === "all"
                 ? "Create your first department to get started."
                 : "Nothing here for this filter."}
@@ -271,18 +271,18 @@ export default function DepartmentsPage({
               return (
                 <div
                   key={dept.id}
-                  className={`dept-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                  className={`dept-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
                 >
                   <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                     <Building2 size={15} />
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                    <p className="text-sm font-medium leading-snug text-(--text-primary)">
                       {dept.name}
                     </p>
                     {dept.description && (
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                      <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                         {dept.description}
                       </p>
                     )}
@@ -297,7 +297,7 @@ export default function DepartmentsPage({
                         {dept.is_active ? "Active" : "Inactive"}
                       </span>
                       {parentName && (
-                        <span className="text-xs text-[var(--text-muted)]">
+                        <span className="text-xs text-(--text-muted)">
                           Under {parentName}
                         </span>
                       )}
@@ -305,8 +305,8 @@ export default function DepartmentsPage({
                   </div>
 
                   {confirming ? (
-                    <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                      <span className="text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -317,7 +317,7 @@ export default function DepartmentsPage({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                        className="px-2.5 py-1 rounded-md text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                       >
                         No
                       </button>
@@ -325,7 +325,7 @@ export default function DepartmentsPage({
                   ) : (
                     (canUpdate || canDelete) && (
                       <div
-                        className="relative flex-shrink-0"
+                        className="relative shrink-0"
                         ref={(el) => {
                           if (el) menuRefs.current.set(dept.id, el);
                           else menuRefs.current.delete(dept.id);
@@ -335,16 +335,16 @@ export default function DepartmentsPage({
                           onClick={() =>
                             setOpenMenuId(menuOpen ? null : dept.id)
                           }
-                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                         >
                           <MoreHorizontal size={15} />
                         </button>
                         {menuOpen && (
-                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                             {canUpdate && (
                               <button
                                 onClick={() => openEdit(dept)}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                               >
                                 <Pencil size={13} />
                                 Edit
@@ -374,7 +374,7 @@ export default function DepartmentsPage({
         )}
 
         {!deptQuery.isPending && filtered.length > 0 && (
-          <p className="mt-5 text-xs text-[var(--text-muted)]">
+          <p className="mt-5 text-xs text-(--text-muted)">
             Showing {filtered.length} of {departments.length}{" "}
             {departments.length === 1 ? "department" : "departments"}
           </p>

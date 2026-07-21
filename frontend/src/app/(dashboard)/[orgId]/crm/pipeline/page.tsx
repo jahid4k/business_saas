@@ -109,47 +109,47 @@ function MobileDealCard({
   const otherStages = stages.filter((s) => s.id !== deal.stage_id);
 
   return (
-    <div className="rounded-2xl p-4 border bg-[var(--bg-surface)] border-[var(--border)] active:scale-[0.99] transition-transform">
+    <div className="rounded-2xl p-4 border bg-(--bg-surface) border-(--border) active:scale-[0.99] transition-transform">
       {/* Title row */}
       <div className="flex items-start justify-between gap-2 mb-1">
         <p
-          className="text-sm font-semibold text-[var(--text-primary)] leading-snug"
+          className="text-sm font-semibold text-(--text-primary) leading-snug"
           style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
         >
           {deal.title}
         </p>
         <button
           onClick={() => onEdit(deal)}
-          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] flex-shrink-0 transition-colors"
+          className="p-1.5 rounded-lg text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) shrink-0 transition-colors"
         >
           <Pencil size={12} />
         </button>
       </div>
 
       {/* Value */}
-      <p className="text-xl font-bold text-[var(--text-primary)] mb-3">
+      <p className="text-xl font-bold text-(--text-primary) mb-3">
         {formatCurrency(deal.value, deal.currency)}
       </p>
 
       {/* Meta */}
       <div className="space-y-1.5 mb-4">
         {company && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <Building2 size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <Building2 size={11} className="shrink-0" />
             <span className="truncate">{company.name}</span>
           </div>
         )}
         {contact && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <User size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <User size={11} className="shrink-0" />
             <span className="truncate">
               {contact.first_name} {contact.last_name ?? ""}
             </span>
           </div>
         )}
         {deal.close_date && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <Calendar size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <Calendar size={11} className="shrink-0" />
             <span>{formatDate(deal.close_date)}</span>
           </div>
         )}
@@ -157,7 +157,7 @@ function MobileDealCard({
 
       {/* Actions */}
       {deal.status === "open" ? (
-        <div className="flex items-center gap-2 pt-3 border-t border-[var(--border)]">
+        <div className="flex items-center gap-2 pt-3 border-t border-(--border)">
           <button
             onClick={() => onWon(deal)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 active:bg-emerald-500/20 transition-colors"
@@ -178,7 +178,7 @@ function MobileDealCard({
             <div className="relative ml-auto">
               <button
                 onClick={() => setMoveOpen((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-elevated)] border border-[var(--border)] active:bg-[var(--bg-base)] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-(--text-secondary) bg-(--bg-elevated) border border-(--border) active:bg-(--bg-base) transition-colors"
               >
                 Move
                 <ChevronDown
@@ -200,10 +200,10 @@ function MobileDealCard({
                   />
                   {/* Stage list — appears above button */}
                   <div
-                    className="absolute right-0 bottom-full mb-2 w-52 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-2xl z-20"
+                    className="absolute right-0 bottom-full mb-2 w-52 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-2xl z-20"
                     style={{ maxHeight: "60vh", overflowY: "auto" }}
                   >
-                    <p className="px-3 py-2 text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border)]">
+                    <p className="px-3 py-2 text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-wider border-b border-(--border)">
                       Move to stage
                     </p>
                     {otherStages.map((stage) => (
@@ -213,12 +213,12 @@ function MobileDealCard({
                           onMove(deal.id, stage.id);
                           setMoveOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                        className="w-full flex items-center gap-2 px-3 py-3 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                         style={{
                           fontFamily: "var(--font-inter, Inter, sans-serif)",
                         }}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
                         {stage.name}
                       </button>
                     ))}
@@ -229,7 +229,7 @@ function MobileDealCard({
           )}
         </div>
       ) : (
-        <div className="pt-3 border-t border-[var(--border)]">
+        <div className="pt-3 border-t border-(--border)">
           <span
             className={`text-xs font-semibold ${STATUS_COLOR[deal.status]}`}
           >
@@ -299,7 +299,7 @@ function DealCard({
       {...attributes}
       className={`
         rounded-xl p-3.5 border select-none
-        bg-[var(--bg-surface)] border-[var(--border)]
+        bg-(--bg-surface) border-(--border)
         hover:border-purple-500/30 hover:shadow-md
         transition-colors duration-150
         ${isDragOverlay ? "shadow-2xl border-purple-500/40 rotate-1" : ""}
@@ -309,7 +309,7 @@ function DealCard({
       {/* Title + edit */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <p
-          className="text-sm font-medium text-[var(--text-primary)] leading-snug"
+          className="text-sm font-medium text-(--text-primary) leading-snug"
           style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
         >
           {deal.title}
@@ -320,36 +320,36 @@ function DealCard({
             e.stopPropagation();
             onEdit(deal);
           }}
-          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] flex-shrink-0 transition-colors"
+          className="p-1 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) shrink-0 transition-colors"
         >
           <Pencil size={11} />
         </button>
       </div>
 
       {/* Value */}
-      <p className="text-base font-bold text-[var(--text-primary)] mb-2">
+      <p className="text-base font-bold text-(--text-primary) mb-2">
         {formatCurrency(deal.value, deal.currency)}
       </p>
 
       {/* Meta */}
       <div className="space-y-1 mb-3">
         {company && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <Building2 size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <Building2 size={10} className="shrink-0" />
             <span className="truncate">{company.name}</span>
           </div>
         )}
         {contact && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <User size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <User size={10} className="shrink-0" />
             <span className="truncate">
               {contact.first_name} {contact.last_name ?? ""}
             </span>
           </div>
         )}
         {deal.close_date && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <Calendar size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <Calendar size={10} className="shrink-0" />
             <span>{formatDate(deal.close_date)}</span>
           </div>
         )}
@@ -430,19 +430,19 @@ function KanbanColumn({
 
   return (
     <div
-      className="flex flex-col flex-shrink-0 h-full min-h-0"
+      className="flex flex-col shrink-0 h-full min-h-0"
       style={{ width: 272 }}
     >
-      {/* Header — flex-shrink-0 so only the card list scrolls */}
-      <div className="flex items-center justify-between px-1 mb-3 flex-shrink-0">
+      {/* Header — shrink-0 so only the card list scrolls */}
+      <div className="flex items-center justify-between px-1 mb-3 shrink-0">
         <div>
           <p
-            className="text-sm font-semibold text-[var(--text-primary)]"
+            className="text-sm font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
           >
-            {stage.name} <span className="text-xs text-[var(--text-muted)] font-normal ml-1">({stage.probability}%)</span>
+            {stage.name} <span className="text-xs text-(--text-muted) font-normal ml-1">({stage.probability}%)</span>
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             {orderedDeals.length} deal{orderedDeals.length !== 1 ? "s" : ""}
             {totalValue > 0 && ` · ${formatCurrency(totalValue)}`}
             {totalValue > 0 && stage.probability > 0 && stage.probability < 100 && (
@@ -455,7 +455,7 @@ function KanbanColumn({
         {canCreate && (
           <button
             onClick={() => onNewDeal(stage)}
-            className="p-1 rounded-md text-[var(--text-muted)] hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+            className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
             title={`Add deal to ${stage.name}`}
           >
             <Plus size={14} />
@@ -472,7 +472,7 @@ function KanbanColumn({
           ${
             isOver
               ? "bg-purple-500/8 border border-purple-500/30"
-              : "bg-[var(--bg-elevated)]/50 border border-[var(--border)]/60"
+              : "bg-(--bg-elevated)/50 border border-(--border)/60"
           }
         `}
       >
@@ -495,7 +495,7 @@ function KanbanColumn({
 
         {orderedDeals.length === 0 && (
           <div className="flex items-center justify-center h-24">
-            <p className="text-xs text-[var(--text-muted)]">Drop deals here</p>
+            <p className="text-xs text-(--text-muted)">Drop deals here</p>
           </div>
         )}
       </div>
@@ -883,11 +883,11 @@ export default function PipelinePage({
 
   // ── Header (shared) ───────────────────────────────────────────────────────
   const header = (
-    <div className="flex items-center justify-between px-4 md:px-8 pt-5 pb-4 flex-shrink-0 gap-3">
+    <div className="flex items-center justify-between px-4 md:px-8 pt-5 pb-4 shrink-0 gap-3">
       <div className="flex items-center gap-3 min-w-0">
         <div className="min-w-0">
           <h1
-            className="text-xl md:text-2xl font-bold text-[var(--text-primary)] truncate"
+            className="text-xl md:text-2xl font-bold text-(--text-primary) truncate"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -896,7 +896,7 @@ export default function PipelinePage({
             Pipeline
           </h1>
           {!isBoardLoading && (
-            <p className="text-xs md:text-sm text-[var(--text-muted)] truncate">
+            <p className="text-xs md:text-sm text-(--text-muted) truncate">
               {openDealCount} open
               {totalOpenValue > 0 && ` · ${formatCurrency(totalOpenValue)}`}
             </p>
@@ -910,7 +910,7 @@ export default function PipelinePage({
               setSelectedPipe(e.target.value);
               setMobileStageId(""); // reset mobile tab on pipeline change
             }}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-purple-500 transition-colors flex-shrink-0"
+            className="hidden sm:block px-3 py-1.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-secondary) outline-none focus:border-purple-500 transition-colors shrink-0"
           >
             {pipelines.map((p) => (
               <option
@@ -928,7 +928,7 @@ export default function PipelinePage({
       {canCreate && (
         <button
           onClick={() => openCreate()}
-          className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shrink-0"
         >
           <Plus size={14} />
           <span className="hidden sm:inline">New deal</span>
@@ -944,22 +944,22 @@ export default function PipelinePage({
       {header}
 
       {bannerError && (
-        <div className="mx-4 md:mx-8 mb-3 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20 flex-shrink-0">
+        <div className="mx-4 md:mx-8 mb-3 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20 shrink-0">
           {bannerError}
         </div>
       )}
 
       {isBoardLoading ? (
-        <div className="flex items-center gap-3 px-8 py-16 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 px-8 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading board…
         </div>
       ) : sortedStages.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center px-8">
-          <p className="text-sm text-[var(--text-muted)] mb-1">
+          <p className="text-sm text-(--text-muted) mb-1">
             No stages in this pipeline
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             Add stages to your pipeline to start tracking deals
           </p>
         </div>
@@ -968,7 +968,7 @@ export default function PipelinePage({
         <div className="flex flex-col flex-1 min-h-0">
           {/* Stage tab strip */}
           <div
-            className="flex gap-2 px-4 py-3 border-b border-[var(--border)] flex-shrink-0 overflow-x-auto"
+            className="flex gap-2 px-4 py-3 border-b border-(--border) shrink-0 overflow-x-auto"
             style={{ scrollbarWidth: "none" }}
           >
             {sortedStages.map((stage) => {
@@ -979,12 +979,12 @@ export default function PipelinePage({
                   key={stage.id}
                   onClick={() => setMobileStageId(stage.id)}
                   className={`
-                    flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+                    shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
                     transition-colors
                     ${
                       active
                         ? "bg-purple-600 text-white"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                        : "bg-(--bg-elevated) text-(--text-muted) hover:text-(--text-secondary)"
                     }
                   `}
                 >
@@ -994,7 +994,7 @@ export default function PipelinePage({
                       className={`text-[0.6rem] px-1.5 py-0.5 rounded-full ${
                         active
                           ? "bg-white/20 text-white"
-                          : "bg-[var(--bg-base)] text-[var(--text-muted)]"
+                          : "bg-(--bg-base) text-(--text-muted)"
                       }`}
                     >
                       {count}
@@ -1023,11 +1023,11 @@ export default function PipelinePage({
 
             {getOrderedDeals(activeMobileStageId).length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-[var(--text-muted)] mb-1">
+                <p className="text-sm text-(--text-muted) mb-1">
                   No deals in this stage
                 </p>
                 {canCreate && (
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-(--text-muted)">
                     Tap &ldquo;New&rdquo; to add one
                   </p>
                 )}
@@ -1042,7 +1042,7 @@ export default function PipelinePage({
                     sortedStages.find((s) => s.id === activeMobileStageId),
                   )
                 }
-                className="w-full py-3.5 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:border-purple-500/40 hover:text-purple-400 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-2xl border-2 border-dashed border-(--border) text-sm text-(--text-muted) hover:border-purple-500/40 hover:text-purple-400 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={14} />
                 Add deal to this stage
