@@ -28,8 +28,8 @@ interface LeaveRequestFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -108,7 +108,7 @@ export default function LeaveRequestForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Employee <span className="text-red-400">*</span>
           </label>
           <select {...register("employee_id")} autoFocus className={inputCls}>
@@ -129,7 +129,7 @@ export default function LeaveRequestForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Leave type <span className="text-red-400">*</span>
           </label>
           <select {...register("leave_type_id")} className={inputCls}>
@@ -156,7 +156,7 @@ export default function LeaveRequestForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Start date <span className="text-red-400">*</span>
             </label>
             <input
@@ -171,7 +171,7 @@ export default function LeaveRequestForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               End date <span className="text-red-400">*</span>
             </label>
             <input {...register("end_date")} type="date" className={inputCls} />
@@ -182,7 +182,7 @@ export default function LeaveRequestForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Total days <span className="text-red-400">*</span>
           </label>
           <input
@@ -198,7 +198,7 @@ export default function LeaveRequestForm({
             }}
             className={inputCls}
           />
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             Auto-filled from the date range — edit for half-days or excluded
             weekends.
           </p>
@@ -208,7 +208,7 @@ export default function LeaveRequestForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Reason
           </label>
           <textarea
@@ -220,11 +220,11 @@ export default function LeaveRequestForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

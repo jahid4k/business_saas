@@ -81,31 +81,31 @@ export default function CommandMenu() {
 
       {/* Modal */}
       <Command
-        className="relative z-50 flex w-full max-w-160 flex-col overflow-hidden rounded-xl border border-[(--border)] bg-[(--bg-elevated)] shadow-2xl mx-4 sm:mx-0 animate-in fade-in zoom-in-95 duration-200"
+        className="relative z-50 flex w-full max-w-160 flex-col overflow-hidden rounded-xl border border-(--border) bg-(--bg-elevated) shadow-2xl mx-4 sm:mx-0 animate-in fade-in zoom-in-95 duration-200"
         loop
       >
-        <div className="flex items-center border-b border-[(--border)] px-4">
-          <Search className="mr-3 h-5 w-5 text-[(--text-muted)] shrink-0" />
+        <div className="flex items-center border-b border-(--border) px-4">
+          <Search className="mr-3 h-5 w-5 text-(--text-muted) shrink-0" />
           <Command.Input
             autoFocus
-            className="flex h-14 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-[(--text-muted)] text-[(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-14 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-(--text-muted) text-(--text-primary) disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Type a command or search..."
           />
         </div>
 
         <Command.List className="max-h-75 overflow-y-auto overflow-x-hidden p-2">
-          <Command.Empty className="py-6 text-center text-sm text-[(--text-muted)]">
+          <Command.Empty className="py-6 text-center text-sm text-(--text-muted)">
             No results found.
           </Command.Empty>
 
           <Command.Group
             heading="Suggestions"
-            className="px-2 text-xs font-medium text-[(--text-muted)] **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[(--text-muted)] [&_[cmdk-group-heading]]:font-semibold"
+            className="px-2 text-xs font-medium text-(--text-muted) **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-(--text-muted) **:[[cmdk-group-heading]]:font-semibold"
           >
             {orgId && (
               <Command.Item
                 onSelect={() => runCommand(() => router.push(`/${orgId}`))}
-                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-[(--bg-surface)] aria-selected:text-[(--text-primary)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-[(--text-secondary)] transition-colors"
+                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-(--bg-surface) aria-selected:text-(--text-primary) data-disabled:pointer-events-none data-disabled:opacity-50 text-(--text-secondary) transition-colors"
               >
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Go to Dashboard
@@ -116,7 +116,7 @@ export default function CommandMenu() {
                 onSelect={() =>
                   runCommand(() => router.push(`/${orgId}/crm/leads`))
                 }
-                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-[(--bg-surface)] aria-selected:text-[(--text-primary)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-[(--text-secondary)] transition-colors"
+                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-(--bg-surface) aria-selected:text-(--text-primary) data-disabled:pointer-events-none data-disabled:opacity-50 text-(--text-secondary) transition-colors"
               >
                 <FileText className="mr-2 h-4 w-4" />
                 Go to Leads
@@ -124,7 +124,7 @@ export default function CommandMenu() {
             )}
             <Command.Item
               onSelect={() => runCommand(toggleTheme)}
-              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-[(--bg-surface)] aria-selected:text-[(--text-primary)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-[(--text-secondary)] transition-colors"
+              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none c data-disabled:pointer-events-none data-disabled:opacity-50 text-(--text-secondary) transition-colors"
             >
               {resolvedTheme === "dark" ? (
                 <Sun className="mr-2 h-4 w-4" />
@@ -135,18 +135,18 @@ export default function CommandMenu() {
             </Command.Item>
           </Command.Group>
 
-          <Command.Separator className="-mx-2 h-px bg-[(--border)] my-1" />
+          <Command.Separator className="-mx-2 h-px bg-(--border) my-1" />
 
           <Command.Group
             heading="Quick Actions"
-            className="px-2 text-xs font-medium text-[(--text-muted)] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[(--text-muted)] [&_[cmdk-group-heading]]:font-semibold"
+            className="px-2 text-xs font-medium text-(--text-muted) **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:py-1.5 **:[[cmdk-group-heading]]:text-(--text-muted) **:[[cmdk-group-heading]]:font-semibold"
           >
             {orgId && (
               <Command.Item
                 onSelect={() =>
                   runCommand(() => router.push(`/${orgId}/settings`))
                 }
-                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-[(--bg-surface)] aria-selected:text-[(--text-primary)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-[(--text-secondary)] transition-colors"
+                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-(--bg-surface) aria-selected:text-(--text-primary) data-disabled:pointer-events-none data-disabled:opacity-50 text-(--text-secondary) transition-colors"
               >
                 <Settings className="mr-2 h-4 w-4" />
                 Settings
@@ -156,7 +156,7 @@ export default function CommandMenu() {
               onSelect={() =>
                 runCommand(() => router.push("/select-organization"))
               }
-              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-[(--bg-surface)] aria-selected:text-[(--text-primary)] data-[disabled]:pointer-events-none data-[disabled]:opacity-50 text-[(--text-secondary)] transition-colors"
+              className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-2.5 text-sm outline-none aria-selected:bg-(--bg-surface) aria-selected:text-(--text-primary) data-disabled:pointer-events-none data-disabled:opacity-50 text-(--text-secondary) transition-colors"
             >
               <Building className="mr-2 h-4 w-4" />
               Switch Workspace

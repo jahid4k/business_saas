@@ -89,28 +89,28 @@ function StatCard({
         ${
           accent
             ? "bg-purple-600/10 border-purple-500/30"
-            : "bg-[var(--bg-surface)] border-[var(--border)]"
+            : "bg-(--bg-surface) border-(--border)"
         }
       `}
     >
       <div className="flex items-start justify-between mb-3">
         <div
           className={`w-9 h-9 rounded-lg flex items-center justify-center
-            ${accent ? "bg-purple-500/20" : "bg-[var(--bg-elevated)]"}`}
+            ${accent ? "bg-purple-500/20" : "bg-(--bg-elevated)"}`}
         >
           <Icon
             size={16}
-            className={accent ? "text-purple-400" : "text-[var(--text-muted)]"}
+            className={accent ? "text-purple-400" : "text-(--text-muted)"}
           />
         </div>
       </div>
       <p
-        className={`text-2xl font-bold mb-0.5 ${accent ? "text-purple-300" : "text-[var(--text-primary)]"}`}
+        className={`text-2xl font-bold mb-0.5 ${accent ? "text-purple-300" : "text-(--text-primary)"}`}
         style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
       >
         {value}
       </p>
-      <p className="text-xs text-[var(--text-muted)]">{label}</p>
+      <p className="text-xs text-(--text-muted)">{label}</p>
       {sub && <p className="text-xs text-purple-400 mt-0.5">{sub}</p>}
     </div>
   );
@@ -184,7 +184,7 @@ function ChartCardState({
 }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48 gap-2 text-sm text-[var(--text-muted)]">
+      <div className="flex items-center justify-center h-48 gap-2 text-sm text-(--text-muted)">
         <Loader2 size={14} className="animate-spin text-purple-500" />
         Loading…
       </div>
@@ -198,7 +198,7 @@ function ChartCardState({
     );
   }
   return (
-    <div className="flex items-center justify-center h-48 text-sm text-[var(--text-muted)]">
+    <div className="flex items-center justify-center h-48 text-sm text-(--text-muted)">
       {emptyLabel}
     </div>
   );
@@ -248,7 +248,7 @@ export default function ReportsPage({
 
   if (!canView) {
     return (
-      <div className="p-8 text-sm text-[var(--text-muted)]">
+      <div className="p-8 text-sm text-(--text-muted)">
         You do not have permission to view reports.
       </div>
     );
@@ -259,7 +259,7 @@ export default function ReportsPage({
   // render without, so it's the only one still gating the whole page.
   if (activeTab === "overview" && overviewQuery.isPending) {
     return (
-      <div className="flex items-center gap-3 p-8 text-sm text-[var(--text-muted)]">
+      <div className="flex items-center gap-3 p-8 text-sm text-(--text-muted)">
         <Loader2 size={15} className="animate-spin text-purple-500" />
         Loading reports…
       </div>
@@ -294,7 +294,7 @@ export default function ReportsPage({
       {/* Header */}
       <div className="mb-8">
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+          className="text-2xl font-bold text-(--text-primary) mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -302,17 +302,17 @@ export default function ReportsPage({
         >
           CRM Reports
         </h1>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Overview of your sales pipeline
         </p>
       </div>
 
-      <div className="flex border-b border-[var(--border)] mb-8">
+      <div className="flex border-b border-(--border) mb-8">
         <button
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === "overview"
               ? "border-purple-500 text-purple-600 dark:text-purple-400"
-              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
           }`}
           onClick={() => setActiveTab("overview")}
         >
@@ -322,7 +322,7 @@ export default function ReportsPage({
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === "performance"
               ? "border-purple-500 text-purple-600 dark:text-purple-400"
-              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
           }`}
           onClick={() => setActiveTab("performance")}
         >
@@ -332,7 +332,7 @@ export default function ReportsPage({
           className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === "forecast"
               ? "border-purple-500 text-purple-600 dark:text-purple-400"
-              : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
           }`}
           onClick={() => setActiveTab("forecast")}
         >
@@ -380,21 +380,21 @@ export default function ReportsPage({
 
       {/* Deal outcome row */}
       <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="rounded-xl p-4 border bg-[var(--bg-surface)] border-[var(--border)] flex items-center gap-4">
+        <div className="rounded-xl p-4 border bg-(--bg-surface) border-(--border) flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
             <TrendingUp size={18} className="text-blue-400" />
           </div>
           <div>
             <p
-              className="text-xl font-bold text-[var(--text-primary)]"
+              className="text-xl font-bold text-(--text-primary)"
               style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
             >
               {summary.open_deals}
             </p>
-            <p className="text-xs text-[var(--text-muted)]">Open</p>
+            <p className="text-xs text-(--text-muted)">Open</p>
           </div>
         </div>
-        <div className="rounded-xl p-4 border bg-[var(--bg-surface)] border-[var(--border)] flex items-center gap-4">
+        <div className="rounded-xl p-4 border bg-(--bg-surface) border-(--border) flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
             <Trophy size={18} className="text-emerald-400" />
           </div>
@@ -405,10 +405,10 @@ export default function ReportsPage({
             >
               {summary.won_deals}
             </p>
-            <p className="text-xs text-[var(--text-muted)]">Won</p>
+            <p className="text-xs text-(--text-muted)">Won</p>
           </div>
         </div>
-        <div className="rounded-xl p-4 border bg-[var(--bg-surface)] border-[var(--border)] flex items-center gap-4">
+        <div className="rounded-xl p-4 border bg-(--bg-surface) border-(--border) flex items-center gap-4">
           <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
             <XIcon size={18} className="text-red-400" />
           </div>
@@ -419,7 +419,7 @@ export default function ReportsPage({
             >
               {summary.lost_deals}
             </p>
-            <p className="text-xs text-[var(--text-muted)]">Lost</p>
+            <p className="text-xs text-(--text-muted)">Lost</p>
           </div>
         </div>
       </div>
@@ -427,14 +427,14 @@ export default function ReportsPage({
       {/* ── Row 2: Charts ─────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-8">
         {/* Deals by stage — bar chart (3/5 width) */}
-        <div className="lg:col-span-3 rounded-xl p-6 border bg-[var(--bg-surface)] border-[var(--border)]">
+        <div className="lg:col-span-3 rounded-xl p-6 border bg-(--bg-surface) border-(--border)">
           <p
-            className="text-sm font-semibold text-[var(--text-primary)] mb-1"
+            className="text-sm font-semibold text-(--text-primary) mb-1"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             Deals by stage
           </p>
-          <p className="text-xs text-[var(--text-muted)] mb-5">
+          <p className="text-xs text-(--text-muted) mb-5">
             Total value per pipeline stage
           </p>
 
@@ -477,14 +477,14 @@ export default function ReportsPage({
         </div>
 
         {/* Leads by source — pie chart (2/5 width) */}
-        <div className="lg:col-span-2 rounded-xl p-6 border bg-[var(--bg-surface)] border-[var(--border)]">
+        <div className="lg:col-span-2 rounded-xl p-6 border bg-(--bg-surface) border-(--border)">
           <p
-            className="text-sm font-semibold text-[var(--text-primary)] mb-1"
+            className="text-sm font-semibold text-(--text-primary) mb-1"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             Leads by source
           </p>
-          <p className="text-xs text-[var(--text-muted)] mb-5">
+          <p className="text-xs text-(--text-muted) mb-5">
             Where your leads come from
           </p>
 
@@ -534,39 +534,39 @@ export default function ReportsPage({
 
       {/* ── Row 3: Recent deals ─────────────── */}
       {recentDeals.length > 0 && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-          <div className="px-6 py-4 border-b border-[var(--border)]">
+        <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
+          <div className="px-6 py-4 border-b border-(--border)">
             <p
-              className="text-sm font-semibold text-[var(--text-primary)]"
+              className="text-sm font-semibold text-(--text-primary)"
               style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
             >
               Recent deals
             </p>
           </div>
-          <div className="divide-y divide-[var(--border)]">
+          <div className="divide-y divide-(--border)">
             {recentDeals.slice(0, 8).map((deal) => (
               <div
                 key={deal.id}
-                className="flex items-center gap-4 px-6 py-3.5 hover:bg-[var(--bg-elevated)] transition-colors"
+                className="flex items-center gap-4 px-6 py-3.5 hover:bg-(--bg-elevated) transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <p
-                    className="text-sm font-medium text-[var(--text-primary)] truncate"
+                    className="text-sm font-medium text-(--text-primary) truncate"
                     style={{
                       fontFamily: "var(--font-inter, Inter, sans-serif)",
                     }}
                   >
                     {deal.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-(--text-muted)">
                     {formatDate(deal.created_at)}
                   </p>
                 </div>
-                <p className="text-sm font-semibold text-[var(--text-primary)] flex-shrink-0">
+                <p className="text-sm font-semibold text-(--text-primary) shrink-0">
                   {formatCurrency(deal.value)}
                 </p>
                 <span
-                  className={`text-[0.65rem] font-semibold capitalize px-2 py-0.5 rounded-full border flex-shrink-0
+                  className={`text-[0.65rem] font-semibold capitalize px-2 py-0.5 rounded-full border shrink-0
                     ${
                       deal.status === "won"
                         ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
@@ -585,10 +585,10 @@ export default function ReportsPage({
       )}
         </>
       ) : activeTab === "performance" ? (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm">
-          <div className="px-6 py-4 border-b border-[var(--border)]">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Rep Performance</h2>
-            <p className="text-sm text-[var(--text-secondary)]">Activity and deal metrics by team member</p>
+        <div className="bg-(--bg-surface) border border-(--border) rounded-xl overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-(--border)">
+            <h2 className="text-lg font-semibold text-(--text-primary)">Rep Performance</h2>
+            <p className="text-sm text-(--text-secondary)">Activity and deal metrics by team member</p>
           </div>
           
           {repPerformanceQuery.isPending ? (
@@ -598,34 +598,34 @@ export default function ReportsPage({
           ) : repPerformanceQuery.isError ? (
             <div className="p-8 text-center text-red-500">Failed to load performance data</div>
           ) : repPerformanceQuery.data?.length === 0 ? (
-            <div className="p-12 text-center text-[var(--text-muted)]">No data available</div>
+            <div className="p-12 text-center text-(--text-muted)">No data available</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-[var(--border)] bg-[var(--bg-canvas)]">
-                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Rep Name</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Calls</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Meetings</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Deals Closed</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Revenue Won</th>
+                  <tr className="border-b border-(--border) bg-(--bg-canvas)">
+                    <th className="px-6 py-4 text-xs font-semibold text-(--text-muted) uppercase tracking-wider">Rep Name</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-(--text-muted) uppercase tracking-wider">Calls</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-(--text-muted) uppercase tracking-wider">Meetings</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-(--text-muted) uppercase tracking-wider">Deals Closed</th>
+                    <th className="px-6 py-4 text-xs font-semibold text-(--text-muted) uppercase tracking-wider">Revenue Won</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--border)]">
+                <tbody className="divide-y divide-(--border)">
                   {repPerformanceQuery.data?.map((rep) => (
-                    <tr key={rep.rep_id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-6 py-4 text-sm font-medium text-[var(--text-primary)]">{rep.rep_name}</td>
-                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)] flex items-center gap-2">
+                    <tr key={rep.rep_id} className="hover:bg-gray-50/50 dark:hover:bg-white/2 transition-colors">
+                      <td className="px-6 py-4 text-sm font-medium text-(--text-primary)">{rep.rep_name}</td>
+                      <td className="px-6 py-4 text-sm text-(--text-secondary) flex items-center gap-2">
                         <Phone size={14} className="text-blue-500" />
                         {rep.calls}
                       </td>
-                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">
+                      <td className="px-6 py-4 text-sm text-(--text-secondary)">
                         <div className="flex items-center gap-2">
                           <Video size={14} className="text-purple-500" />
                           {rep.meetings}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm text-[var(--text-secondary)]">{rep.deals_closed}</td>
+                      <td className="px-6 py-4 text-sm text-(--text-secondary)">{rep.deals_closed}</td>
                       <td className="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                         {formatCurrency(rep.revenue_won)}
                       </td>
@@ -637,10 +637,10 @@ export default function ReportsPage({
           )}
         </div>
       ) : activeTab === "forecast" ? (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden shadow-sm p-8">
-          <div className="mb-8 border-b border-[var(--border)] pb-6">
-            <h2 className="text-xl font-bold text-[var(--text-primary)] mb-2">Revenue Forecast</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
+        <div className="bg-(--bg-surface) border border-(--border) rounded-xl overflow-hidden shadow-sm p-8">
+          <div className="mb-8 border-b border-(--border) pb-6">
+            <h2 className="text-xl font-bold text-(--text-primary) mb-2">Revenue Forecast</h2>
+            <p className="text-sm text-(--text-secondary)">
               Expected revenue calculated by multiplying open deal values by their pipeline stage probability.
             </p>
           </div>
@@ -652,15 +652,15 @@ export default function ReportsPage({
           ) : forecastQuery.isError ? (
             <div className="p-8 text-center text-red-500">Failed to load forecast data</div>
           ) : !forecastQuery.data ? (
-            <div className="p-12 text-center text-[var(--text-muted)]">No data available</div>
+            <div className="p-12 text-center text-(--text-muted)">No data available</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="p-6 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]">
-                <p className="text-sm font-medium text-[var(--text-secondary)] mb-2">Total Pipeline Value</p>
-                <p className="text-3xl font-bold text-[var(--text-primary)]" style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}>
+              <div className="p-6 rounded-xl border border-(--border) bg-(--bg-elevated)">
+                <p className="text-sm font-medium text-(--text-secondary) mb-2">Total Pipeline Value</p>
+                <p className="text-3xl font-bold text-(--text-primary)" style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}>
                   {formatCurrency(forecastQuery.data.total_pipeline_value)}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-2">Sum of all open deals</p>
+                <p className="text-xs text-(--text-muted) mt-2">Sum of all open deals</p>
               </div>
               
               <div className="p-6 rounded-xl border border-purple-500/30 bg-purple-500/5 relative overflow-hidden group">

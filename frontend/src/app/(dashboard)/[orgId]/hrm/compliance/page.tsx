@@ -92,7 +92,7 @@ export default function CompliancePage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -100,13 +100,13 @@ export default function CompliancePage({
           >
             Compliance
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Complaints, documents, and acknowledgements
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit flex-wrap">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit flex-wrap">
         {(["complaints", "documents", "acknowledgements"] as TabKey[]).map(
           (key) => (
             <button
@@ -115,7 +115,7 @@ export default function CompliancePage({
               className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 tab === key
                   ? "bg-purple-600 text-white"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  : "text-(--text-secondary) hover:text-(--text-primary)"
               }`}
             >
               {key === "complaints"
@@ -338,7 +338,7 @@ function ComplaintsView({
   return (
     <>
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)] flex-wrap">
+        <div className="flex items-center gap-0.5 border-b border-(--border) flex-wrap">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -352,7 +352,7 @@ function ComplaintsView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : key.replace("_", " ")}
@@ -374,11 +374,11 @@ function ComplaintsView({
 
       {/* Inline mini-forms for assign/resolve/dismiss */}
       {assignId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 flex items-center gap-3">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 flex items-center gap-3">
           <select
             value={investigatorPick}
             onChange={(e) => setInvestigatorPick(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="flex-1 px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           >
             <option value="">Select investigator</option>
             {employees.map((e) => (
@@ -399,20 +399,20 @@ function ComplaintsView({
           </button>
           <button
             onClick={() => setAssignId(null)}
-            className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+            className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
           >
             Cancel
           </button>
         </div>
       )}
       {resolveId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <textarea
             value={resolveText}
             onChange={(e) => setResolveText(e.target.value)}
             rows={2}
             placeholder="Resolution notes"
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button
@@ -423,7 +423,7 @@ function ComplaintsView({
             </button>
             <button
               onClick={() => setResolveId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -431,13 +431,13 @@ function ComplaintsView({
         </div>
       )}
       {dismissId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <textarea
             value={dismissText}
             onChange={(e) => setDismissText(e.target.value)}
             rows={2}
             placeholder="Reason for dismissal"
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button
@@ -448,7 +448,7 @@ function ComplaintsView({
             </button>
             <button
               onClick={() => setDismissId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -457,16 +457,16 @@ function ComplaintsView({
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <AlertTriangle size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <AlertTriangle size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No complaints
           </p>
         </div>
@@ -477,23 +477,23 @@ function ComplaintsView({
             return (
               <div
                 key={c.id}
-                className={`cp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`cp-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <AlertTriangle size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {c.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {c.complaint_type.replace("_", " ")} ·{" "}
                     {c.is_anonymous
                       ? "Filed anonymously"
                       : `By ${empName(c.employee_id)}`}
                     {c.incident_date ? ` · ${fmtDate(c.incident_date)}` : ""}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                  <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                     {c.description}
                   </p>
                   <div className="mt-2">
@@ -509,7 +509,7 @@ function ComplaintsView({
                   c.status !== "dismissed" &&
                   c.status !== "withdrawn" && (
                     <div
-                      className="relative flex-shrink-0"
+                      className="relative shrink-0"
                       ref={(el) => {
                         if (el) menuRefs.current.set(c.id, el);
                         else menuRefs.current.delete(c.id);
@@ -517,16 +517,16 @@ function ComplaintsView({
                     >
                       <button
                         onClick={() => setOpenMenuId(menuOpen ? null : c.id)}
-                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                       >
                         <MoreHorizontal size={15} />
                       </button>
                       {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                           {canProcess && c.status === "submitted" && (
                             <button
                               onClick={() => handleStartReview(c)}
-                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                             >
                               Start review
                             </button>
@@ -539,7 +539,7 @@ function ComplaintsView({
                                   setAssignId(c.id);
                                   setOpenMenuId(null);
                                 }}
-                                className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                                className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                               >
                                 Assign investigator
                               </button>
@@ -719,16 +719,16 @@ function DocumentsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <FileText size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <FileText size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No documents
           </p>
         </div>
@@ -739,16 +739,16 @@ function DocumentsView({
             return (
               <div
                 key={d.id}
-                className={`doc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`doc-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <FileText size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {d.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {empName(d.employee_id)} · {d.document_type}
                     {d.expiry_date
                       ? ` · Expires ${fmtDate(d.expiry_date)}`
@@ -764,7 +764,7 @@ function DocumentsView({
 
                 {canManage && (d.status === "draft" || d.status === "sent") && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(d.id, el);
                       else menuRefs.current.delete(d.id);
@@ -772,12 +772,12 @@ function DocumentsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : d.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {d.status === "draft" && (
                           <button
                             onClick={() => handleSend(d)}
@@ -908,7 +908,7 @@ function AcknowledgementsView({
   return (
     <>
       <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((key) => {
             const count =
               key === "all"
@@ -922,7 +922,7 @@ function AcknowledgementsView({
                 className={`px-3 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {key === "all" ? "All" : key}
@@ -943,13 +943,13 @@ function AcknowledgementsView({
       </div>
 
       {declineId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <textarea
             value={declineReason}
             onChange={(e) => setDeclineReason(e.target.value)}
             rows={2}
             placeholder="Reason for declining"
-            className="w-full px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+            className="w-full px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
           />
           <div className="flex gap-2">
             <button
@@ -960,7 +960,7 @@ function AcknowledgementsView({
             </button>
             <button
               onClick={() => setDeclineId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -969,16 +969,16 @@ function AcknowledgementsView({
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <ClipboardCheck size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <ClipboardCheck size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No acknowledgement requests
           </p>
         </div>
@@ -987,16 +987,16 @@ function AcknowledgementsView({
           {filtered.map((a) => (
             <div
               key={a.id}
-              className="ack-row flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="ack-row flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <ClipboardCheck size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                <p className="text-sm font-medium leading-snug text-(--text-primary)">
                   {a.entity_title}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {empName(a.employee_id)} ·{" "}
                   {a.acknowledgeable_type.replace("_", " ")}
                   {a.signature_required ? " · Signature required" : ""}
@@ -1006,7 +1006,7 @@ function AcknowledgementsView({
                 </div>
               </div>
               {a.status === "pending" && canRespond && (
-                <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
+                <div className="flex items-center gap-2 shrink-0 pt-0.5">
                   <button
                     onClick={() => handleAcknowledge(a)}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10"

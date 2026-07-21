@@ -1,6 +1,6 @@
 // src/types/rbac.ts
 
-export type MemberRole = "owner" | "admin" | "manager" | "member" | "viewer";
+export type MemberRole = "owner" | "admin" | "manager" | "member" | "viewer" | (string & {});
 export type MemberStatus = "active" | "inactive" | "pending" | "removed";
 
 // ── Members ───────────────────────────────────────────

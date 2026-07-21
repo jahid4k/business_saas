@@ -43,8 +43,8 @@ interface DocumentTemplateFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -111,7 +111,7 @@ export default function DocumentTemplateForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -126,7 +126,7 @@ export default function DocumentTemplateForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Document type
           </label>
           <select {...register("document_type")} className={inputCls}>
@@ -143,7 +143,7 @@ export default function DocumentTemplateForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description
           </label>
           <input
@@ -154,7 +154,7 @@ export default function DocumentTemplateForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Available variables
           </label>
           <input
@@ -162,13 +162,13 @@ export default function DocumentTemplateForm({
             placeholder="e.g. employee_name, position, start_date"
             className={inputCls}
           />
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             Comma-separated. Use as {"{{employee_name}}"} in the body below.
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Template body (Markdown) <span className="text-red-400">*</span>
           </label>
           <textarea
@@ -196,7 +196,7 @@ export default function DocumentTemplateForm({
             />
             <label
               htmlFor="requires_acknowledgement"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Requires acknowledgement
             </label>
@@ -211,7 +211,7 @@ export default function DocumentTemplateForm({
               />
               <label
                 htmlFor="is_active"
-                className="text-sm text-[var(--text-secondary)]"
+                className="text-sm text-(--text-secondary)"
               >
                 Active
               </label>
@@ -220,11 +220,11 @@ export default function DocumentTemplateForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

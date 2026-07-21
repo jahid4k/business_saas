@@ -58,7 +58,7 @@ export default function SalarySetupPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -66,13 +66,13 @@ export default function SalarySetupPage({
           >
             Salary Setup
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Components, structures, and employee assignments
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["components", "structures", "assignments"] as TabKey[]).map(
           (key) => (
             <button
@@ -81,7 +81,7 @@ export default function SalarySetupPage({
               className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 tab === key
                   ? "bg-purple-600 text-white"
-                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  : "text-(--text-secondary) hover:text-(--text-primary)"
               }`}
             >
               {key === "components"
@@ -196,16 +196,16 @@ function ComponentsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Wallet size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Wallet size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No salary components yet
           </p>
         </div>
@@ -214,16 +214,16 @@ function ComponentsView({
           {items.map((c) => (
             <div
               key={c.id}
-              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <Wallet size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {c.name}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {c.component_type.replace("_", " ")} ·{" "}
                   {c.calc_method.replace("_", " ")}
                   {c.calc_method === "fixed" ? ` · ${c.fixed_value}` : ""}
@@ -235,8 +235,8 @@ function ComponentsView({
               </div>
               {canManage &&
                 (deleteConfirm === c.id ? (
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -247,16 +247,16 @@ function ComponentsView({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                      className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                     >
                       No
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={() => openEdit(c)}
-                      className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+                      className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated)"
                     >
                       <Pencil size={14} />
                     </button>
@@ -361,16 +361,16 @@ function StructuresView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Layers size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Layers size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No salary structures yet
           </p>
         </div>
@@ -379,22 +379,22 @@ function StructuresView({
           {items.map((s) => (
             <div
               key={s.id}
-              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <Layers size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {s.name}
                 </p>
                 {s.grade_label && (
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {s.grade_label}
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {canManage && (
                   <button
                     onClick={() => openManageComponents(s.id, s.name)}
@@ -406,7 +406,7 @@ function StructuresView({
                 {canManage &&
                   (deleteConfirm === s.id ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[var(--text-muted)]">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -417,7 +417,7 @@ function StructuresView({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                       >
                         No
                       </button>
@@ -501,7 +501,7 @@ function AssignmentsView({
 
   if (assignmentsQuery.isPending) {
     return (
-      <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+      <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
         <Loader2 size={16} className="animate-spin text-purple-500" /> Loading…
       </div>
     );
@@ -517,16 +517,16 @@ function AssignmentsView({
         return (
           <div
             key={e.id}
-            className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+            className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
           >
             <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold bg-linear-to-br from-[#7c3aed] to-[#a855f7]">
               {e.first_name[0]?.toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-(--text-primary)">
                 {e.first_name} {e.last_name ?? ""}
               </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              <p className="text-xs text-(--text-muted) mt-0.5">
                 {active ? (
                   <>
                     {active.basic_pay} basic pay
@@ -544,7 +544,7 @@ function AssignmentsView({
             {canManage && (
               <button
                 onClick={() => openAssign(e)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 transition-colors flex-shrink-0"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-purple-400 border border-purple-500/30 hover:bg-purple-500/10 transition-colors shrink-0"
               >
                 {active ? "Update" : "Assign"}
               </button>

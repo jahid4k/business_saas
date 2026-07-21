@@ -78,13 +78,13 @@ function CloneForm({
         onSubmit={handleSubmit(onSubmit)}
         className="flex-1 px-6 py-5 space-y-5"
       >
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]">
-          <Shield size={16} className="text-purple-400 flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-(--bg-elevated) border border-(--border)">
+          <Shield size={16} className="text-purple-400 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-[var(--text-primary)] capitalize">
+            <p className="text-sm font-medium text-(--text-primary) capitalize">
               {sourceRole.name}
             </p>
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-(--text-muted)">
               {sourceRole.permissionKeys.length} permissions will be copied
             </p>
           </div>
@@ -95,24 +95,24 @@ function CloneForm({
           </div>
         )}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             New role name <span className="text-red-400">*</span>
           </label>
           <input
             {...register("name")}
             autoFocus
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
           />
           {errors.name && (
             <p className="text-xs text-red-400">{errors.name.message}</p>
           )}
         </div>
       </form>
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>
@@ -261,7 +261,7 @@ export default function RolesPage({
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -269,7 +269,7 @@ export default function RolesPage({
           >
             Roles
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             {roles.length} roles · Click a role to view its permissions
           </p>
         </div>
@@ -291,7 +291,7 @@ export default function RolesPage({
       )}
 
       {rolesQuery.isPending ? (
-        <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading roles…
         </div>
@@ -305,16 +305,16 @@ export default function RolesPage({
             return (
               <div
                 key={role.id}
-                className="role-card rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] hover:border-[var(--text-muted)]/20 transition-all duration-150"
+                className="role-card rounded-xl border border-(--border) bg-(--bg-surface) hover:border-(--text-muted)/20 transition-all duration-150"
               >
                 <div className="flex items-center gap-4 px-5 py-4">
-                  <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
-                    <Shield size={15} className="text-[var(--text-muted)]" />
+                  <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-(--bg-elevated) border border-(--border)">
+                    <Shield size={15} className="text-(--text-muted)" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 mb-0.5">
                       <span
-                        className="text-sm font-semibold text-[var(--text-primary)] capitalize"
+                        className="text-sm font-semibold text-(--text-primary) capitalize"
                         style={{
                           fontFamily: "var(--font-inter, Inter, sans-serif)",
                         }}
@@ -327,16 +327,16 @@ export default function RolesPage({
                         {role.isSystem ? "System" : "Custom"}
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--text-muted)] truncate">
+                    <p className="text-xs text-(--text-muted) truncate">
                       {role.description}
                     </p>
                   </div>
-                  <span className="text-xs text-[var(--text-muted)] flex-shrink-0 hidden sm:block">
+                  <span className="text-xs text-(--text-muted) shrink-0 hidden sm:block">
                     {role.permissionKeys.length} permissions
                   </span>
                   {confirming ? (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-[var(--text-muted)]">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -347,17 +347,17 @@ export default function RolesPage({
                       </button>
                       <button
                         onClick={() => setDelConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                       >
                         No
                       </button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1 flex-shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       {(canViewPerms || canEditPerms) && (
                         <button
                           onClick={() => openPermissions(rwm)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
                         >
                           {canEditPerms && !role.isSystem ? "Edit" : "View"}{" "}
                           permissions
@@ -368,7 +368,7 @@ export default function RolesPage({
                         <button
                           onClick={() => openClone(rwm)}
                           title="Clone role"
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                          className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
                         >
                           <Copy size={13} />
                         </button>
@@ -377,7 +377,7 @@ export default function RolesPage({
                         <button
                           onClick={() => setDelConfirm(role.id)}
                           title="Delete role"
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <Trash2 size={13} />
                         </button>

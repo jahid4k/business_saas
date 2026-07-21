@@ -9,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -20,11 +21,12 @@ import (
 // before the handler is called — the handler trusts that and focuses only
 // on HTTP concerns.
 type Handler struct {
-	service Service
+	service  Service
+	authzSvc authz.Service
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, authzSvc authz.Service) *Handler {
+	return &Handler{service: service, authzSvc: authzSvc}
 }
 
 // List handles GET /api/v1/organizations/:orgId/tasks
@@ -32,12 +34,26 @@ func NewHandler(service Service) *Handler {
 // Query params: status, assignedTo, sort, order (asc|desc), limit, offset
 func (h *Handler) List(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
 	filter := ListFilter{SortDesc: true}
+
+	// Check if user has view_all permission. If not, restrict to their own tasks.
+	hasViewAll, err := h.authzSvc.Can(c.Context(), userID, orgID, "tasks", "view_all")
+	if err != nil {
+		log.Error("task: List: failed to check view_all permission", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !hasViewAll {
+		filter.InvolvedUserID = userID
+	}
 
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
 		s := TaskStatus(status)

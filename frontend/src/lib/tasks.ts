@@ -14,7 +14,14 @@ import type {
 
 export async function listTasks(
   orgId: string,
-  params?: { status?: string; limit?: number; offset?: number },
+  params?: {
+    status?: string;
+    assignedTo?: string;
+    relatedType?: string;
+    relatedId?: string;
+    limit?: number;
+    offset?: number;
+  },
 ): Promise<TaskListResponse> {
   const res = await api.get<{ success: boolean; data: TaskListResponse }>(
     `/api/v1/organizations/${orgId}/tasks`,

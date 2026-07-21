@@ -40,27 +40,27 @@ function SnippetModal({ orgId }: { orgId: string }) {
   return (
     <div className="p-6 space-y-6">
       <div className="mb-2">
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Copy and paste this snippet into the <code>&lt;head&gt;</code> of your website to start tracking visitors.
         </p>
       </div>
 
       <div className="relative">
-        <pre className="p-4 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl text-xs overflow-x-auto font-mono text-[var(--text-secondary)]">
+        <pre className="p-4 bg-(--bg-surface) border border-(--border) rounded-xl text-xs overflow-x-auto font-mono text-(--text-secondary)">
           {isLoading ? "Loading API key..." : snippet}
         </pre>
         <button
           onClick={copyToClipboard}
-          className="absolute top-3 right-3 p-1.5 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-md hover:bg-black/5 transition-colors"
+          className="absolute top-3 right-3 p-1.5 bg-(--bg-elevated) border border-(--border) rounded-md hover:bg-black/5 transition-colors"
         >
-          {copied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} className="text-[var(--text-muted)]" />}
+          {copied ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} className="text-(--text-muted)" />}
         </button>
       </div>
 
-      <div className="flex justify-end pt-4 border-t border-[var(--border)]">
+      <div className="flex justify-end pt-4 border-t border-(--border)">
         <button
           onClick={() => closeDrawer()}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
         >
           Close
         </button>
@@ -93,12 +93,12 @@ export default function VisitorsPage() {
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)", letterSpacing: "-0.02em" }}
           >
             Website Visitors
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Track who is browsing your website and automatically identify companies.
           </p>
         </div>
@@ -112,29 +112,29 @@ export default function VisitorsPage() {
       </div>
 
       {isLoading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-sm text-[var(--text-muted)]">
+        <div className="py-20 flex flex-col items-center justify-center text-sm text-(--text-muted)">
           <Loader2 size={24} className="animate-spin mb-4 text-purple-500" />
           Loading visitor data...
         </div>
       ) : !visitors || visitors.length === 0 ? (
-        <div className="py-20 text-center border border-dashed border-[var(--border)] rounded-2xl bg-[var(--bg-surface)]">
-          <Globe size={40} className="mx-auto text-[var(--text-muted)] mb-4 opacity-50" />
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">No visitors yet</h3>
-          <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
+        <div className="py-20 text-center border border-dashed border-(--border) rounded-2xl bg-(--bg-surface)">
+          <Globe size={40} className="mx-auto text-(--text-muted) mb-4 opacity-50" />
+          <h3 className="text-lg font-semibold text-(--text-primary)">No visitors yet</h3>
+          <p className="text-sm text-(--text-muted) mt-1 max-w-sm mx-auto">
             Embed the tracking snippet on your website to start identifying companies visiting your site.
           </p>
           <button
             onClick={handleShowSnippet}
-            className="mt-6 px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-primary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="mt-6 px-4 py-2 rounded-lg text-sm font-medium text-(--text-primary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
           >
             Get Snippet
           </button>
         </div>
       ) : (
-        <div className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-surface)]">
+        <div className="border border-(--border) rounded-2xl overflow-hidden bg-(--bg-surface)">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-[var(--bg-elevated)] border-b border-[var(--border)] text-[var(--text-muted)] font-medium">
+              <thead className="bg-(--bg-elevated) border-b border-(--border) text-(--text-muted) font-medium">
                 <tr>
                   <th className="px-6 py-4">Visitor / Company</th>
                   <th className="px-6 py-4">IP Address</th>
@@ -143,26 +143,26 @@ export default function VisitorsPage() {
                   <th className="px-6 py-4 text-right">CRM Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)] text-[var(--text-secondary)]">
+              <tbody className="divide-y divide-(--border) text-(--text-secondary)">
                 {visitors.map((v) => (
-                  <tr key={v.id} className="hover:bg-[var(--bg-elevated)] transition-colors">
+                  <tr key={v.id} className="hover:bg-(--bg-elevated) transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
                           <Globe size={14} />
                         </div>
                         <div>
-                          <p className="font-medium text-[var(--text-primary)]">
+                          <p className="font-medium text-(--text-primary)">
                             {v.company_name || "Unknown Company"}
                           </p>
                           {v.company_domain && (
-                            <p className="text-xs text-[var(--text-muted)]">{v.company_domain}</p>
+                            <p className="text-xs text-(--text-muted)">{v.company_domain}</p>
                           )}
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 font-mono text-xs">{v.ip_address || "—"}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-[var(--text-muted)]">
+                    <td className="px-6 py-4 font-mono text-xs text-(--text-muted)">
                       {v.session_id.substring(0, 8)}...
                     </td>
                     <td className="px-6 py-4">
@@ -175,7 +175,7 @@ export default function VisitorsPage() {
                           Captured
                         </span>
                       ) : (
-                        <span className="text-xs text-[var(--text-muted)]">Anonymous</span>
+                        <span className="text-xs text-(--text-muted)">Anonymous</span>
                       )}
                     </td>
                   </tr>

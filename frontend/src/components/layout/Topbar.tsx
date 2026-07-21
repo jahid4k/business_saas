@@ -12,7 +12,6 @@ import {
   User,
   Building2,
   ChevronDown,
-  Menu,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
@@ -165,16 +164,16 @@ export default function Topbar({ orgId }: { orgId: string }) {
           <div className="hidden sm:flex items-center gap-2 mr-2">
             <button
               onClick={() => setCommandOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors text-sm text-[var(--text-muted)] w-48 lg:w-64"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-(--border) bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors text-sm text-(--text-muted) w-48 lg:w-64"
             >
               <span className="flex-1 text-left">Quick actions...</span>
-              <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-[var(--border)] bg-[var(--bg-base)] px-1.5 font-mono text-[10px] font-medium text-[var(--text-muted)]">
+              <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-(--border) bg-(--bg-base) px-1.5 font-mono text-[10px] font-medium text-(--text-muted)">
                 <span className="text-xs">⌘</span>K
               </kbd>
             </button>
             <button
               onClick={() => setCommandOpen(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors text-[var(--text-muted)]"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-(--border) bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors text-(--text-muted)"
               title="Search (/)"
             >
               <svg

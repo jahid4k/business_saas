@@ -47,8 +47,8 @@ interface ShiftFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -129,7 +129,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -144,7 +144,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Type
           </label>
           <select {...register("shift_type")} className={inputCls}>
@@ -163,7 +163,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         {shiftType === "fixed" ? (
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Start time
               </label>
               <input
@@ -173,7 +173,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 End time
               </label>
               <input
@@ -185,7 +185,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
           </div>
         ) : (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Weekly hours target
             </label>
             <input
@@ -199,14 +199,14 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Working days
           </label>
           <div className="flex flex-wrap gap-2">
             {DAYS.map((d) => (
               <label
                 key={d.value}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-xs text-[var(--text-secondary)] cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-(--bg-elevated) border border-(--border) text-xs text-(--text-secondary) cursor-pointer"
               >
                 <input
                   type="checkbox"
@@ -221,7 +221,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Break minutes
           </label>
           <input
@@ -242,7 +242,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
             />
             <label
               htmlFor="track_overtime"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Track overtime
             </label>
@@ -256,7 +256,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
             />
             <label
               htmlFor="track_breaks"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Track breaks
             </label>
@@ -270,7 +270,7 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
             />
             <label
               htmlFor="is_default"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Default shift for the org
             </label>
@@ -278,11 +278,11 @@ export default function ShiftForm({ shift, onSave }: ShiftFormProps) {
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

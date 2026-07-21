@@ -37,8 +37,8 @@ interface WarningTypeFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -106,7 +106,7 @@ export default function WarningTypeForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -121,7 +121,7 @@ export default function WarningTypeForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description
           </label>
           <textarea
@@ -134,7 +134,7 @@ export default function WarningTypeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Severity (1–10)
             </label>
             <input
@@ -146,7 +146,7 @@ export default function WarningTypeForm({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Valid for (days)
             </label>
             <input
@@ -160,7 +160,7 @@ export default function WarningTypeForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Can be issued by
           </label>
           <select
@@ -178,7 +178,7 @@ export default function WarningTypeForm({
               </option>
             ))}
           </select>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             Hold Ctrl/Cmd to select multiple.
           </p>
         </div>
@@ -193,7 +193,7 @@ export default function WarningTypeForm({
             />
             <label
               htmlFor="requires_hr_approval"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Requires HR approval before issuing
             </label>
@@ -207,7 +207,7 @@ export default function WarningTypeForm({
             />
             <label
               htmlFor="employee_can_respond"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Employee can respond / appeal
             </label>
@@ -224,7 +224,7 @@ export default function WarningTypeForm({
             />
             <label
               htmlFor="is_active"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Active
             </label>
@@ -233,7 +233,7 @@ export default function WarningTypeForm({
 
         {warningType?.employee_can_respond !== undefined && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Response window (days)
             </label>
             <input
@@ -246,11 +246,11 @@ export default function WarningTypeForm({
         )}
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

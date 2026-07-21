@@ -66,8 +66,8 @@ type ProfileValues = z.infer<typeof schema>;
 
 const cls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-(--border)
-  text-[var(--text-primary)] placeholder:text-(--text-muted)
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all disabled:opacity-50 disabled:cursor-not-allowed
 `;
@@ -355,7 +355,7 @@ export default function ProfilePage({
       {/* Header */}
       <div className="mb-8">
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+          className="text-2xl font-bold text-(--text-primary) mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -434,7 +434,7 @@ export default function ProfilePage({
               {/* User summary */}
               <div>
                 <p
-                  className="text-lg font-bold text-[var(--text-primary)] mb-0.5"
+                  className="text-lg font-bold text-(--text-primary) mb-0.5"
                   style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
                 >
                   {displayName}
@@ -505,7 +505,7 @@ export default function ProfilePage({
           <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
             <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-[var(--text-primary)]"
+                className="text-sm font-semibold text-(--text-primary)"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Personal information
@@ -514,7 +514,7 @@ export default function ProfilePage({
 
             <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                <label className="block text-sm font-medium text-(--text-secondary)">
                   Display name <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -531,7 +531,7 @@ export default function ProfilePage({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                  <label className="block text-sm font-medium text-(--text-secondary)">
                     First name
                   </label>
                   <input
@@ -541,7 +541,7 @@ export default function ProfilePage({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                  <label className="block text-sm font-medium text-(--text-secondary)">
                     Last name
                   </label>
                   <input
@@ -553,7 +553,7 @@ export default function ProfilePage({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                <label className="block text-sm font-medium text-(--text-secondary)">
                   Email
                   <span className="ml-2 text-xs font-normal text-(--text-muted)">
                     read only
@@ -567,7 +567,7 @@ export default function ProfilePage({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-[var(--text-secondary)]">
+                <label className="block text-sm font-medium text-(--text-secondary)">
                   Timezone
                 </label>
                 <select {...register("timezone")} className={cls}>
@@ -606,14 +606,14 @@ export default function ProfilePage({
           <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
             <div className="px-6 py-4 border-b border-(--border)">
               <p
-                className="text-sm font-semibold text-[var(--text-primary)]"
+                className="text-sm font-semibold text-(--text-primary)"
                 style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
               >
                 Account information
               </p>
             </div>
 
-            <div className="divide-y divide-[var(--border)]">
+            <div className="divide-y divide-(--border)">
               {[
                 { label: "Account type", value: user?.accountType ?? "—" },
                 { label: "Status", value: user?.status ?? "—" },
@@ -628,7 +628,7 @@ export default function ProfilePage({
                     {row.label}
                   </span>
                   <span
-                    className="text-sm text-[var(--text-secondary)] capitalize"
+                    className="text-sm text-(--text-secondary) capitalize"
                     style={{
                       fontFamily: "var(--font-inter, Inter, sans-serif)",
                     }}

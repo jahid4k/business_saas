@@ -91,7 +91,7 @@ function formatDate(iso: string) {
 function LeadAvatar({ name }: { name: string }) {
   const initial = name ? name.charAt(0).toUpperCase() : "?";
   return (
-    <div className="w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xs font-bold flex-shrink-0">
+    <div className="w-8 h-8 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center text-xs font-bold shrink-0">
       {initial}
     </div>
   );
@@ -146,18 +146,18 @@ function LeadCard({
   const isConverted = lead.status === "converted";
 
   return (
-    <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--text-muted)]/30 transition-colors relative flex flex-col h-full shadow-sm">
+    <div className="bg-(--bg-surface) border border-(--border) rounded-xl p-5 hover:border-(--text-muted)/30 transition-colors relative flex flex-col h-full shadow-sm">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <LeadAvatar name={lead.first_name} />
           <div>
             <h3
-              className="text-sm font-semibold text-[var(--text-primary)]"
+              className="text-sm font-semibold text-(--text-primary)"
               style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
             >
               {fullName}
             </h3>
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-(--text-muted)">
               {lead.company_name ?? "No company"}
             </p>
           </div>
@@ -169,20 +169,20 @@ function LeadCard({
               e.stopPropagation();
               setMenuOpen(!menuOpen);
             }}
-            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
           >
             <MoreVertical size={16} />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-1 w-36 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg shadow-xl z-20 py-1 overflow-hidden">
+            <div className="absolute right-0 mt-1 w-36 bg-(--bg-surface) border border-(--border) rounded-lg shadow-xl z-20 py-1 overflow-hidden">
               {canUpdate && !isConverted && (
                 <button
                   onClick={() => {
                     setMenuOpen(false);
                     openEdit(lead);
                   }}
-                  className="w-full text-left px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) hover:text-(--text-primary) transition-colors flex items-center gap-2"
                 >
                   <Pencil size={13} />
                   Edit
@@ -213,7 +213,7 @@ function LeadCard({
                 </button>
               )}
               {!canUpdate && !canConvert && !canDelete && (
-                <div className="px-3 py-2 text-xs text-[var(--text-muted)] text-center">
+                <div className="px-3 py-2 text-xs text-(--text-muted) text-center">
                   No actions
                 </div>
               )}
@@ -228,7 +228,7 @@ function LeadCard({
         >
           {status.label}
         </span>
-        <span className="text-[0.65rem] font-medium border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-muted)] px-2 py-0.5 rounded-full">
+        <span className="text-[0.65rem] font-medium border border-(--border) bg-(--bg-elevated) text-(--text-muted) px-2 py-0.5 rounded-full">
           {lead.source ? (SOURCE_LABELS[lead.source] ?? lead.source) : "Direct"}
         </span>
       </div>
@@ -238,9 +238,9 @@ function LeadCard({
           <div className="flex items-center gap-2.5">
             <Mail
               size={14}
-              className="text-[var(--text-muted)] flex-shrink-0"
+              className="text-(--text-muted) shrink-0"
             />
-            <span className="text-xs text-[var(--text-secondary)] truncate">
+            <span className="text-xs text-(--text-secondary) truncate">
               {lead.email}
             </span>
           </div>
@@ -249,9 +249,9 @@ function LeadCard({
           <div className="flex items-center gap-2.5">
             <Phone
               size={14}
-              className="text-[var(--text-muted)] flex-shrink-0"
+              className="text-(--text-muted) shrink-0"
             />
-            <span className="text-xs text-[var(--text-secondary)] truncate">
+            <span className="text-xs text-(--text-secondary) truncate">
               {lead.phone}
             </span>
           </div>
@@ -260,18 +260,18 @@ function LeadCard({
           <div className="flex items-center gap-2.5">
             <Briefcase
               size={14}
-              className="text-[var(--text-muted)] flex-shrink-0"
+              className="text-(--text-muted) shrink-0"
             />
-            <span className="text-xs text-[var(--text-secondary)] truncate">
+            <span className="text-xs text-(--text-secondary) truncate">
               {lead.title}
             </span>
           </div>
         )}
       </div>
 
-      <div className="pt-3 border-t border-[var(--border)]">
+      <div className="pt-3 border-t border-(--border)">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
             <CalendarDays size={12} />
             <span>Added {new Date(lead.created_at).toLocaleDateString()}</span>
           </div>
@@ -285,17 +285,17 @@ function LeadCard({
       </div>
 
       {confirming && (
-        <div className="absolute inset-0 bg-[var(--bg-surface)]/90 backdrop-blur-sm rounded-xl border border-red-500/30 flex flex-col items-center justify-center p-4 text-center z-10 animate-in fade-in">
-          <p className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+        <div className="absolute inset-0 bg-(--bg-surface)/90 backdrop-blur-sm rounded-xl border border-red-500/30 flex flex-col items-center justify-center p-4 text-center z-10 animate-in fade-in">
+          <p className="text-sm font-semibold text-(--text-primary) mb-1">
             Delete Lead?
           </p>
-          <p className="text-xs text-[var(--text-muted)] mb-4">
+          <p className="text-xs text-(--text-muted) mb-4">
             This action cannot be undone.
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => setDeleteId(null)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] bg-[var(--bg-elevated)] hover:bg-[var(--border)] transition-colors"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-(--text-secondary) bg-(--bg-elevated) hover:bg-(--border) transition-colors"
             >
               Cancel
             </button>
@@ -472,7 +472,7 @@ export default function LeadsPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -480,7 +480,7 @@ export default function LeadsPage({
           >
             Leads
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             {leads.length} total leads
           </p>
         </div>
@@ -506,19 +506,19 @@ export default function LeadsPage({
           <div className="relative flex-1 max-w-xs">
             <Search
               size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)"
             />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, email, company…"
-              className="w-full pl-9 pr-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 transition-all"
+              className="w-full pl-9 pr-3.5 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 transition-all"
             />
           </div>
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="px-3.5 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-purple-500 transition-all"
+            className="px-3.5 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-secondary) outline-none focus:border-purple-500 transition-all"
           >
             <option value="">All sources</option>
             {sources.map((s) => (
@@ -533,7 +533,7 @@ export default function LeadsPage({
           </select>
         </div>
 
-        <div className="flex items-center gap-0.5 border-b border-[var(--border)]">
+        <div className="flex items-center gap-0.5 border-b border-(--border)">
           {STATUS_TABS.map((tab) => {
             const count =
               tab.key === "all"
@@ -547,7 +547,7 @@ export default function LeadsPage({
                 className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
                   active
                     ? "text-purple-400 border-purple-500"
-                    : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                    : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                 }`}
               >
                 {tab.label}
@@ -556,7 +556,7 @@ export default function LeadsPage({
                     className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
                       active
                         ? "bg-purple-500/15 text-purple-400"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+                        : "bg-(--bg-elevated) text-(--text-muted)"
                     }`}
                   >
                     {count}
@@ -569,16 +569,16 @@ export default function LeadsPage({
       </div>
 
       {leadsQuery.isPending ? (
-        <div className="flex items-center gap-3 py-20 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 py-20 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading leads…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <ArrowRightLeft size={18} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <ArrowRightLeft size={18} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <p className="text-sm font-medium text-(--text-secondary) mb-1">
             {search || sourceFilter || activeStatus !== "all"
               ? "No leads match your filters"
               : "No leads yet"}
@@ -615,7 +615,7 @@ export default function LeadsPage({
               />
             ))}
           </div>
-          <p className="mt-4 text-xs text-[var(--text-muted)]">
+          <p className="mt-4 text-xs text-(--text-muted)">
             Showing {filtered.length} of {leads.length} leads
           </p>
         </>

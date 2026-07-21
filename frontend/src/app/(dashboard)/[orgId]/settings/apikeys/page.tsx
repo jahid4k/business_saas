@@ -35,7 +35,7 @@ function CopyButton({ text }: { text: string }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+      className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
       title="Copy to clipboard"
     >
       {copied ? (
@@ -93,7 +93,7 @@ function CreateKeyForm({
           <div className="w-12 h-12 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center mb-4">
             <Check size={24} />
           </div>
-          <h3 className="text-lg font-bold text-[var(--text-primary)] mb-2">
+          <h3 className="text-lg font-bold text-(--text-primary) mb-2">
             Your new API key
           </h3>
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-left w-full mt-2">
@@ -113,14 +113,14 @@ function CreateKeyForm({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 p-3 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg mb-6">
-          <code className="flex-1 text-sm font-mono text-[var(--text-primary)] break-all">
+        <div className="flex items-center gap-2 p-3 bg-(--bg-elevated) border border-(--border) rounded-lg mb-6">
+          <code className="flex-1 text-sm font-mono text-(--text-primary) break-all">
             {showKey ? newKey : "•".repeat(32)}
           </code>
           <button
             type="button"
             onClick={() => setShowKey(!showKey)}
-            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
             title={showKey ? "Hide API key" : "Show API key"}
           >
             {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -143,25 +143,25 @@ function CreateKeyForm({
   return (
     <form onSubmit={handleSubmit} className="p-6 space-y-6">
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label className="block text-sm font-medium text-(--text-primary) mb-1.5">
           Key Name
         </label>
         <input
           required
           type="text"
           placeholder="e.g. Production Web Forms"
-          className="w-full px-3 py-2 bg-transparent border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500"
+          className="w-full px-3 py-2 bg-transparent border border-(--border) rounded-lg text-sm text-(--text-primary) placeholder-(--text-muted) focus:outline-none focus:border-purple-500"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label className="block text-sm font-medium text-(--text-primary) mb-1.5">
           Capabilities (Scopes)
         </label>
         <div className="space-y-2">
-          <label className="flex items-center gap-3 p-3 border border-[var(--border)] rounded-lg cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors">
+          <label className="flex items-center gap-3 p-3 border border-(--border) rounded-lg cursor-pointer hover:bg-(--bg-elevated) transition-colors">
             <input
               type="checkbox"
               checked={scopes.includes("capture:leads")}
@@ -172,15 +172,15 @@ function CreateKeyForm({
               className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
             />
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-(--text-primary)">
                 Lead Capture
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-(--text-muted)">
                 Allow creating leads via the public API
               </p>
             </div>
           </label>
-          <label className="flex items-center gap-3 p-3 border border-[var(--border)] rounded-lg cursor-pointer hover:bg-[var(--bg-elevated)] transition-colors">
+          <label className="flex items-center gap-3 p-3 border border-(--border) rounded-lg cursor-pointer hover:bg-(--bg-elevated) transition-colors">
             <input
               type="checkbox"
               checked={scopes.includes("capture:visitors")}
@@ -193,10 +193,10 @@ function CreateKeyForm({
               className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
             />
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-(--text-primary)">
                 Website Visitors
               </p>
-              <p className="text-xs text-[var(--text-muted)]">
+              <p className="text-xs text-(--text-muted)">
                 Allow tracking and identifying website visitors
               </p>
             </div>
@@ -205,13 +205,13 @@ function CreateKeyForm({
       </div>
 
       <div>
-        <label className="flex items-center justify-between text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label className="flex items-center justify-between text-sm font-medium text-(--text-primary) mb-1.5">
           Allowed Domains
-          <span className="text-xs text-[var(--text-muted)] font-normal">
+          <span className="text-xs text-(--text-muted) font-normal">
             Optional
           </span>
         </label>
-        <p className="text-xs text-[var(--text-muted)] mb-2">
+        <p className="text-xs text-(--text-muted) mb-2">
           Restrict this API key to specific websites (e.g.{" "}
           <code>https://mywebsite.com</code>). Separate multiple domains with
           commas. Leave empty to allow any origin.
@@ -219,17 +219,17 @@ function CreateKeyForm({
         <input
           type="text"
           placeholder="https://example.com, https://test.com"
-          className="w-full px-3 py-2 bg-transparent border border-[var(--border)] rounded-lg text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500"
+          className="w-full px-3 py-2 bg-transparent border border-(--border) rounded-lg text-sm text-(--text-primary) placeholder-(--text-muted) focus:outline-none focus:border-purple-500"
           value={allowedOriginsString}
           onChange={(e) => setAllowedOriginsString(e.target.value)}
         />
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-[var(--border)]">
+      <div className="flex items-center justify-end gap-3 pt-4 border-t border-(--border)">
         <button
           type="button"
           onClick={() => closeDrawer()}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="px-4 py-2 rounded-lg text-sm font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>
@@ -252,13 +252,13 @@ function KeyPrefixDisplay({ prefix }: { prefix: string }) {
 
   return (
     <div className="flex items-center gap-0.5">
-      <code className="text-[0.7rem] px-2 py-0.5 rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] font-mono border border-[var(--border)] min-w-[140px] text-center mr-1">
+      <code className="text-[0.7rem] px-2 py-0.5 rounded bg-(--bg-elevated) text-(--text-secondary) font-mono border border-(--border) min-w-[140px] text-center mr-1">
         {show ? displayKey : "••••••••••••••••••••"}
       </code>
       <button
         type="button"
         onClick={() => setShow(!show)}
-        className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors flex-shrink-0"
+        className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors shrink-0"
         title={show ? "Hide key prefix" : "Show key prefix"}
       >
         {show ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -323,7 +323,7 @@ export default function APIKeysPage() {
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -331,7 +331,7 @@ export default function APIKeysPage() {
           >
             API Keys
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Manage keys used to integrate external forms and applications.
           </p>
         </div>
@@ -353,27 +353,27 @@ export default function APIKeysPage() {
       )}
 
       {keysQuery.isPending ? (
-        <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading API keys…
         </div>
       ) : keys.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-[var(--border)] rounded-xl bg-[var(--bg-surface)]">
+        <div className="py-16 text-center border border-dashed border-(--border) rounded-xl bg-(--bg-surface)">
           <Key
             size={32}
-            className="mx-auto text-[var(--text-muted)] mb-3 opacity-50"
+            className="mx-auto text-(--text-muted) mb-3 opacity-50"
           />
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">
+          <h3 className="text-sm font-semibold text-(--text-primary) mb-1">
             No API keys
           </h3>
-          <p className="text-xs text-[var(--text-muted)] max-w-[250px] mx-auto mb-4">
+          <p className="text-xs text-(--text-muted) max-w-[250px] mx-auto mb-4">
             Create an API key to allow external forms and services to capture
             leads in your CRM.
           </p>
           {canEdit && (
             <button
               onClick={handleCreate}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-primary)] bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--text-muted)] transition-colors"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-(--text-primary) bg-(--bg-elevated) border border-(--border) hover:border-(--text-muted) transition-colors"
             >
               <Plus size={13} />
               Create key
@@ -387,22 +387,22 @@ export default function APIKeysPage() {
             return (
               <div
                 key={k.id}
-                className={`rounded-xl border bg-[var(--bg-surface)] transition-all duration-150 ${
+                className={`rounded-xl border bg-(--bg-surface) transition-all duration-150 ${
                   k.is_active
-                    ? "border-[var(--border)] hover:border-[var(--text-muted)]/30"
+                    ? "border-(--border) hover:border-(--text-muted)/30"
                     : "border-red-500/10 opacity-70"
                 }`}
               >
                 <div className="flex items-center gap-4 px-5 py-4">
                   <div
-                    className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center border ${
+                    className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center border ${
                       k.is_active
-                        ? "bg-[var(--bg-elevated)] border-[var(--border)]"
+                        ? "bg-(--bg-elevated) border-(--border)"
                         : "bg-red-500/5 border-red-500/10"
                     }`}
                   >
                     {k.is_active ? (
-                      <Key size={15} className="text-[var(--text-muted)]" />
+                      <Key size={15} className="text-(--text-muted)" />
                     ) : (
                       <AlertCircle size={15} className="text-red-400" />
                     )}
@@ -411,7 +411,7 @@ export default function APIKeysPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 mb-1">
                       <span
-                        className="text-sm font-semibold text-[var(--text-primary)]"
+                        className="text-sm font-semibold text-(--text-primary)"
                         style={{
                           fontFamily: "var(--font-inter, Inter, sans-serif)",
                         }}
@@ -426,25 +426,25 @@ export default function APIKeysPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <KeyPrefixDisplay prefix={k.key_prefix} />
-                      <span className="text-xs text-[var(--text-muted)] truncate hidden sm:block">
+                      <span className="text-xs text-(--text-muted) truncate hidden sm:block">
                         Scopes: {k.scopes.join(", ")}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-right hidden md:block mr-4">
-                    <p className="text-[0.65rem] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">
+                    <p className="text-[0.65rem] text-(--text-muted) uppercase tracking-wider mb-0.5">
                       Created
                     </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
+                    <p className="text-xs text-(--text-secondary)">
                       {new Date(k.created_at).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="text-right hidden md:block mr-4">
-                    <p className="text-[0.65rem] text-[var(--text-muted)] uppercase tracking-wider mb-0.5">
+                    <p className="text-[0.65rem] text-(--text-muted) uppercase tracking-wider mb-0.5">
                       Last Used
                     </p>
-                    <p className="text-xs text-[var(--text-secondary)]">
+                    <p className="text-xs text-(--text-secondary)">
                       {k.last_used_at
                         ? new Date(k.last_used_at).toLocaleDateString()
                         : "Never"}
@@ -452,10 +452,10 @@ export default function APIKeysPage() {
                   </div>
 
                   {k.is_active && canEdit && (
-                    <div className="flex items-center flex-shrink-0 border-l border-[var(--border)] pl-4 ml-2">
+                    <div className="flex items-center shrink-0 border-l border-(--border) pl-4 ml-2">
                       {confirming ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-[var(--text-muted)] mr-1">
+                          <span className="text-xs text-(--text-muted) mr-1">
                             Revoke?
                           </span>
                           <button
@@ -466,7 +466,7 @@ export default function APIKeysPage() {
                           </button>
                           <button
                             onClick={() => setDelConfirm(null)}
-                            className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                            className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                           >
                             No
                           </button>
@@ -475,7 +475,7 @@ export default function APIKeysPage() {
                         <button
                           onClick={() => setDelConfirm(k.id)}
                           title="Revoke key"
-                          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          className="p-1.5 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
                         >
                           <Trash2 size={14} />
                         </button>

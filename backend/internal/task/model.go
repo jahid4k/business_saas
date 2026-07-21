@@ -59,6 +59,8 @@ type Task struct {
 	DueDate     *time.Time `db:"due_date"    json:"dueDate,omitempty"`
 	CreatedBy   *string    `db:"created_by"  json:"createdBy,omitempty"`
 	AssignedTo  *string    `db:"assigned_to" json:"assignedTo,omitempty"`
+	RelatedType *string    `db:"related_type" json:"relatedType,omitempty"`
+	RelatedID   *string    `db:"related_id"   json:"relatedId,omitempty"`
 	CreatedAt   time.Time  `db:"created_at"  json:"createdAt"`
 	UpdatedAt   time.Time  `db:"updated_at"  json:"updatedAt"`
 }
@@ -66,12 +68,15 @@ type Task struct {
 // ListFilter narrows List/Count to a subset of an organization's tasks.
 // Zero values mean "no filter on this field".
 type ListFilter struct {
-	Status     TaskStatus
-	AssignedTo string
-	SortBy     SortField
-	SortDesc   bool
-	Limit      int
-	Offset     int
+	Status         TaskStatus
+	AssignedTo     string
+	InvolvedUserID string // Checks assigned_to = X OR created_by = X
+	RelatedType    string
+	RelatedID      string
+	SortBy         SortField
+	SortDesc       bool
+	Limit          int
+	Offset         int
 }
 
 // Normalise clamps pagination and applies defaults. Called by the service so
@@ -95,9 +100,11 @@ func (f *ListFilter) Normalise() {
 type CreateTaskRequest struct {
 	Title       string  `json:"title"`
 	Description string  `json:"description"`
-	Status      string  `json:"status"`     // optional — defaults to "todo"
-	DueDate     *string `json:"dueDate"`    // optional — RFC3339, e.g. "2026-07-01T00:00:00Z"
-	AssignedTo  *string `json:"assignedTo"` // optional — user id, public id, or email; must be an active org member
+	Status      string  `json:"status"`      // optional — defaults to "todo"
+	DueDate     *string `json:"dueDate"`     // optional — RFC3339, e.g. "2026-07-01T00:00:00Z"
+	AssignedTo  *string `json:"assignedTo"`  // optional — user id, public id, or email; must be an active org member
+	RelatedType *string `json:"relatedType"` // optional
+	RelatedID   *string `json:"relatedId"`   // optional
 }
 
 // UpdateTaskRequest is the body for PATCH /organizations/:orgId/tasks/:taskId.
@@ -111,6 +118,8 @@ type UpdateTaskRequest struct {
 	Status      *string `json:"status"`
 	DueDate     *string `json:"dueDate"`
 	AssignedTo  *string `json:"assignedTo"`
+	RelatedType *string `json:"relatedType"`
+	RelatedID   *string `json:"relatedId"`
 }
 
 // TaskListResponse wraps the list response with pagination metadata.

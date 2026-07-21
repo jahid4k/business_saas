@@ -10,16 +10,14 @@ import {
   Circle,
   AlertCircle,
   Loader2,
-  MoreHorizontal,
   CalendarClock,
   Link as LinkIcon,
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { getAgenda, type AgendaItem } from "@/lib/crm/reports";
-import { updateTask, createTask } from "@/lib/tasks";
-import type { UpdateTaskRequest } from "@/types/task";
-import { usePermissionStore } from "@/stores/permissionStore";
+import { listTasks, updateTask, createTask } from "@/lib/tasks";
+import type { Task, UpdateTaskRequest } from "@/types/task";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function AgendaPage({
   params,
@@ -30,9 +28,18 @@ export default function AgendaPage({
   const queryClient = useQueryClient();
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
+  const { user } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<"my" | "delegated">("my");
+
   const query = useQuery({
-    queryKey: ["crm", "agenda", orgId],
-    queryFn: () => getAgenda(orgId),
+    queryKey: ["tasks", orgId, activeTab],
+    queryFn: () =>
+      listTasks(orgId, {
+        assignedTo: activeTab === "my" ? user?.id : undefined,
+        // For delegated, we could ideally filter by createdBy = user?.id && assignedTo != user?.id
+        // But for now, we'll just fetch all and filter client-side for delegated if needed,
+        // or just let the backend handle the default list if they aren't admin.
+      }),
   });
 
   const createMutation = useMutation({
@@ -41,10 +48,11 @@ export default function AgendaPage({
         title,
         status: "todo",
         dueDate: new Date().toISOString(),
+        assignedTo: user?.id,
       }),
     onSuccess: () => {
       setNewTaskTitle("");
-      queryClient.invalidateQueries({ queryKey: ["crm", "agenda", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", orgId] });
     },
   });
 
@@ -52,7 +60,7 @@ export default function AgendaPage({
     mutationFn: ({ id, updates }: { id: string; updates: UpdateTaskRequest }) =>
       updateTask(orgId, id, updates),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["crm", "agenda", orgId] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", orgId] });
     },
   });
 
@@ -62,7 +70,13 @@ export default function AgendaPage({
     }
   };
 
-  const items = query.data ?? [];
+  const allItems = query.data?.tasks ?? [];
+  const items =
+    activeTab === "delegated"
+      ? allItems.filter(
+          (t) => t.createdBy === user?.id && t.assignedTo !== user?.id,
+        )
+      : allItems;
 
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
@@ -77,19 +91,18 @@ export default function AgendaPage({
   );
 
   const overdueItems = openItems.filter(
-    (i) =>
-      i.due_date && new Date(i.due_date).getTime() < startOfToday.getTime(),
+    (i) => i.dueDate && new Date(i.dueDate).getTime() < startOfToday.getTime(),
   );
 
   const todayItems = openItems.filter(
     (i) =>
-      !i.due_date ||
-      (new Date(i.due_date).getTime() >= startOfToday.getTime() &&
-        new Date(i.due_date).getTime() <= endOfToday.getTime()),
+      !i.dueDate ||
+      (new Date(i.dueDate).getTime() >= startOfToday.getTime() &&
+        new Date(i.dueDate).getTime() <= endOfToday.getTime()),
   );
 
   const upcomingItems = openItems.filter(
-    (i) => i.due_date && new Date(i.due_date).getTime() > endOfToday.getTime(),
+    (i) => i.dueDate && new Date(i.dueDate).getTime() > endOfToday.getTime(),
   );
 
   const totalToday =
@@ -104,11 +117,33 @@ export default function AgendaPage({
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-xl font-semibold text-(--text-primary)">
-              Today's Agenda
+              Today&apos;s Agenda
             </h1>
             <p className="mt-1.5 text-sm text-(--text-secondary) max-w-2xl">
               Your high-priority tasks and overdue activities to focus on today.
             </p>
+            <div className="flex items-center gap-4 mt-6">
+              <button
+                onClick={() => setActiveTab("my")}
+                className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                  activeTab === "my"
+                    ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                    : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
+                }`}
+              >
+                My Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab("delegated")}
+                className={`text-sm font-medium pb-2 border-b-2 transition-colors ${
+                  activeTab === "delegated"
+                    ? "border-purple-500 text-purple-600 dark:text-purple-400"
+                    : "border-transparent text-(--text-secondary) hover:text-(--text-primary)"
+                }`}
+              >
+                Delegated Tasks
+              </button>
+            </div>
           </div>
 
           {/* Progress Indicator */}
@@ -163,7 +198,7 @@ export default function AgendaPage({
                 />
               </div>
               <h3 className="text-base font-medium text-(--text-primary) mb-1">
-                You're all caught up!
+                You&apos;re all caught up!
               </h3>
               <p className="text-sm text-(--text-secondary) max-w-sm">
                 There are no tasks or activities scheduled.
@@ -259,19 +294,19 @@ function AgendaItemRow({
   orgId,
   onUpdate,
 }: {
-  item: AgendaItem;
+  item: Task;
   orgId: string;
   onUpdate: (updates: UpdateTaskRequest) => void;
 }) {
   const isDone = item.status === "done";
 
   const getEntityUrl = () => {
-    if (!item.related_type || !item.related_id) return "#";
-    const type = item.related_type.toLowerCase();
-    if (type === "lead") return `/${orgId}/crm/leads/${item.related_id}`;
-    if (type === "contact") return `/${orgId}/crm/contacts/${item.related_id}`;
+    if (!item.relatedType || !item.relatedId) return "#";
+    const type = item.relatedType.toLowerCase();
+    if (type === "lead") return `/${orgId}/crm/leads/${item.relatedId}`;
+    if (type === "contact") return `/${orgId}/crm/contacts/${item.relatedId}`;
     if (type === "deal") return `/${orgId}/crm/pipeline`; // Specific deal deep-link usually handled via query params in pipelines
-    if (type === "company") return `/${orgId}/crm/companies/${item.related_id}`;
+    if (type === "company") return `/${orgId}/crm/companies/${item.relatedId}`;
     return "#";
   };
 
@@ -306,9 +341,9 @@ function AgendaItemRow({
             {item.title}
           </h4>
           <div className="flex items-center gap-3">
-            {item.due_date && (
+            {item.dueDate && (
               <span className="shrink-0 text-xs font-medium text-(--text-secondary) bg-gray-100 dark:bg-white/5 px-2 py-1 rounded-md">
-                {new Date(item.due_date).toLocaleDateString("en-US", {
+                {new Date(item.dueDate).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
                 })}
@@ -334,14 +369,14 @@ function AgendaItemRow({
           </p>
         )}
 
-        {item.related_type && (
+        {item.relatedType && (
           <div className="flex items-center gap-2 mt-2">
             <Link
               href={getEntityUrl()}
               className="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-500/10 px-2.5 py-1 text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors"
             >
               <LinkIcon size={10} />
-              {item.related_type}
+              {item.relatedType}
             </Link>
           </div>
         )}

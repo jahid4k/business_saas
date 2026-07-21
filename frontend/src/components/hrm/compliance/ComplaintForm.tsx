@@ -42,8 +42,8 @@ interface ComplaintFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -108,7 +108,7 @@ export default function ComplaintForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Filed by <span className="text-red-400">*</span>
           </label>
           <select {...register("employee_id")} autoFocus className={inputCls}>
@@ -129,7 +129,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Complaint type <span className="text-red-400">*</span>
           </label>
           <select {...register("complaint_type")} className={inputCls}>
@@ -152,7 +152,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Title <span className="text-red-400">*</span>
           </label>
           <input
@@ -166,7 +166,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description <span className="text-red-400">*</span>
           </label>
           <textarea
@@ -181,7 +181,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Incident date
           </label>
           <input
@@ -192,7 +192,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Against (employee)
           </label>
           <select {...register("against_employee_id")} className={inputCls}>
@@ -210,7 +210,7 @@ export default function ComplaintForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Against (other details)
           </label>
           <input
@@ -229,23 +229,23 @@ export default function ComplaintForm({
           />
           <label
             htmlFor="is_anonymous"
-            className="text-sm text-[var(--text-secondary)]"
+            className="text-sm text-(--text-secondary)"
           >
             Mark as anonymous
           </label>
         </div>
-        <p className="text-xs text-[var(--text-muted)] -mt-2">
+        <p className="text-xs text-(--text-muted) -mt-2">
           Note: this flags the complaint for sensitive handling, but the
           filer&apos;s identity is still stored and visible to HR — it is not
           fully anonymized at the system level.
         </p>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

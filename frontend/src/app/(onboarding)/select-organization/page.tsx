@@ -4,8 +4,32 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronRight, Plus, LogOut } from "lucide-react";
+import {
+  Building2,
+  ChevronRight,
+  Plus,
+  LogOut,
+  GripVertical,
+} from "lucide-react";
 import gsap from "gsap";
+
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import {
   listOrganizations,
@@ -22,6 +46,7 @@ const PURPLE = "#7c3aed";
 const PURPLE_HOVER = "#a855f7";
 const FONT_SYNE = "var(--font-syne, Syne, sans-serif)";
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
+const LOCAL_STORAGE_KEY = "business_saas_org_order";
 
 function roleBadge(role: string) {
   const map: Record<string, { bg: string; color: string }> = {
@@ -50,6 +75,168 @@ function timeGreeting() {
   return "evening";
 }
 
+function SortableOrgItem({
+  membership: m,
+  anyLoading,
+  switching,
+  handleSelect,
+}: {
+  membership: MembershipWithRole;
+  anyLoading: boolean;
+  switching: string | null;
+  handleSelect: (m: MembershipWithRole) => void;
+}) {
+  const org = m.organization;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: org.id, disabled: anyLoading });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    position: "relative" as const,
+  };
+
+  const badge = roleBadge(m.role);
+  const isThisLoading = switching === org.id;
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <button
+        onClick={() => !anyLoading && handleSelect(m)}
+        disabled={anyLoading}
+        className="group w-full rounded-xl px-5 py-4 flex items-center gap-4 text-left transition-all duration-150"
+        style={{
+          background: "#0f0f0f",
+          border: `1px solid ${
+            isThisLoading ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.07)"
+          }`,
+          cursor: isDragging
+            ? "grabbing"
+            : anyLoading
+              ? "not-allowed"
+              : "pointer",
+          opacity: isDragging ? 0.8 : anyLoading && !isThisLoading ? 0.4 : 1,
+          boxShadow: isThisLoading
+            ? "0 0 0 1px rgba(124,58,237,0.15)"
+            : isDragging
+              ? "0 10px 20px rgba(0,0,0,0.3)"
+              : "none",
+        }}
+        onMouseEnter={(e) => {
+          if (!anyLoading && !isDragging) {
+            e.currentTarget.style.borderColor = "rgba(124,58,237,0.4)";
+            e.currentTarget.style.boxShadow = "0 0 0 1px rgba(124,58,237,0.1)";
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!anyLoading && !isDragging) {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)";
+            e.currentTarget.style.boxShadow = "none";
+          }
+        }}
+      >
+        {/* Drag handle (visible on hover or drag) */}
+        <div
+          className={`shrink-0 text-gray-500 mr-[-8px] transition-opacity ${
+            isDragging ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+        >
+          <GripVertical size={16} />
+        </div>
+
+        {/* Initials avatar */}
+        <div
+          className="shrink-0 rounded-lg flex items-center justify-center text-white font-bold"
+          style={{
+            width: 44,
+            height: 44,
+            background: "linear-gradient(135deg, #7c3aed, #a855f7)",
+            fontFamily: FONT_SYNE,
+            fontSize: "0.9rem",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {initials(org.name)}
+        </div>
+
+        {/* Org details */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span
+              className="text-sm font-semibold text-white truncate"
+              style={{ fontFamily: FONT_INTER }}
+            >
+              {org.name}
+            </span>
+            <span
+              className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium capitalize"
+              style={{
+                background: badge.bg,
+                color: badge.color,
+                fontFamily: FONT_INTER,
+              }}
+            >
+              {m.role}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className="text-xs"
+              style={{ color: "#555", fontFamily: FONT_INTER }}
+            >
+              {org.slug}
+            </span>
+            {org.industry && (
+              <>
+                <span className="text-[10px] text-[#444]">•</span>
+                <span
+                  className="text-xs"
+                  style={{ color: "#777", fontFamily: FONT_INTER }}
+                >
+                  {org.industry}
+                </span>
+              </>
+            )}
+            {org.type && (
+              <>
+                <span className="text-[10px] text-[#444]">•</span>
+                <span
+                  className="text-xs"
+                  style={{ color: "#777", fontFamily: FONT_INTER }}
+                >
+                  {org.type}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Arrow / spinner */}
+        <div className="shrink-0" style={{ color: "#444" }}>
+          {isThisLoading ? (
+            <span
+              className="w-4 h-4 rounded-full animate-spin block"
+              style={{
+                border: "2px solid rgba(124,58,237,0.25)",
+                borderTopColor: PURPLE,
+              }}
+            />
+          ) : (
+            <ChevronRight size={16} />
+          )}
+        </div>
+      </button>
+    </div>
+  );
+}
+
 export default function SelectOrganizationPage() {
   const router = useRouter();
   const { user, setOrg, reset: resetAuth } = useAuthStore();
@@ -66,9 +253,40 @@ export default function SelectOrganizationPage() {
   const listRef = useRef<HTMLDivElement>(null);
   const footRef = useRef<HTMLDivElement>(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
   useEffect(() => {
     listOrganizations()
-      .then(setOrgs)
+      .then((fetchedOrgs) => {
+        // restore order from local storage
+        const storedOrderStr = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (storedOrderStr) {
+          try {
+            const storedOrder = JSON.parse(storedOrderStr) as string[];
+            const ordered = [...fetchedOrgs].sort((a, b) => {
+              const idxA = storedOrder.indexOf(a.organization.id);
+              const idxB = storedOrder.indexOf(b.organization.id);
+              const weightA = idxA === -1 ? 99999 : idxA;
+              const weightB = idxB === -1 ? 99999 : idxB;
+              return weightA - weightB;
+            });
+            setOrgs(ordered);
+          } catch (e) {
+            setOrgs(fetchedOrgs);
+          }
+        } else {
+          setOrgs(fetchedOrgs);
+        }
+      })
       .catch(() => setError("Failed to load workspaces. Please refresh."))
       .finally(() => setFetching(false));
   }, []);
@@ -129,6 +347,29 @@ export default function SelectOrganizationPage() {
     resetAuth();
     resetPerms();
     router.replace("/login");
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setOrgs((items) => {
+        const oldIndex = items.findIndex(
+          (i) => i.organization.id === active.id,
+        );
+        const newIndex = items.findIndex((i) => i.organization.id === over.id);
+
+        const newItems = arrayMove(items, oldIndex, newIndex);
+
+        // Save new order to local storage
+        localStorage.setItem(
+          LOCAL_STORAGE_KEY,
+          JSON.stringify(newItems.map((i) => i.organization.id)),
+        );
+
+        return newItems;
+      });
+    }
   };
 
   const firstName = user?.firstName ?? user?.displayName ?? "there";
@@ -305,103 +546,30 @@ export default function SelectOrganizationPage() {
               </Link>
             </div>
           ) : (
-            orgs.map((m) => {
-              const org = m.organization;
-              const badge = roleBadge(m.role);
-              const isThisLoading = switching === org.id;
-              const anyLoading = switching !== null;
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={orgs.map((o) => o.organization.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {orgs.map((m) => {
+                  const anyLoading = switching !== null;
 
-              return (
-                <button
-                  key={org.id}
-                  onClick={() => !anyLoading && handleSelect(m)}
-                  disabled={anyLoading}
-                  className="w-full rounded-xl px-5 py-4 flex items-center gap-4 text-left transition-all duration-150"
-                  style={{
-                    background: "#0f0f0f",
-                    border: `1px solid ${isThisLoading ? "rgba(124,58,237,0.45)" : "rgba(255,255,255,0.07)"}`,
-                    cursor: anyLoading ? "not-allowed" : "pointer",
-                    opacity: anyLoading && !isThisLoading ? 0.4 : 1,
-                    boxShadow: isThisLoading
-                      ? "0 0 0 1px rgba(124,58,237,0.15)"
-                      : "none",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!anyLoading) {
-                      e.currentTarget.style.borderColor =
-                        "rgba(124,58,237,0.4)";
-                      e.currentTarget.style.boxShadow =
-                        "0 0 0 1px rgba(124,58,237,0.1)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!anyLoading) {
-                      e.currentTarget.style.borderColor =
-                        "rgba(255,255,255,0.07)";
-                      e.currentTarget.style.boxShadow = "none";
-                    }
-                  }}
-                >
-                  {/* Initials avatar */}
-                  <div
-                    className="flex-shrink-0 rounded-lg flex items-center justify-center text-white font-bold"
-                    style={{
-                      width: 44,
-                      height: 44,
-                      background: "linear-gradient(135deg, #7c3aed, #a855f7)",
-                      fontFamily: FONT_SYNE,
-                      fontSize: "0.9rem",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {initials(org.name)}
-                  </div>
-
-                  {/* Org details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span
-                        className="text-sm font-semibold text-white truncate"
-                        style={{ fontFamily: FONT_INTER }}
-                      >
-                        {org.name}
-                      </span>
-                      <span
-                        className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium capitalize"
-                        style={{
-                          background: badge.bg,
-                          color: badge.color,
-                          fontFamily: FONT_INTER,
-                        }}
-                      >
-                        {m.role}
-                      </span>
-                    </div>
-                    <span
-                      className="text-xs"
-                      style={{ color: "#555", fontFamily: FONT_INTER }}
-                    >
-                      {org.slug}
-                    </span>
-                  </div>
-
-                  {/* Arrow / spinner */}
-                  <div className="flex-shrink-0" style={{ color: "#444" }}>
-                    {isThisLoading ? (
-                      <span
-                        className="w-4 h-4 rounded-full animate-spin block"
-                        style={{
-                          border: "2px solid rgba(124,58,237,0.25)",
-                          borderTopColor: PURPLE,
-                        }}
-                      />
-                    ) : (
-                      <ChevronRight size={16} />
-                    )}
-                  </div>
-                </button>
-              );
-            })
+                  return (
+                    <SortableOrgItem
+                      key={m.organization.id}
+                      membership={m}
+                      anyLoading={anyLoading}
+                      switching={switching}
+                      handleSelect={handleSelect}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 

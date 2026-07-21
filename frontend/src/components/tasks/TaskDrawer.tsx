@@ -130,19 +130,19 @@ export default function TaskDrawer({
       {/* Slide panel */}
       <div
         ref={panelRef}
-        className="absolute right-0 top-0 h-full w-full max-w-[440px] pointer-events-auto flex flex-col bg-[var(--bg-surface)] border-l border-[var(--border)] shadow-2xl"
+        className="absolute right-0 top-0 h-full w-full max-w-[440px] pointer-events-auto flex flex-col bg-(--bg-surface) border-l border-(--border) shadow-2xl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] flex-shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-(--border) shrink-0">
           <h2
-            className="text-base font-semibold text-[var(--text-primary)]"
+            className="text-base font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
           >
             {isEdit ? "Edit task" : "New task"}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="p-1.5 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
           >
             <X size={16} />
           </button>
@@ -165,7 +165,7 @@ export default function TaskDrawer({
 
             {/* Title */}
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Title <span className="text-red-400">*</span>
               </label>
               <input
@@ -173,7 +173,7 @@ export default function TaskDrawer({
                 type="text"
                 placeholder="What needs to be done?"
                 autoComplete="off"
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
               />
               {errors.title && (
                 <p className="text-xs text-red-400">{errors.title.message}</p>
@@ -182,9 +182,9 @@ export default function TaskDrawer({
 
             {/* Description */}
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Description
-                <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+                <span className="ml-2 text-xs font-normal text-(--text-muted)">
                   optional
                 </span>
               </label>
@@ -192,18 +192,18 @@ export default function TaskDrawer({
                 {...register("description")}
                 rows={4}
                 placeholder="Add more details…"
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all resize-none"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all resize-none"
               />
             </div>
 
             {/* Status */}
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Status
               </label>
               <select
                 {...register("status")}
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
               >
                 {STATUS_OPTIONS.map((o) => (
                   <option
@@ -222,27 +222,27 @@ export default function TaskDrawer({
 
             {/* Due date */}
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Due date
-                <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+                <span className="ml-2 text-xs font-normal text-(--text-muted)">
                   optional
                 </span>
               </label>
               <input
                 {...register("dueDate")}
                 type="date"
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
               />
             </div>
           </form>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+        <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+            className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
           >
             Cancel
           </button>

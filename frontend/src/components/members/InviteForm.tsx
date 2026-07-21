@@ -1,42 +1,48 @@
 // src/components/members/InviteForm.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
-import type { MemberRole } from "@/types/rbac";
-
-const ROLES: { value: MemberRole; label: string; desc: string }[] = [
-  { value: "admin", label: "Admin", desc: "Broad management access" },
-  { value: "manager", label: "Manager", desc: "Project and member visibility" },
-  { value: "member", label: "Member", desc: "Standard access" },
-  { value: "viewer", label: "Viewer", desc: "Read-only access" },
-];
+import type { Role } from "@/types/rbac";
 
 const schema = z.object({
   email: z.string().min(1, "Email is required").email("Enter a valid email"),
-  role: z.enum(["admin", "manager", "member", "viewer"]),
+  role: z.string().min(1, "Role is required"),
 });
 type InviteValues = z.infer<typeof schema>;
 
 interface InviteFormProps {
-  onSave: (email: string, role: MemberRole) => Promise<void>;
+  orgRoles: Role[];
+  onSave: (email: string, role: string) => Promise<void>;
 }
 
-export default function InviteForm({ onSave }: InviteFormProps) {
+export default function InviteForm({ orgRoles, onSave }: InviteFormProps) {
   const { closeDrawer } = useDrawer();
   const [error, setError] = useState<string | null>(null);
+
+  const assignableRoles = orgRoles.filter((r) => r.name !== "owner");
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<InviteValues>({
     resolver: zodResolver(schema),
     defaultValues: { role: "member" },
   });
+
+  useEffect(() => {
+    if (
+      assignableRoles.length > 0 &&
+      !assignableRoles.some((r) => r.name === "member")
+    ) {
+      setValue("role", assignableRoles[0].name);
+    }
+  }, [assignableRoles, setValue]);
 
   const onSubmit = async (values: InviteValues) => {
     setError(null);
@@ -64,7 +70,7 @@ export default function InviteForm({ onSave }: InviteFormProps) {
 
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Email address <span className="text-red-400">*</span>
           </label>
           <input
@@ -72,7 +78,7 @@ export default function InviteForm({ onSave }: InviteFormProps) {
             type="email"
             placeholder="colleague@company.com"
             autoFocus
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
           />
           {errors.email && (
             <p className="text-xs text-red-400">{errors.email.message}</p>
@@ -81,26 +87,28 @@ export default function InviteForm({ onSave }: InviteFormProps) {
 
         {/* Role */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Role <span className="text-red-400">*</span>
           </label>
           <div className="space-y-2">
-            {ROLES.map((r) => (
+            {assignableRoles.map((r) => (
               <label
-                key={r.value}
-                className="flex items-start gap-3 p-3 rounded-lg border border-[var(--border)] cursor-pointer hover:border-purple-500/40 hover:bg-purple-500/5 transition-all has-[:checked]:border-purple-500 has-[:checked]:bg-purple-500/8"
+                key={r.id}
+                className="flex items-start gap-3 p-3 rounded-lg border border-(--border) cursor-pointer hover:border-purple-500/40 hover:bg-purple-500/5 transition-all has-checked:border-purple-500 has-checked:bg-purple-500/8"
               >
                 <input
                   {...register("role")}
                   type="radio"
-                  value={r.value}
-                  className="mt-0.5 accent-purple-500 flex-shrink-0"
+                  value={r.name}
+                  className="mt-0.5 accent-purple-500 shrink-0"
                 />
                 <div>
-                  <p className="text-sm font-medium text-[var(--text-primary)]">
-                    {r.label}
+                  <p className="text-sm font-medium text-(--text-primary) capitalize">
+                    {r.name}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)]">{r.desc}</p>
+                  <p className="text-xs text-(--text-muted)">
+                    {r.description}
+                  </p>
                 </div>
               </label>
             ))}
@@ -109,11 +117,11 @@ export default function InviteForm({ onSave }: InviteFormProps) {
       </form>
 
       {/* Footer */}
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

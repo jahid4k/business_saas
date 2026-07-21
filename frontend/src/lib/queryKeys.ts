@@ -16,6 +16,10 @@ export const queryKeys = {
     avatars: () => ["profile", "avatars"] as const,
   },
 
+  dashboard: {
+    metrics: (orgId: string) => ["dashboard", orgId, "metrics"] as const,
+  },
+
   tasks: {
     all: (orgId: string) => ["tasks", orgId] as const,
     list: (orgId: string) => ["tasks", orgId, "list"] as const,

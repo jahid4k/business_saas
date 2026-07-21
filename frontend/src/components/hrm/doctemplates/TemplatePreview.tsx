@@ -13,8 +13,8 @@ interface TemplatePreviewProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -47,12 +47,12 @@ export default function TemplatePreview({
     <div className="px-6 py-5 space-y-4">
       {template.available_variables.length > 0 && (
         <div className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+          <p className="text-xs font-semibold uppercase tracking-wide text-(--text-muted)">
             Fill sample values
           </p>
           {template.available_variables.map((v) => (
             <div key={v} className="space-y-1">
-              <label className="block text-xs font-medium text-[var(--text-secondary)]">
+              <label className="block text-xs font-medium text-(--text-secondary)">
                 {v}
               </label>
               <input
@@ -84,7 +84,7 @@ export default function TemplatePreview({
               Missing values for: {result.missing.join(", ")}
             </p>
           )}
-          <div className="p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] whitespace-pre-wrap text-sm text-[var(--text-primary)] max-h-80 overflow-y-auto">
+          <div className="p-4 rounded-lg bg-(--bg-elevated) border border-(--border) whitespace-pre-wrap text-sm text-(--text-primary) max-h-80 overflow-y-auto">
             {result.filled_content}
           </div>
         </div>

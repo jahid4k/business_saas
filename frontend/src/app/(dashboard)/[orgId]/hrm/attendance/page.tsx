@@ -90,7 +90,7 @@ export default function AttendancePage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -98,13 +98,13 @@ export default function AttendancePage({
           >
             Attendance
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Daily records and monthly periods
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["records", "periods"] as const).map((key) => (
           <button
             key={key}
@@ -112,7 +112,7 @@ export default function AttendancePage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "records" ? "Records" : "Periods"}
@@ -275,7 +275,7 @@ function RecordsView({
         <select
           value={month}
           onChange={(e) => setMonth(Number(e.target.value))}
-          className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+          className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
         >
           {MONTHS.map((m, i) => (
             <option
@@ -290,7 +290,7 @@ function RecordsView({
         <select
           value={year}
           onChange={(e) => setYear(Number(e.target.value))}
-          className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+          className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
         >
           {[year - 1, year, year + 1].map((y) => (
             <option
@@ -305,7 +305,7 @@ function RecordsView({
         <select
           value={empFilter}
           onChange={(e) => setEmpFilter(e.target.value)}
-          className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+          className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
         >
           <option value="">All employees</option>
           {employees.map((e) => (
@@ -321,7 +321,7 @@ function RecordsView({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+          className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
         >
           <option value="all">All statuses</option>
           <option value="approved">Approved</option>
@@ -341,16 +341,16 @@ function RecordsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Clock size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Clock size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No records for this period
           </p>
         </div>
@@ -365,20 +365,20 @@ function RecordsView({
             return (
               <div
                 key={rec.id}
-                className={`att-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`att-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <Clock size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(rec.employee_id)} ·{" "}
                     {new Date(rec.attendance_date).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                     })}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {DAY_TYPE_LABEL[rec.day_type] ?? rec.day_type}
                     {rec.check_in_time ? ` · In ${rec.check_in_time}` : ""}
                     {rec.check_out_time ? ` · Out ${rec.check_out_time}` : ""}
@@ -387,7 +387,7 @@ function RecordsView({
                       : ""}
                   </p>
                   {rec.regularization_reason && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       Correction: {rec.regularization_reason}
                     </p>
                   )}
@@ -402,7 +402,7 @@ function RecordsView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(rec.id, el);
                       else menuRefs.current.delete(rec.id);
@@ -410,12 +410,12 @@ function RecordsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : rec.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {rec.status === "pending" && canApprove && (
                           <>
                             <button
@@ -435,7 +435,7 @@ function RecordsView({
                         {rec.status === "approved" && canManage && (
                           <button
                             onClick={() => openRegularize(rec)}
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                           >
                             Request correction
                           </button>
@@ -537,7 +537,7 @@ function PeriodsView({
           <select
             value={newMonth}
             onChange={(e) => setNewMonth(Number(e.target.value))}
-            className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+            className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
           >
             {MONTHS.map((m, i) => (
               <option
@@ -552,7 +552,7 @@ function PeriodsView({
           <select
             value={newYear}
             onChange={(e) => setNewYear(Number(e.target.value))}
-            className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500"
+            className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500"
           >
             {[newYear - 1, newYear, newYear + 1].map((y) => (
               <option
@@ -575,12 +575,12 @@ function PeriodsView({
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : periods.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)] py-10 text-center">
+        <p className="text-sm text-(--text-muted) py-10 text-center">
           No periods opened yet.
         </p>
       ) : (
@@ -588,13 +588,13 @@ function PeriodsView({
           {periods.map((p) => (
             <div
               key={p.id}
-              className="flex items-start justify-between gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="flex items-start justify-between gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {MONTHS[p.period_month - 1]} {p.period_year}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {p.total_employees} employees · {p.total_present} present ·{" "}
                   {p.total_absent} absent · {p.total_leaves} on leave ·{" "}
                   {p.total_holidays} holidays · {p.total_overtime_hours}h OT
@@ -614,7 +614,7 @@ function PeriodsView({
               {canFinalize && p.status === "open" && (
                 <button
                   onClick={() => handleFinalize(p)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-400 border border-blue-500/20 hover:bg-blue-500/10 transition-colors flex-shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-400 border border-blue-500/20 hover:bg-blue-500/10 transition-colors shrink-0"
                 >
                   <CheckCircle2 size={13} />
                   Finalize
@@ -623,7 +623,7 @@ function PeriodsView({
               {canFinalize && p.status === "finalized" && (
                 <button
                   onClick={() => handleLock(p)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors flex-shrink-0"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors shrink-0"
                 >
                   <Lock size={13} />
                   Lock

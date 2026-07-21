@@ -119,7 +119,7 @@ export default function HolidaysPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -127,7 +127,7 @@ export default function HolidaysPage({
           >
             Holiday Calendars
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Public and company holidays by year
           </p>
         </div>
@@ -143,14 +143,14 @@ export default function HolidaysPage({
       </div>
 
       {assignId && (
-        <div className="mb-4 p-4 rounded-xl bg-[var(--bg-surface)] border border-purple-500/30 space-y-2">
+        <div className="mb-4 p-4 rounded-xl bg-(--bg-surface) border border-purple-500/30 space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={assigneeType}
               onChange={(e) =>
                 setAssigneeType(e.target.value as typeof assigneeType)
               }
-              className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
             >
               <option
                 value="organization"
@@ -175,7 +175,7 @@ export default function HolidaysPage({
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+                className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
               >
                 <option value="">Select department</option>
                 {departments.map((d) => (
@@ -193,7 +193,7 @@ export default function HolidaysPage({
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+                className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
               >
                 <option value="">Select employee</option>
                 {employees.map((e) => (
@@ -211,7 +211,7 @@ export default function HolidaysPage({
               value={effectiveDate}
               onChange={(e) => setEffectiveDate(e.target.value)}
               type="date"
-              className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
             />
           </div>
           <div className="flex gap-2">
@@ -223,7 +223,7 @@ export default function HolidaysPage({
             </button>
             <button
               onClick={() => setAssignId(null)}
-              className="px-3.5 py-2 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+              className="px-3.5 py-2 rounded-lg text-sm text-(--text-secondary) hover:bg-(--bg-elevated)"
             >
               Cancel
             </button>
@@ -232,16 +232,16 @@ export default function HolidaysPage({
       )}
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <CalendarRange size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <CalendarRange size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No holiday calendars yet
           </p>
         </div>
@@ -250,21 +250,21 @@ export default function HolidaysPage({
           {items.map((cal) => (
             <div
               key={cal.id}
-              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="group flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <CalendarRange size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[var(--text-primary)]">
+                <p className="text-sm font-medium text-(--text-primary)">
                   {cal.name}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {cal.year}
                   {cal.country_code ? ` · ${cal.country_code}` : ""}
                 </p>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 {canManage && (
                   <>
                     <button
@@ -275,7 +275,7 @@ export default function HolidaysPage({
                     </button>
                     <button
                       onClick={() => setAssignId(cal.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
                     >
                       Assign
                     </button>
@@ -284,7 +284,7 @@ export default function HolidaysPage({
                 {canManage &&
                   (deleteConfirm === cal.id ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-[var(--text-muted)]">
+                      <span className="text-xs text-(--text-muted)">
                         Delete?
                       </span>
                       <button
@@ -295,7 +295,7 @@ export default function HolidaysPage({
                       </button>
                       <button
                         onClick={() => setDeleteConfirm(null)}
-                        className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
                       >
                         No
                       </button>
