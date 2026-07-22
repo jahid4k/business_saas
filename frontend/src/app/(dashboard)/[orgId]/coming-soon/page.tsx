@@ -116,7 +116,7 @@ function ComingSoonContent() {
 
   if (!info) {
     return (
-      <div className="p-8 text-[var(--text-muted)] text-sm">
+      <div className="p-8 text-(--text-muted) text-sm">
         Unknown module.{" "}
         <Link href={`/${orgId}`} className="text-[#7c3aed] underline">
           Go back.
@@ -132,7 +132,7 @@ function ComingSoonContent() {
       {/* Back */}
       <Link
         href={`/${orgId}`}
-        className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors no-underline mb-10"
+        className="inline-flex items-center gap-2 text-sm text-(--text-muted) hover:text-(--text-secondary) transition-colors no-underline mb-10"
       >
         <ArrowLeft size={14} />
         Back to dashboard
@@ -141,7 +141,7 @@ function ComingSoonContent() {
       {/* Module hero */}
       <div className="flex items-start gap-5 mb-10">
         <div
-          className="w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center"
+          className="w-14 h-14 rounded-2xl shrink-0 flex items-center justify-center"
           style={{
             background: "rgba(124,58,237,0.12)",
             border: "1px solid rgba(124,58,237,0.2)",
@@ -152,7 +152,7 @@ function ComingSoonContent() {
         <div>
           <div className="flex items-center gap-3 mb-1.5">
             <h1
-              className="text-2xl font-bold text-[var(--text-primary)]"
+              className="text-2xl font-bold text-(--text-primary)"
               style={{
                 fontFamily: "var(--font-syne, Syne, sans-serif)",
                 letterSpacing: "-0.02em",
@@ -182,7 +182,7 @@ function ComingSoonContent() {
               </span>
             )}
           </div>
-          <p className="text-sm text-[var(--text-muted)]">{info.desc}</p>
+          <p className="text-sm text-(--text-muted)">{info.desc}</p>
         </div>
       </div>
 
@@ -198,7 +198,7 @@ function ComingSoonContent() {
           <div className="flex items-center gap-2 mb-4">
             <Sparkles size={14} style={{ color: "#7c3aed" }} />
             <p
-              className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider"
+              className="text-xs font-semibold text-(--text-muted) uppercase tracking-wider"
               style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
             >
               Planned features
@@ -208,10 +208,10 @@ function ComingSoonContent() {
             {info.features.map((f) => (
               <div key={f} className="flex items-center gap-2.5">
                 <div
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ background: "#7c3aed" }}
                 />
-                <span className="text-sm text-[var(--text-secondary)]">
+                <span className="text-sm text-(--text-secondary)">
                   {f}
                 </span>
               </div>
@@ -223,7 +223,7 @@ function ComingSoonContent() {
       {/* Product roadmap */}
       <div>
         <h2
-          className="text-base font-semibold text-[var(--text-primary)] mb-5"
+          className="text-base font-semibold text-(--text-primary) mb-5"
           style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
         >
           Product roadmap
@@ -245,7 +245,7 @@ function ComingSoonContent() {
                   ${
                     isCurrent
                       ? "border border-[#7c3aed]/30 bg-[rgba(124,58,237,0.06)]"
-                      : "border border-[var(--border)] bg-[var(--bg-surface)]"
+                      : "border border-(--border) bg-(--bg-surface)"
                   }
                 `}
               >
@@ -253,8 +253,8 @@ function ComingSoonContent() {
                 <div className="flex flex-col items-center self-stretch">
                   <div
                     className={`
-                      w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center
-                      ${isLive ? "bg-emerald-500/15" : isCurrent ? "bg-purple-500/15" : "bg-[var(--bg-elevated)]"}
+                      w-7 h-7 rounded-full shrink-0 flex items-center justify-center
+                      ${isLive ? "bg-emerald-500/15" : isCurrent ? "bg-purple-500/15" : "bg-(--bg-elevated)"}
                     `}
                   >
                     {isLive ? (
@@ -265,20 +265,20 @@ function ComingSoonContent() {
                         className={
                           isCurrent
                             ? "text-purple-400"
-                            : "text-[var(--text-muted)]"
+                            : "text-(--text-muted)"
                         }
                       />
                     )}
                   </div>
                   {idx < ROADMAP_ORDER.length - 1 && (
-                    <div className="w-px flex-1 mt-1.5 bg-[var(--border)]" />
+                    <div className="w-px flex-1 mt-1.5 bg-(--border)" />
                   )}
                 </div>
 
                 {/* Content */}
                 <div className="flex items-center gap-3 flex-1 min-w-0 py-0.5">
                   <div
-                    className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center"
+                    className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center"
                     style={{
                       background:
                         isLive || isCurrent
@@ -297,7 +297,7 @@ function ComingSoonContent() {
                   </div>
                   <div className="min-w-0">
                     <p
-                      className={`text-sm font-semibold ${isLive || isCurrent ? "text-[var(--text-primary)]" : "text-[var(--text-muted)]"}`}
+                      className={`text-sm font-semibold ${isLive || isCurrent ? "text-(--text-primary)" : "text-(--text-muted)"}`}
                       style={{
                         fontFamily: "var(--font-inter, Inter, sans-serif)",
                       }}
@@ -309,20 +309,20 @@ function ComingSoonContent() {
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-[var(--text-muted)]">
+                    <p className="text-xs text-(--text-muted)">
                       {mod.desc}
                     </p>
                   </div>
                 </div>
 
                 {/* ETA badge */}
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   {isLive ? (
                     <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
                       Live
                     </span>
                   ) : (
-                    <span className="text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-elevated)] border border-[var(--border)] px-2.5 py-1 rounded-full">
+                    <span className="text-xs font-medium text-(--text-muted) bg-(--bg-elevated) border border-(--border) px-2.5 py-1 rounded-full">
                       {mod.eta}
                     </span>
                   )}
@@ -341,7 +341,7 @@ export default function ComingSoonPage() {
   return (
     <Suspense
       fallback={
-        <div className="p-8 text-sm text-[var(--text-muted)]">Loading…</div>
+        <div className="p-8 text-sm text-(--text-muted)">Loading…</div>
       }
     >
       <ComingSoonContent />

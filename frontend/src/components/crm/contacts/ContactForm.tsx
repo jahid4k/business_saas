@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { listCompanies } from "@/lib/crm/companies";
 import type { Contact, Company } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 const SOURCES = [
   { value: "linkedin", label: "LinkedIn" },
@@ -39,8 +40,8 @@ interface ContactFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -68,6 +69,8 @@ export default function ContactForm({
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ContactFormValues>({
     resolver: zodResolver(schema),
@@ -112,7 +115,7 @@ export default function ContactForm({
         {/* Name row */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               First name <span className="text-red-400">*</span>
             </label>
             <input
@@ -128,7 +131,7 @@ export default function ContactForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Last name
             </label>
             <input
@@ -141,7 +144,7 @@ export default function ContactForm({
 
         {/* Email */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Email
           </label>
           <input
@@ -158,7 +161,7 @@ export default function ContactForm({
         {/* Phone + Title */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Phone
             </label>
             <input
@@ -169,7 +172,7 @@ export default function ContactForm({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Job title
             </label>
             <input
@@ -182,48 +185,39 @@ export default function ContactForm({
 
         {/* Company dropdown */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Company
           </label>
-          <select {...register("company_id")} className={inputCls}>
-            <option value="">No company</option>
-            {companies.map((c) => (
-              <option
-                key={c.id}
-                value={c.id}
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("company_id")} />
+          <Select
+            value={watch("company_id") || ""}
+            onChange={(v) => setValue("company_id", v)}
+            options={[
+              { value: "", label: "No company" },
+              ...companies.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
         </div>
 
         {/* Source */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Source
           </label>
-          <select {...register("source")} className={inputCls}>
-            <option value="">Select source</option>
-            {SOURCES.map((s) => (
-              <option
-                key={s.value}
-                value={s.value}
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("source")} />
+          <Select
+            value={watch("source") || ""}
+            onChange={(v) => setValue("source", v)}
+            options={[{ value: "", label: "Select source" }, ...SOURCES]}
+          />
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

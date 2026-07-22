@@ -118,33 +118,34 @@ func (s *serviceImpl) GetAgenda(ctx context.Context, orgID string) (*Agenda, err
 	}
 
 	now := time.Now()
-	// end of today
-	endOfToday := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 0, now.Location())
+	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	for _, t := range tasksRes.Tasks {
 		if t.Status == "done" || t.Status == "cancelled" {
-			continue
-		}
-		if t.DueDate == nil || t.DueDate.Before(endOfToday) {
-			dueDateStr := ""
-			if t.DueDate != nil {
-				dueDateStr = t.DueDate.Format(time.RFC3339)
+			if t.UpdatedAt.Before(startOfToday) {
+				continue
 			}
-			desc := ""
-			if t.Description != nil {
-				desc = *t.Description
-			}
-			agenda.Items = append(agenda.Items, AgendaItem{
-				ID:          t.ID,
-				Type:        "task",
-				Title:       t.Title,
-				Description: desc,
-				Status:      string(t.Status),
-				DueDate:     &dueDateStr,
-				RelatedType: string(t.RelatedType),
-				RelatedID:   t.RelatedID,
-			})
 		}
+
+		dueDateStr := ""
+		if t.DueDate != nil {
+			dueDateStr = t.DueDate.Format(time.RFC3339)
+		}
+		desc := ""
+		if t.Description != nil {
+			desc = *t.Description
+		}
+		agenda.Items = append(agenda.Items, AgendaItem{
+			ID:          t.ID,
+			Type:        "task",
+			Title:       t.Title,
+			Description: desc,
+			Status:      string(t.Status),
+			DueDate:     &dueDateStr,
+			RelatedType: string(t.RelatedType),
+			RelatedID:   t.RelatedID,
+			UpdatedAt:   t.UpdatedAt.Format(time.RFC3339),
+		})
 	}
 
 	return agenda, nil

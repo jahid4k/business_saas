@@ -78,28 +78,30 @@ export default function LeadRoutingPage({
     <div className="max-w-4xl space-y-8 pb-12 p-8">
       <div>
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-2"
+          className="text-2xl font-bold text-(--text-primary) mb-2"
           style={{ fontFamily: "var(--font-syne, Syne, sans-serif)" }}
         >
           Lead Routing
         </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          Configure how new leads are automatically assigned to your team members.
+        <p className="text-sm text-(--text-secondary)">
+          Configure how new leads are automatically assigned to your team
+          members.
         </p>
       </div>
 
-      <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6">
+      <div className="bg-(--bg-surface) border border-(--border) rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
               <Route size={20} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+              <h2 className="text-sm font-semibold text-(--text-primary)">
                 Round-Robin Assignment
               </h2>
-              <p className="text-xs text-[var(--text-muted)]">
-                Automatically distribute new leads equally among selected team members.
+              <p className="text-xs text-(--text-muted)">
+                Automatically distribute new leads equally among selected team
+                members.
               </p>
             </div>
           </div>
@@ -111,24 +113,24 @@ export default function LeadRoutingPage({
               onChange={(e) => setEnabled(e.target.checked)}
               disabled={!canUpdate || updateMutation.isPending}
             />
-            <div className="w-11 h-6 bg-[var(--bg-elevated)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+            <div className="w-11 h-6 bg-(--bg-elevated) peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
           </label>
         </div>
 
         {enabled && (
-          <div className="mt-8 space-y-6 border-t border-[var(--border)] pt-6">
+          <div className="mt-8 space-y-6 border-t border-(--border) pt-6">
             <div>
-              <h3 className="text-sm font-medium text-[var(--text-primary)] mb-2 flex items-center gap-2">
+              <h3 className="text-sm font-medium text-(--text-primary) mb-2 flex items-center gap-2">
                 <Users size={16} className="text-purple-500" />
                 Eligible Assignees
               </h3>
-              <p className="text-xs text-[var(--text-muted)] mb-4">
+              <p className="text-xs text-(--text-muted) mb-4">
                 These users will receive new leads in sequential order.
               </p>
 
               <div className="flex gap-2 mb-4">
                 <select
-                  className="flex-1 bg-[var(--bg-canvas)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-purple-500 transition-colors"
+                  className="flex-1 bg-(--bg-canvas) border border-(--border) rounded-lg px-3 py-2 text-sm text-(--text-primary) focus:outline-none focus:border-purple-500 transition-colors"
                   value={selectedUser}
                   onChange={(e) => setSelectedUser(e.target.value)}
                   disabled={!canUpdate}
@@ -145,7 +147,7 @@ export default function LeadRoutingPage({
                 <button
                   onClick={handleAddAssignee}
                   disabled={!selectedUser || !canUpdate}
-                  className="px-4 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-primary)] hover:bg-[var(--bg-hover)] disabled:opacity-50 transition-colors flex items-center gap-2"
+                  className="px-4 py-2 bg-(--bg-elevated) border border-(--border) rounded-lg text-sm font-medium text-(--text-primary) hover:bg-(--bg-hover) disabled:opacity-50 transition-colors flex items-center gap-2"
                 >
                   <Plus size={16} /> Add
                 </button>
@@ -158,23 +160,29 @@ export default function LeadRoutingPage({
                     return (
                       <div
                         key={id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-[var(--border)] bg-[var(--bg-canvas)]"
+                        className="flex items-center justify-between p-3 rounded-lg border border-(--border) bg-(--bg-canvas)"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-6 h-6 rounded bg-purple-500/10 text-purple-400 flex items-center justify-center text-xs font-bold">
                             {index + 1}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[var(--text-primary)]">
-                              {m ? `${m.firstName} ${m.lastName}` : "Unknown User"}
+                            <p className="text-sm font-medium text-(--text-primary)">
+                              {m
+                                ? `${m.firstName} ${m.lastName}`
+                                : "Unknown User"}
                             </p>
-                            {m && <p className="text-xs text-[var(--text-muted)]">{m.email}</p>}
+                            {m && (
+                              <p className="text-xs text-(--text-muted)">
+                                {m.email}
+                              </p>
+                            )}
                           </div>
                         </div>
                         {canUpdate && (
                           <button
                             onClick={() => handleRemoveAssignee(id)}
-                            className="p-1 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                            className="p-1 text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                           >
                             <X size={16} />
                           </button>
@@ -184,7 +192,7 @@ export default function LeadRoutingPage({
                   })}
                 </div>
               ) : (
-                <div className="p-8 text-center border border-dashed border-[var(--border)] rounded-lg text-[var(--text-muted)] text-sm">
+                <div className="p-8 text-center border border-dashed border-(--border) rounded-lg text-(--text-muted) text-sm">
                   No assignees configured. Round-robin assignment will not run.
                 </div>
               )}
@@ -194,7 +202,7 @@ export default function LeadRoutingPage({
       </div>
 
       {canUpdate && (
-        <div className="flex justify-end border-t border-[var(--border)] pt-6 mt-8">
+        <div className="flex justify-end border-t border-(--border) pt-6 mt-8">
           <button
             onClick={handleSave}
             disabled={updateMutation.isPending}

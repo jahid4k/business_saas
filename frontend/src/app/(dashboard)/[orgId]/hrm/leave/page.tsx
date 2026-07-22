@@ -119,7 +119,7 @@ export default function LeavePage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -127,13 +127,13 @@ export default function LeavePage({
           >
             Leave
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Requests and leave type configuration
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit">
         {(["requests", "types"] as TabKey[]).map((key) => (
           <button
             key={key}
@@ -141,7 +141,7 @@ export default function LeavePage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "requests" ? "Requests" : "Leave types"}
@@ -344,7 +344,7 @@ function RequestsView({
         </div>
       )}
 
-      <div className="flex items-center gap-0.5 mb-6 border-b border-[var(--border)]">
+      <div className="flex items-center gap-0.5 mb-6 border-b border-(--border)">
         {STATUS_TABS.map((key) => {
           const count =
             key === "all"
@@ -358,7 +358,7 @@ function RequestsView({
               className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
                 active
                   ? "text-purple-400 border-purple-500"
-                  : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                  : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
               }`}
             >
               {key === "all" ? "All" : STATUS_STYLE[key].label}
@@ -367,7 +367,7 @@ function RequestsView({
                   className={`text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
                     active
                       ? "bg-purple-500/15 text-purple-400"
-                      : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"
+                      : "bg-(--bg-elevated) text-(--text-muted)"
                   }`}
                 >
                   {count}
@@ -380,22 +380,22 @@ function RequestsView({
 
       {reqQuery.isPending ? (
         <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-3 text-sm text-[var(--text-muted)]">
+          <div className="flex items-center gap-3 text-sm text-(--text-muted)">
             <Loader2 size={16} className="animate-spin text-purple-500" />
             Loading requests…
           </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <CalendarClock size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <CalendarClock size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <p className="text-sm font-medium text-(--text-secondary) mb-1">
             {statusFilter === "all"
               ? "No leave requests yet"
               : `No ${statusFilter} requests`}
           </p>
-          <p className="text-xs text-[var(--text-muted)] mb-4">
+          <p className="text-xs text-(--text-muted) mb-4">
             {canRequest && statusFilter === "all"
               ? "Submit the first leave request."
               : "Nothing here for this filter."}
@@ -425,22 +425,22 @@ function RequestsView({
             return (
               <div
                 key={req.id}
-                className={`req-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`req-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <CalendarClock size={15} />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {empName(req.employee_id)} · {typeName(req.leave_type_id)}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {formatDate(req.start_date)} – {formatDate(req.end_date)} ·{" "}
                     {req.total_days} {req.total_days === 1 ? "day" : "days"}
                   </p>
                   {req.reason && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       {req.reason}
                     </p>
                   )}
@@ -454,8 +454,8 @@ function RequestsView({
                 </div>
 
                 {confirmingDelete ? (
-                  <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -466,14 +466,14 @@ function RequestsView({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                     >
                       No
                     </button>
                   </div>
                 ) : confirmingReject ? (
-                  <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <span className="text-xs text-(--text-muted)">
                       Reject?
                     </span>
                     <button
@@ -484,13 +484,13 @@ function RequestsView({
                     </button>
                     <button
                       onClick={() => setRejectConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                     >
                       No
                     </button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {req.status === "pending" && canApprove && (
                       <>
                         <button
@@ -522,12 +522,12 @@ function RequestsView({
                           onClick={() =>
                             setOpenMenuId(menuOpen ? null : req.id)
                           }
-                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                          className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                         >
                           <MoreHorizontal size={15} />
                         </button>
                         {menuOpen && (
-                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                          <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                             {(req.status === "pending" ||
                               req.status === "approved") &&
                               canRequest && (
@@ -564,7 +564,7 @@ function RequestsView({
       )}
 
       {!reqQuery.isPending && filtered.length > 0 && (
-        <p className="mt-5 text-xs text-[var(--text-muted)]">
+        <p className="mt-5 text-xs text-(--text-muted)">
           Showing {filtered.length} of {requests.length}{" "}
           {requests.length === 1 ? "request" : "requests"}
         </p>
@@ -675,7 +675,7 @@ function TypesView({
   return (
     <>
       <div className="flex items-start justify-between mb-5">
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           {leaveTypes.length}{" "}
           {leaveTypes.length === 1 ? "leave type" : "leave types"} configured
         </p>
@@ -692,13 +692,13 @@ function TypesView({
 
       {leaveTypes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <CalendarClock size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <CalendarClock size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <p className="text-sm font-medium text-(--text-secondary) mb-1">
             No leave types yet
           </p>
-          <p className="text-xs text-[var(--text-muted)] mb-4">
+          <p className="text-xs text-(--text-muted) mb-4">
             {canCreate
               ? "Create your first leave type — e.g. Annual, Sick, Unpaid."
               : "Nothing configured yet."}
@@ -722,18 +722,18 @@ function TypesView({
             return (
               <div
                 key={lt.id}
-                className={`type-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`type-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <CalendarClock size={15} />
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {lt.name}
                   </p>
                   {lt.description && (
-                    <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                    <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                       {lt.description}
                     </p>
                   )}
@@ -747,16 +747,16 @@ function TypesView({
                     >
                       {lt.is_active ? "Active" : "Inactive"}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">
+                    <span className="text-xs text-(--text-muted)">
                       {lt.max_days_per_year > 0
                         ? `${lt.max_days_per_year} days/yr`
                         : "Unlimited"}
                     </span>
-                    <span className="text-xs text-[var(--text-muted)]">
+                    <span className="text-xs text-(--text-muted)">
                       {lt.is_paid ? "Paid" : "Unpaid"}
                     </span>
                     {!lt.requires_approval && (
-                      <span className="text-xs text-[var(--text-muted)]">
+                      <span className="text-xs text-(--text-muted)">
                         No approval needed
                       </span>
                     )}
@@ -764,8 +764,8 @@ function TypesView({
                 </div>
 
                 {confirming ? (
-                  <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                    <span className="text-xs text-[var(--text-muted)]">
+                  <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <span className="text-xs text-(--text-muted)">
                       Delete?
                     </span>
                     <button
@@ -776,7 +776,7 @@ function TypesView({
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                     >
                       No
                     </button>
@@ -784,7 +784,7 @@ function TypesView({
                 ) : (
                   (canUpdate || canDelete) && (
                     <div
-                      className="relative flex-shrink-0"
+                      className="relative shrink-0"
                       ref={(el) => {
                         if (el) menuRefs.current.set(lt.id, el);
                         else menuRefs.current.delete(lt.id);
@@ -792,16 +792,16 @@ function TypesView({
                     >
                       <button
                         onClick={() => setOpenMenuId(menuOpen ? null : lt.id)}
-                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                       >
                         <MoreHorizontal size={15} />
                       </button>
                       {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                           {canUpdate && (
                             <button
                               onClick={() => openEdit(lt)}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                             >
                               <Pencil size={13} />
                               Edit

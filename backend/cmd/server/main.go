@@ -57,6 +57,7 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
@@ -69,6 +70,13 @@ import (
 	// ── Internal — Platform (shared across modules) ───────────────────────────
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
+
+	// ── Internal — Capture ────────────────────────────────────────────────────
+	"github.com/mridha/businesssaas/internal/capture/apikeys"
+	"github.com/mridha/businesssaas/internal/capture/email"
+	"github.com/mridha/businesssaas/internal/capture/public"
+	"github.com/mridha/businesssaas/internal/capture/social"
+	"github.com/mridha/businesssaas/internal/capture/visitors"
 
 	// ── Internal — CRM ────────────────────────────────────────────────────────
 	crmdeals "github.com/mridha/businesssaas/internal/crm/deals"
@@ -195,6 +203,7 @@ func main() {
 	avatarRepo := user.NewAvatarRepository(pgPool)
 	authzRepo := authz.NewRepository(pgPool)
 	businessRepo := organizations.NewRepository(pgPool)
+	dashboardRepo := dashboard.NewRepository(pgPool)
 	auditRepo := audit.NewRepository(pgPool)
 	securityRepo := security.NewRepository(pgPool)
 	taskRepo := task.NewRepository(pgPool)
@@ -210,6 +219,12 @@ func main() {
 	reportsRepo := crmreports.NewRepository(pgPool)
 	crmTemplatesRepo := crmtemplates.NewRepository(pgPool)
 	crmSettingsRepo := crmsettings.NewRepository(pgPool)
+
+	// ── Capture ───────────────────────────────────────────────────────────────
+	apikeysRepo := apikeys.NewRepository(pgPool)
+	emailRepo := email.NewRepository(pgPool)
+	socialRepo := social.NewRepository(pgPool)
+	visitorsRepo := visitors.NewRepository(pgPool)
 
 	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
 	// Departments, Positions, Employees, Leave, Reports
@@ -263,6 +278,7 @@ func main() {
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
+	dashboardSvc := dashboard.NewService(dashboardRepo)
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
@@ -274,9 +290,15 @@ func main() {
 	crmSettingsSvc := crmsettings.NewService(crmSettingsRepo)
 	pipelineSvc := crmpipeline.NewService(pipelineRepo)
 	dealsSvc := crmdeals.NewService(dealsRepo, pipelineSvc, engagementSvc)
-	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc, crmSettingsSvc)
+	leadsSvc := crmleads.NewService(leadsRepo, contactsSvc, dealsSvc, crmSettingsSvc, engagementSvc)
 	crmRptSvc := crmreports.NewService(reportsRepo, dealsSvc, leadsSvc, engagementSvc)
 	crmTemplatesSvc := crmtemplates.NewService(crmTemplatesRepo)
+
+	// ── Capture ───────────────────────────────────────────────────────────────
+	apikeysSvc := apikeys.NewService(apikeysRepo)
+	emailSvc := email.NewService(emailRepo, leadsSvc)
+	socialSvc := social.NewService(socialRepo, leadsSvc, cfg.Social)
+	visitorsSvc := visitors.NewService(visitorsRepo, leadsSvc)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	// If your Phase 1 services require auditSvc, replace NewService(repo) with
@@ -348,8 +370,9 @@ func main() {
 	userHandler := user.NewHandler(userSvc, avatarSvc)
 	authzHandler := authz.NewHandler(authzSvc)
 	businessHandler := organizations.NewHandler(businessSvc)
+	dashboardHandler := dashboard.NewHandler(dashboardSvc)
 	securityHandler := security.NewHandler(securitySvc)
-	taskHandler := task.NewHandler(taskSvc)
+	taskHandler := task.NewHandler(taskSvc, authzSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsHandler := contacts.NewHandler(contactsSvc)
@@ -363,6 +386,13 @@ func main() {
 	crmRptHandler := crmreports.NewHandler(crmRptSvc)
 	crmTemplatesHandler := crmtemplates.NewHandler(crmTemplatesSvc)
 	crmSettingsHandler := crmsettings.NewHandler(crmSettingsSvc)
+
+	// ── Capture ───────────────────────────────────────────────────────────────
+	apikeysHandler := apikeys.NewHandler(apikeysSvc)
+	publicHandler := public.NewHandler(leadsSvc)
+	emailHandler := email.NewHandler(emailSvc)
+	socialHandler := social.NewHandler(socialSvc)
+	visitorsHandler := visitors.NewHandler(visitorsSvc)
 
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	hrmDeptsHandler := hrmdepts.NewHandler(hrmDeptsSvc)
@@ -428,9 +458,12 @@ func main() {
 	app.Use(middleware.Logger())
 	app.Use(middleware.SecurityHeaders(cfg.App.IsProduction()))
 	app.Use(cors.New(cors.Config{
+		Next: func(c fiber.Ctx) bool {
+			return strings.HasPrefix(c.Path(), "/api/v1/pub")
+		},
 		AllowOrigins:     cfg.CORS.AllowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID", "X-API-Key"},
 		AllowCredentials: true,
 		MaxAge:           86400,
 	}))
@@ -456,6 +489,8 @@ func main() {
 	requireOrgParam := middleware.RequireOrganizationParam("orgId")
 	requireOrgMatch := middleware.RequireOrganizationParam("orgId")
 
+	dashboard.RegisterRoutes(api, dashboardHandler, requireAuth, requireOrgMatch)
+
 	permFn := func(perm string) fiber.Handler {
 		return middleware.RequirePermission(authzSvc, perm)
 	}
@@ -475,6 +510,13 @@ func main() {
 	crmreports.RegisterRoutes(api, crmRptHandler, permFn, requireAuth, requireOrgMatch)
 	crmtemplates.RegisterRoutes(api, crmTemplatesHandler, permFn, requireAuth, requireOrgMatch)
 	crmsettings.RegisterRoutes(api, crmSettingsHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── Capture ───────────────────────────────────────────────────────────────
+	apikeys.RegisterRoutes(api, apikeysHandler, permFn, requireAuth, requireOrgMatch)
+	public.RegisterRoutes(api, publicHandler, apikeysSvc)
+	email.RegisterRoutes(api, emailHandler, permFn, requireAuth, requireOrgMatch)
+	social.RegisterRoutes(api, socialHandler, permFn, requireAuth, requireOrgMatch)
+	visitors.RegisterRoutes(api, visitorsHandler, apikeysSvc, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Phase 1 — Core Employee Management ────────────────────────────────
 	// Routes under /organizations/:orgId/hrm/{departments,positions,employees,leave,reports}

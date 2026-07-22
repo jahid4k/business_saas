@@ -105,7 +105,7 @@ export default function StatusesPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -113,7 +113,7 @@ export default function StatusesPage({
           >
             Employee Statuses
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Manage dynamic status tabs and badges for your employees.
           </p>
         </div>
@@ -133,20 +133,20 @@ export default function StatusesPage({
           <Loader2 className="animate-spin text-purple-500" size={32} />
         </div>
       ) : items.length === 0 ? (
-        <div className="text-center p-12 border border-dashed border-[var(--border)] rounded-2xl bg-[var(--bg-surface)]">
+        <div className="text-center p-12 border border-dashed border-(--border) rounded-2xl bg-(--bg-surface)">
           <div className="inline-flex w-12 h-12 bg-purple-500/10 rounded-full items-center justify-center text-purple-500 mb-4">
             <ListTree size={24} />
           </div>
-          <h3 className="text-[var(--text-primary)] font-medium mb-1">
+          <h3 className="text-(--text-primary) font-medium mb-1">
             No statuses found
           </h3>
-          <p className="text-sm text-[var(--text-muted)] mb-6 max-w-sm mx-auto">
+          <p className="text-sm text-(--text-muted) mb-6 max-w-sm mx-auto">
             You don't have any employee statuses yet.
           </p>
           {canManage && (
             <button
               onClick={openCreate}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--text-muted)] transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-(--bg-elevated) border border-(--border) text-(--text-secondary) hover:text-(--text-primary) hover:border-(--text-muted) transition-all"
             >
               <Plus size={15} />
               Create your first status
@@ -154,8 +154,8 @@ export default function StatusesPage({
           )}
         </div>
       ) : (
-        <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl overflow-hidden">
-          <div className="divide-y divide-[var(--border)]">
+        <div className="bg-(--bg-surface) border border-(--border) rounded-2xl overflow-hidden">
+          <div className="divide-y divide-(--border)">
             {items.map((status) => {
               const isDefault = ["Active", "Inactive", "On leave", "Terminated", "Resigned"].includes(status.name);
               const isConfirming = deleteConfirm === status.id;
@@ -163,7 +163,7 @@ export default function StatusesPage({
               return (
                 <div
                   key={status.id}
-                  className="p-5 flex items-start gap-4 hover:bg-[var(--bg-elevated)] transition-colors group"
+                  className="p-5 flex items-start gap-4 hover:bg-(--bg-elevated) transition-colors group"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
@@ -177,12 +177,12 @@ export default function StatusesPage({
                         {status.name}
                       </span>
                       {isDefault && (
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-muted)] bg-[var(--bg-base)] px-2 py-0.5 rounded border border-[var(--border)]">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-(--text-muted) bg-(--bg-base) px-2 py-0.5 rounded border border-(--border)">
                           System Default
                         </span>
                       )}
                     </div>
-                    <div className="text-sm text-[var(--text-muted)] flex items-center gap-2">
+                    <div className="text-sm text-(--text-muted) flex items-center gap-2">
                       <span className="capitalize">{status.category.replace("_", " ")}</span>
                     </div>
                   </div>
@@ -208,14 +208,14 @@ export default function StatusesPage({
                         <>
                           <button
                             onClick={() => openEdit(status)}
-                            className="p-2 rounded-lg text-[var(--text-muted)] hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                            className="p-2 rounded-lg text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
                           >
                             <Pencil size={16} />
                           </button>
                           {!isDefault && (
                             <button
                               onClick={() => setDeleteConfirm(status.id)}
-                              className="p-2 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              className="p-2 rounded-lg text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
                             >
                               <Trash2 size={16} />
                             </button>

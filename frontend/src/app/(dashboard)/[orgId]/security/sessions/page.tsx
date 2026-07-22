@@ -95,15 +95,15 @@ function SessionRow({
 
   return (
     <div
-      className={`flex items-center gap-4 px-5 py-4 transition-colors ${session.isActive ? "hover:bg-[var(--bg-elevated)]" : "opacity-50"}`}
+      className={`flex items-center gap-4 px-5 py-4 transition-colors ${session.isActive ? "hover:bg-(--bg-elevated)" : "opacity-50"}`}
     >
-      <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
-        <Icon size={16} className="text-[var(--text-muted)]" />
+      <div className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-(--bg-elevated) border border-(--border)">
+        <Icon size={16} className="text-(--text-muted)" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <p
-            className="text-sm font-medium text-[var(--text-primary)]"
+            className="text-sm font-medium text-(--text-primary)"
             style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
           >
             {browser} on {os}
@@ -118,11 +118,11 @@ function SessionRow({
             </span>
           )}
         </div>
-        <p className="text-xs text-[var(--text-muted)]">
+        <p className="text-xs text-(--text-muted)">
           {formatIP(session.ipAddress)}
-          <span className="mx-1.5 text-[var(--border)]">·</span>
+          <span className="mx-1.5 text-(--border)">·</span>
           Last active {timeAgo(session.lastActivityAt)}
-          <span className="mx-1.5 text-[var(--border)]">·</span>
+          <span className="mx-1.5 text-(--border)">·</span>
           {session.isActive
             ? `Expires ${formatDate(session.expiresAt)}`
             : `Revoked ${formatDate(session.revokedAt!)}`}
@@ -132,7 +132,7 @@ function SessionRow({
         <button
           onClick={onRevoke}
           disabled={revoking}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-red-400 border border-red-500/25 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-red-400 border border-red-500/25 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
         >
           {revoking ? (
             <Loader2 size={11} className="animate-spin" />
@@ -213,7 +213,7 @@ export default function SecurityPage({
     <div className="p-6 md:p-8 max-w-4xl">
       <div className="mb-8">
         <h1
-          className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+          className="text-2xl font-bold text-(--text-primary) mb-1"
           style={{
             fontFamily: "var(--font-syne, Syne, sans-serif)",
             letterSpacing: "-0.02em",
@@ -221,15 +221,15 @@ export default function SecurityPage({
         >
           Security
         </h1>
-        <p className="text-sm text-[var(--text-muted)]">
+        <p className="text-sm text-(--text-muted)">
           Manage active sessions and review login history
         </p>
       </div>
 
       {!canView ? (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)]">
-          <Shield size={16} className="text-[var(--text-muted)]" />
-          <p className="text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-(--bg-elevated) border border-(--border)">
+          <Shield size={16} className="text-(--text-muted)" />
+          <p className="text-sm text-(--text-muted)">
             You do not have permission to view security settings.
           </p>
         </div>
@@ -242,7 +242,7 @@ export default function SecurityPage({
           )}
 
           {/* Tabs */}
-          <div className="flex items-center gap-0.5 border-b border-[var(--border)] mb-6">
+          <div className="flex items-center gap-0.5 border-b border-(--border) mb-6">
             {[
               {
                 key: "sessions" as Tab,
@@ -263,13 +263,13 @@ export default function SecurityPage({
                   className={`flex items-center gap-2 px-3.5 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${
                     active
                       ? "text-purple-400 border-purple-500"
-                      : "text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]"
+                      : "text-(--text-muted) border-transparent hover:text-(--text-secondary)"
                   }`}
                 >
                   {tab.label}
                   {tab.count > 0 && !isLoading && (
                     <span
-                      className={`text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-purple-500/15 text-purple-400" : "bg-[var(--bg-elevated)] text-[var(--text-muted)]"}`}
+                      className={`text-xs px-1.5 py-0.5 rounded-full ${active ? "bg-purple-500/15 text-purple-400" : "bg-(--bg-elevated) text-(--text-muted)"}`}
                     >
                       {tab.count}
                     </span>
@@ -280,7 +280,7 @@ export default function SecurityPage({
           </div>
 
           {isLoading ? (
-            <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
+            <div className="flex items-center gap-3 py-16 text-sm text-(--text-muted)">
               <Loader2 size={15} className="animate-spin text-purple-500" />
               Loading…
             </div>
@@ -288,14 +288,14 @@ export default function SecurityPage({
             <div className="space-y-6">
               <div>
                 <p
-                  className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
+                  className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-widest mb-3"
                   style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
                 >
                   Active sessions ({activeSessions.length})
                 </p>
-                <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)] bg-[var(--bg-surface)]">
+                <div className="rounded-xl border border-(--border) overflow-hidden divide-y divide-(--border) bg-(--bg-surface)">
                   {activeSessions.length === 0 ? (
-                    <p className="px-5 py-8 text-sm text-center text-[var(--text-muted)]">
+                    <p className="px-5 py-8 text-sm text-center text-(--text-muted)">
                       No active sessions
                     </p>
                   ) : (
@@ -321,14 +321,14 @@ export default function SecurityPage({
               {revokedSessions.length > 0 && (
                 <div>
                   <p
-                    className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
+                    className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-widest mb-3"
                     style={{
                       fontFamily: "var(--font-inter, Inter, sans-serif)",
                     }}
                   >
                     Revoked sessions ({revokedSessions.length})
                   </p>
-                  <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)] bg-[var(--bg-surface)]">
+                  <div className="rounded-xl border border-(--border) overflow-hidden divide-y divide-(--border) bg-(--bg-surface)">
                     {revokedSessions.map((s) => (
                       <SessionRow
                         key={s.id}
@@ -344,12 +344,12 @@ export default function SecurityPage({
             </div>
           ) : (
             <div>
-              <div className="rounded-xl border border-[var(--border)] overflow-hidden bg-[var(--bg-surface)]">
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-[var(--border)] bg-[var(--bg-elevated)]">
+              <div className="rounded-xl border border-(--border) overflow-hidden bg-(--bg-surface)">
+                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-(--border) bg-(--bg-elevated)">
                   {["Time", "IP address", "Method", "Status"].map((h) => (
                     <span
                       key={h}
-                      className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider"
+                      className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-wider"
                       style={{
                         fontFamily: "var(--font-inter, Inter, sans-serif)",
                       }}
@@ -358,36 +358,36 @@ export default function SecurityPage({
                     </span>
                   ))}
                 </div>
-                <div className="divide-y divide-[var(--border)]">
+                <div className="divide-y divide-(--border)">
                   {events.length === 0 ? (
-                    <p className="px-5 py-8 text-sm text-center text-[var(--text-muted)]">
+                    <p className="px-5 py-8 text-sm text-center text-(--text-muted)">
                       No login events
                     </p>
                   ) : (
                     events.map((ev) => (
                       <div
                         key={ev.id}
-                        className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5 hover:bg-[var(--bg-elevated)] transition-colors"
+                        className="grid grid-cols-[1fr_auto_auto_auto] gap-4 items-center px-5 py-3.5 hover:bg-(--bg-elevated) transition-colors"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Clock
                             size={13}
-                            className="text-[var(--text-muted)] flex-shrink-0"
+                            className="text-(--text-muted) shrink-0"
                           />
-                          <span className="text-sm text-[var(--text-secondary)]">
+                          <span className="text-sm text-(--text-secondary)">
                             {formatDate(ev.createdAt)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Globe
                             size={12}
-                            className="text-[var(--text-muted)] flex-shrink-0"
+                            className="text-(--text-muted) shrink-0"
                           />
-                          <span className="text-xs text-[var(--text-muted)] font-mono">
+                          <span className="text-xs text-(--text-muted) font-mono">
                             {formatIP(ev.ipAddress)}
                           </span>
                         </div>
-                        <span className="text-xs text-[var(--text-secondary)] whitespace-nowrap">
+                        <span className="text-xs text-(--text-secondary) whitespace-nowrap">
                           {formatProvider(ev.provider)}
                         </span>
                         <div className="flex items-center justify-end">

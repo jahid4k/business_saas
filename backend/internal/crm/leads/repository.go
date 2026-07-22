@@ -14,6 +14,7 @@ import (
 type Repository interface {
 	FindLeads(ctx context.Context, orgID string) ([]*Lead, error)
 	FindLeadByID(ctx context.Context, orgID, leadID string) (*Lead, error)
+	FindLeadByEmail(ctx context.Context, orgID, email string) (*Lead, error)
 	CreateLead(ctx context.Context, l *Lead) error
 	UpdateLead(ctx context.Context, l *Lead) error
 	SoftDeleteLead(ctx context.Context, orgID, leadID string) error
@@ -40,7 +41,7 @@ const leadCols = `
 	id, public_id, org_id, first_name, last_name, email, phone,
 	company_name, title, source, status, converted_at,
 	converted_contact_id, converted_deal_id, owner_id,
-	created_by, created_at, updated_at`
+	created_by, created_at, updated_at, custom_fields, capture_source, capture_metadata`
 
 func scanLead(row interface{ Scan(...any) error }, l *Lead) error {
 	return row.Scan(
@@ -48,6 +49,7 @@ func scanLead(row interface{ Scan(...any) error }, l *Lead) error {
 		&l.Phone, &l.CompanyName, &l.Title, &l.Source, &l.Status,
 		&l.ConvertedAt, &l.ConvertedContactID, &l.ConvertedDealID,
 		&l.OwnerID, &l.CreatedBy, &l.CreatedAt, &l.UpdatedAt,
+		&l.CustomFields, &l.CaptureSource, &l.CaptureMetadata,
 	)
 }
 
@@ -88,17 +90,34 @@ func (r *repoImpl) FindLeadByID(ctx context.Context, orgID, leadID string) (*Lea
 	return l, nil
 }
 
+func (r *repoImpl) FindLeadByEmail(ctx context.Context, orgID, email string) (*Lead, error) {
+	q := `SELECT ` + leadCols + `
+		FROM crm_leads WHERE org_id = $1 AND email = $2 AND deleted_at IS NULL
+		ORDER BY created_at DESC LIMIT 1`
+
+	l := &Lead{}
+	err := scanLead(r.db.QueryRow(ctx, q, orgID, email), l)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("leads: FindLeadByEmail: %w", err)
+	}
+	return l, nil
+}
+
 func (r *repoImpl) CreateLead(ctx context.Context, l *Lead) error {
 	const q = `
 		INSERT INTO crm_leads
 		    (org_id, first_name, last_name, email, phone, company_name,
-		     title, source, status, owner_id, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		     title, source, status, owner_id, created_by, custom_fields, capture_source, capture_metadata)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		RETURNING id, public_id, created_at, updated_at`
 
 	return r.db.QueryRow(ctx, q,
 		l.OrgID, l.FirstName, l.LastName, l.Email, l.Phone,
 		l.CompanyName, l.Title, l.Source, l.Status, l.OwnerID, l.CreatedBy,
+		l.CustomFields, l.CaptureSource, l.CaptureMetadata,
 	).Scan(&l.ID, &l.PublicID, &l.CreatedAt, &l.UpdatedAt)
 }
 

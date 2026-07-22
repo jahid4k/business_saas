@@ -3,7 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { getMemberPermissions } from "@/lib/members";
@@ -107,16 +107,27 @@ function Checklist({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const byResource = useMemo(() => {
     const map = new Map<string, Permission[]>();
+    const q = searchQuery.toLowerCase();
     for (const p of allPerms) {
+      const resourceLabel = RESOURCE_LABEL[p.resource] ?? p.resource;
+      const matchesSearch =
+        !q ||
+        p.action.replace(/_/g, " ").toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        resourceLabel.toLowerCase().includes(q);
+
+      if (!matchesSearch) continue;
+
       const arr = map.get(p.resource) ?? [];
       arr.push(p);
       map.set(p.resource, arr);
     }
     return map;
-  }, [allPerms]);
+  }, [allPerms, searchQuery]);
 
   const toggle = (key: string) => {
     if (!canEdit) return;
@@ -171,6 +182,20 @@ function Checklist({
     <div className="flex flex-col h-full">
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+        <div className="relative">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-(--text-muted)"
+          />
+          <input
+            type="text"
+            placeholder="Search permissions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 rounded-lg text-sm bg-(--bg-surface) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 transition-colors"
+          />
+        </div>
+
         {!canEdit && (
           <div className="px-4 py-3 rounded-lg text-sm text-purple-300 bg-purple-500/8 border border-purple-500/20">
             You can view {memberName}&apos;s permissions, but you don&apos;t
@@ -185,7 +210,7 @@ function Checklist({
         )}
 
         {(customCount > 0 || deniedCount > 0) && (
-          <div className="px-4 py-3 rounded-lg text-xs text-[var(--text-muted)] bg-[var(--bg-elevated)] border border-[var(--border)]">
+          <div className="px-4 py-3 rounded-lg text-xs text-(--text-muted) bg-(--bg-elevated) border border-(--border)">
             {customCount > 0 && <span>{customCount} granted beyond role</span>}
             {customCount > 0 && deniedCount > 0 && <span> · </span>}
             {deniedCount > 0 && <span>{deniedCount} denied despite role</span>}
@@ -201,7 +226,7 @@ function Checklist({
           return (
             <div key={group.label}>
               <p
-                className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
+                className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-widest mb-3"
                 style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
               >
                 {group.label}
@@ -219,10 +244,10 @@ function Checklist({
                   return (
                     <div
                       key={resource}
-                      className="rounded-lg border border-[var(--border)] overflow-hidden"
+                      className="rounded-lg border border-(--border) overflow-hidden"
                     >
                       <div
-                        className="flex items-center gap-3 px-3.5 py-2.5 bg-[var(--bg-elevated)] cursor-pointer"
+                        className="flex items-center gap-3 px-3.5 py-2.5 bg-(--bg-elevated) cursor-pointer"
                         onClick={() => toggleResource(resource)}
                       >
                         <input
@@ -233,24 +258,24 @@ function Checklist({
                           }}
                           onChange={() => toggleResource(resource)}
                           disabled={!canEdit}
-                          className="accent-purple-500 flex-shrink-0"
+                          className="accent-purple-500 shrink-0"
                           onClick={(e) => e.stopPropagation()}
                         />
                         <span
-                          className="text-xs font-semibold text-[var(--text-secondary)]"
+                          className="text-xs font-semibold text-(--text-secondary)"
                           style={{
                             fontFamily: "var(--font-inter, Inter, sans-serif)",
                           }}
                         >
                           {RESOURCE_LABEL[resource] ?? resource}
                         </span>
-                        <span className="ml-auto text-[0.65rem] text-[var(--text-muted)]">
+                        <span className="ml-auto text-[0.65rem] text-(--text-muted)">
                           {perms.filter((p) => effective.has(p.key)).length}/
                           {perms.length}
                         </span>
                       </div>
 
-                      <div className="divide-y divide-[var(--border)]">
+                      <div className="divide-y divide-(--border)">
                         {perms.map((p) => {
                           const fromRole = rolePerms.has(p.key);
                           return (
@@ -258,7 +283,7 @@ function Checklist({
                               key={p.key}
                               className={`
                                 flex items-center gap-3 px-3.5 py-2
-                                ${canEdit ? "cursor-pointer hover:bg-[var(--bg-elevated)]/50" : "cursor-default"}
+                                ${canEdit ? "cursor-pointer hover:bg-(--bg-elevated)/50" : "cursor-default"}
                                 transition-colors
                               `}
                             >
@@ -267,12 +292,12 @@ function Checklist({
                                 checked={effective.has(p.key)}
                                 onChange={() => toggle(p.key)}
                                 disabled={!canEdit}
-                                className="accent-purple-500 flex-shrink-0"
+                                className="accent-purple-500 shrink-0"
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <span
-                                    className="text-xs font-medium text-[var(--text-primary)] capitalize"
+                                    className="text-xs font-medium text-(--text-primary) capitalize"
                                     style={{
                                       fontFamily:
                                         "var(--font-inter, Inter, sans-serif)",
@@ -281,12 +306,12 @@ function Checklist({
                                     {p.action.replace(/_/g, " ")}
                                   </span>
                                   {fromRole && (
-                                    <span className="text-[0.55rem] font-semibold text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border)] px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                    <span className="text-[0.55rem] font-semibold text-(--text-muted) bg-(--bg-surface) border border-(--border) px-1.5 py-0.5 rounded-full shrink-0">
                                       from role
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-[0.65rem] text-[var(--text-muted)] leading-none mt-0.5">
+                                <p className="text-[0.65rem] text-(--text-muted) leading-none mt-0.5">
                                   {p.description}
                                 </p>
                               </div>
@@ -304,11 +329,11 @@ function Checklist({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           {canEdit ? "Cancel" : "Close"}
         </button>

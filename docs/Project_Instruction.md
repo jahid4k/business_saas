@@ -1,6 +1,30 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-07-14 (r10 — Full RBAC User Management shipped: custom role builder (`PermissionForm.tsx` create mode, wired to the already-existing `CreateRole` endpoint) and per-member permission overrides (new `MemberPermissionsForm.tsx`, unified checklist with a "from role" tag, diffed against the role baseline at save time). Backend `UpdateMemberPermissions` gained two guards it was missing — can no longer target yourself or the org owner — found and closed during this build, not before. Permission categorization extracted to `lib/permissionGroups.ts`, shared between both forms, now includes all 25 HRM resources that were previously invisible in the picker despite existing in the database since HRM shipped. Also shipped as standalone User Management items before Full RBAC absorbed the rest of that work: admin password reset (`members.password_reset`, migration 00051) and a lightweight per-org seat limit (`organizations.max_seats`, migration 00052, no admin UI yet — direct DB write only). Migration count 50 → 52. Current Focus reset: CRM is now the sole focus; HRM functionality pass pushed back in the queue, not dropped. Section 11's "COMPLEX CUSTOM ROLE UI" entry removed — shipped, per this doc's own "remove once it ships" convention — and replaced with a new CRM — Advanced Functionality Pass entry capturing Mridha's five-category wish list (communication/omnichannel, workflow automation, productivity, analytics/forecasting, post-sale/financials), triaged by buildability rather than left as a flat list; nothing in it has started.)
+> Last updated: 2026-07-22 (r14 — Mobile App promoted ⚪ NOT STARTED → 🔵 ACTIVE. Section 9's
+> entry slimmed to a pointer, same pattern as CAPTURE. Section 5 → AUTH gained a real MOBILE
+> subsection with the actual route list, and resolved the r10 draft's one open question: checked
+> against `frontend/src/app/(auth)/signup/page.tsx`, `Signup` does NOT auto-authenticate — the web
+> client calls `login()` separately right after. `MobileSignup` mirrors that instead of inventing
+> an auto-login path mobile alone would exercise. Mobile Architecture and Mobile Module Registry
+> restored from the r10 archive as new Section 14 and Section 15 — appended at the end rather than
+> reinstated at their old Section 9/10 slot, to avoid renumbering every cross-reference in Sections
+> 1–13. Revisit if the old position is wanted back; it's a rename pass, not a content change.
+> Section 13's version table gained Expo SDK 57 (57.0.7)/React Native 0.86/Expo Router/
+> expo-secure-store rows, plus a scaffolding gotcha: `create-expo-app` without
+> `--template default@sdk-57` currently still lands on SDK 54 during the transition window.
+> Zero mobile code written — this revision is the doc-level start only, implementation is next.
+> Note: a stale snapshot of an older doc draft had the mobile auth extension marked 🔵 ACTIVE with
+> code implied; the real `backend/internal/auth/routes.go` has no `/mobile/*` group at all. That
+> snapshot was planning text, not shipped state — flagging in case it resurfaces elsewhere.)
+> Last updated: 2026-07-21 (r14 — introduced the Collection View Pattern (Section 7): a
+> Notion-style grouped/collapsible list with borderless rows, full inline editing, and inline
+> quick-add, replacing the bordered-table pattern for single-entity lists. Tasks is the first
+> page rebuilt on it (Section 8). Design tokens unchanged — this is a layout/interaction
+> decision, not a token change. Candidate for Leads/Members when next revisited; not a mandate
+> to rewrite them now.)
+> Last updated: 2026-07-20 (r13 — Section 13's Tailwind v4 reminder expanded from a vague "don't use v3 patterns" into six concrete, verified syntax rules: `@import "tailwindcss"` entry point, `@theme` CSS config over `tailwind.config.js`, `bg-linear-*` gradient naming, parens vs brackets for arbitrary CSS-variable references, the gray-200 default border color, and `@utility` for custom utilities.)
+> Last updated: 2026-07-20 (r12 — reconciled against the real r11 after a conversation had drifted onto a stale, incorrect picture of HRM's status; see note at bottom of this entry. Structural changes: removed "Current Focus" from Section 2 — its content either lived in Section 5 CAPTURE already or was pure priority-ranking, so it's gone rather than moved. Folded the Phase-2 backend-modification carve-out into a new general principle in Section 1: the system is interconnected, touching a connected module to finish what you're building is normal, not an exception requiring special permission. Section 9 renamed from "Build Queue" to "Unbuilt Module Registry," `⚪ QUEUED` → `⚪ NOT STARTED` everywhere, "order is decided when the current focus ships" and the CRM→HRM priority ranking removed — nothing in it carries priority ordering. Real technical dependency notes were kept as-is throughout (Capture Fix Pass B blocking deployment, ERP needing HRM/Accounting/Projects scoped first, sales velocity needing the stage-history table) — those are facts about how the system works, not schedule decisions, and stay regardless of the no-priority-ordering rule. — Also: a prior chat session spent several turns planning HRM frontend architecture, an RBAC override UI, and a full Mobile Architecture rebuild, all based on a wrong claim that HRM's frontend hadn't been built and Contacts had an unresolved integration gap. Neither was true against this document. None of that work was carried in here.)
+> Last updated: 2026-07-15 (r11 — CRM Auto Lead-Capture backend built end-to-end and audited: new `internal/capture/` tree (apikeys, public, email, social, visitors), `RequireAPIKey` middleware, migrations 00057–00064. **Audit verdict: architecture sound, not yet functional** — 3 of 5 capture sources cannot create leads (`created_by` empty-UUID bug), social connect hits a column-name mismatch, visitors dashboard 403s on a nonexistent permission, and both webhook endpoints ship with zero signature verification. Full list in Section 5 → CAPTURE → Known open items; Fix Pass A/B is the current work item. Capture frontend not started. r11 also folds in four items shipped after r10 that never made it into the doc: CRM Templates (00054–55), CRM Settings with lead round-robin routing (00056, wired into lead creation via `GetLastAssignedLeadOwner`), HRM dynamic employee statuses (00053, `status_id` FK on `hrm_employees`), and the CRM Agenda page. Migration count 52 → 64, table count → 74. Structural change per Mridha's decision: **the "deferred" concept is removed from this document** — no more "deliberately last", "paused", or "confirmed still deferred"; everything not shipped is simply ⚪ QUEUED in one flat build queue. Mobile Architecture and Mobile Module Registry sections (old 9 & 10) deleted — zero code exists; the decided architecture is preserved in git history (r10) and gets restored when mobile work actually starts. Sections renumbered accordingly.)
 > This document is both a Claude system instruction and a personal project reference.
 > Update the STATUS blocks and MODULE REGISTRY whenever the project state changes.
 
@@ -17,6 +41,7 @@
 - Design matters. Enterprise Minimalist — clean, trustworthy, information-dense done well. Not flashy, not decorative. Every screen earns its place through clarity and scannability, not visual flourish.
 - Multi-tenancy is the foundation. Every feature lives inside an organization context.
 - Backend stays stable. Frontend drives feature prioritization, not the other way around.
+- The system is interconnected — CRM, HRM, RBAC, and the platform layer share models, permissions, and the engagement layer. Don't let scope discipline block necessary work: if finishing what you're building requires touching a connected module, touch it. Correct and complete beats narrowly scoped.
 
 ---
 
@@ -30,7 +55,6 @@ Done:
 
 - Docker Compose setup (backend, frontend placeholder, PostgreSQL, Redis)
 - Go backend with clean layered architecture (handler → service → repository)
-- 17 database migrations (users, organizations, roles, permissions, memberships, sessions, audit logs, CRM, tasks, platform tables)
 - Auth: signup, login, logout, logout-all, refresh token, password reset, OAuth sync
 - JWT access token (short TTL) + opaque refresh token stored in httpOnly cookie (cookie name: `bsaas_refresh`, path: `/api/v1/auth`)
 - RBAC: roles (owner, admin, manager, member, viewer), permissions, membership, custom/denied permission overrides
@@ -41,54 +65,27 @@ Done:
 - Platform engagement layer (notes, tasks, activities, emails)
 - Audit logging (append-only)
 - Rate limiting (Redis-backed, on auth endpoints)
-- Tests: unit (auth, authz, user, orgs, CRM, pkg) + integration (auth flows, tenant isolation)
+- Tests: unit (auth, authz, user, orgs, CRM, HRM, pkg) + integration (auth flows, tenant isolation)
 - CI workflow (GitHub Actions)
 
-### Phase 2 — Frontend: 🔵 ACTIVE
+### Phase 2 — Frontend + CRM buildout: 🔵 ACTIVE
 
-Building the full admin dashboard frontend. This is not a test interface — it is the real product UI, Enterprise Minimalist quality: clean, scannable, built the way an actual B2B SaaS dashboard should look.
+Building the full admin dashboard frontend plus the CRM Advanced Functionality Pass. This is not a test interface — it is the real product UI, Enterprise Minimalist quality.
 
-Active work:
+Shipped and verified (see Section 7 for the full frontend registry):
 
-- Auth pages (login, signup, password reset)
-- Dashboard shell (sidebar, topbar, org switcher, user menu)
-- Organization setup and switching
-- RBAC management (roles, permissions, members, invitations)
-- Task module UI (CRUD, permission-gated actions)
-- CRM module UI (leads, contacts, companies, pipeline board, deals, reports)
-- HRM module UI (departments, positions, employees, leave, attendance, payroll, lifecycle, warnings, complaints, documents, recognition, calendar, reports, setup) — ✅ all 8 phases complete, verified against source (r9)
-- Profile and settings pages
+- Auth pages, onboarding, dashboard shell, org switching
+- RBAC management (roles, permissions, members, invitations, per-member overrides, admin password reset)
+- Task module UI
+- CRM UI: leads, contacts, companies, pipeline board, deals, reports, agenda, setup (routing, templates)
+- HRM UI: all 8 phases complete (verified r9), plus dynamic employee statuses setup page (post-r10)
+- Profile and settings pages, security pages
 
-_This list hasn't been checked against the real codebase in a while — several of these are probably done. Don't trust it blindly; "Current Focus" below is what's actually being worked on right now._
+Scope beyond what's shipped lives in Section 5 (backend), Section 8 (frontend), and Section 9 — status per item lives in those registries, not here, so there's one place to check, not two that can quietly disagree. The Capture module (Section 5 → CAPTURE) has the most detailed known-defect write-up in the whole doc right now — read it there rather than a restated summary here.
 
-### Current Focus (r10)
+### Unbuilt Modules
 
-**Full RBAC User Management is done** — both halves shipped:
-
-- **Custom role builder** — `PermissionForm.tsx` now runs in a create mode (name + description fields, empty permission set to start, same permission picker), wired to the already-existing `CreateRole` backend endpoint. "+ New role" button on `/[orgId]/settings/roles`.
-- **Per-member permission overrides** — new `MemberPermissionsForm.tsx` drawer off the members list ("Manage permissions" / "View permissions" depending on grant), unified checklist with a "from role" tag on inherited permissions — checking/unchecking diffs against the role baseline into custom grants / denials at save time. Backend `UpdateMemberPermissions` gained two guards it was missing: can no longer target yourself or the org owner (matches the existing pattern on `ResetMemberPassword`/`UpdateMember`).
-- Permission categorization (`GROUPS`/`RESOURCE_LABEL`) extracted to a shared `lib/permissionGroups.ts` so the role editor and override panel can't drift apart — now includes all 25 HRM resources, previously invisible in the picker despite existing in the database since HRM shipped.
-
-**CRM is now the sole focus.** HRM functionality pass (previously next in line) is pushed back — not abandoned, just no longer next. Mridha has laid out a five-category wish list (communication/omnichannel, workflow automation, productivity, analytics/forecasting, post-sale/financials) that needs scoping before it's a real build queue — see Section 11, CRM — Advanced Functionality Pass, for the full breakdown and triage by buildability. Nothing in that list is started; first real decisions (which tier, which items) still pending as of r10.
-
-**Also shipped, r10** (scoped as standalone User Management items before Full RBAC absorbed most of that work):
-
-- **Admin password reset** — `members.password_reset` permission (migration 00051), `POST /organizations/:orgId/members/:memberId/reset-password`, wired into the members list action menu. Revokes the target's sessions, audit-logged.
-- **Lightweight seat limit** — `organizations.max_seats` (migration 00052, nullable = unlimited), enforced in `InviteMember`. No admin UI to set the limit yet — direct DB write only, deliberately not tied to the (still nonexistent) billing system.
-
-**Confirmed still deferred:** Impersonation (needs its own design pass before any code), auto-seeded client/vendor roles (tied to a portal decision not yet made), Full Production Deployment (Section 11) — still not started, still deliberately last. Everything else in Section 11 (MFA, SSO, email sending, resource-level permissions, billing, remaining business modules, mobile) stays queued with no committed order yet.
-
-Mobile App is paused, not abandoned — architecture is decided and documented (Section 9/10), implementation just isn't the current priority. See Section 11.
-
-Backend may be modified or extended during Phase 2 if:
-
-- A frontend flow reveals a missing endpoint
-- Business logic needs to change to support a UI pattern
-- A new CRM sub-feature is needed
-
-### Upcoming — Build Queue
-
-Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**. Nothing there is off-limits — it's next up, one at a time. When one starts, give it a proper entry in Section 5 and/or Section 8, the same as any other module. Priority order for what's already decided: **RBAC (done) → CRM functionality pass (sole current focus) → HRM functionality pass (pushed back, not dropped) → (unordered queue) → Production Deployment (deliberately last)**.
+Full list: **Section 9 — Unbuilt Module Registry**. Anything in it can be picked up any time.
 
 ---
 
@@ -96,62 +93,64 @@ Full list with status and scope: **Section 11 — Upcoming Modules Build Queue**
 
 ### Backend
 
-| Concern        | Choice                                                |
-| -------------- | ----------------------------------------------------- |
-| Language       | Go 1.25+                                              |
-| HTTP Framework | Fiber v3 (`github.com/gofiber/fiber/v3`)              |
-| Database       | PostgreSQL 16+                                        |
-| DB Driver      | pgx v5 (`github.com/jackc/pgx/v5`)                    |
-| Cache / Rate   | Redis 7+ (`github.com/redis/go-redis/v9`)             |
-| Migrations     | Goose (SQL migration files in `internal/migrations/`) |
-| JWT            | `github.com/golang-jwt/jwt/v5`                        |
-| Password hash  | bcrypt via `golang.org/x/crypto`                      |
-| UUID           | `github.com/google/uuid`                              |
-| Logger         | `log/slog` + `github.com/lmittmann/tint`              |
-| Config         | `github.com/joho/godotenv`                            |
-| Module path    | `github.com/mridha/businesssaas`                      |
+| Concern        | Choice                                                                                                       |
+| -------------- | ------------------------------------------------------------------------------------------------------------ |
+| Language       | Go 1.25+                                                                                                     |
+| HTTP Framework | Fiber v3 (`github.com/gofiber/fiber/v3`)                                                                     |
+| Database       | PostgreSQL 16+                                                                                               |
+| DB Driver      | pgx v5 (`github.com/jackc/pgx/v5`)                                                                           |
+| Cache / Rate   | Redis 7+ (`github.com/redis/go-redis/v9`)                                                                    |
+| Migrations     | Goose (SQL migration files in `internal/migrations/`)                                                        |
+| JWT            | `github.com/golang-jwt/jwt/v5`                                                                               |
+| Password hash  | bcrypt via `golang.org/x/crypto`                                                                             |
+| API key hash   | SHA-256 (`crypto/sha256`) — high-entropy keys, indexed exact-match lookup; bcrypt deliberately NOT used here |
+| UUID           | `github.com/google/uuid`                                                                                     |
+| Logger         | `log/slog` + `github.com/lmittmann/tint`                                                                     |
+| Config         | `github.com/joho/godotenv`                                                                                   |
+| Module path    | `github.com/mridha/businesssaas`                                                                             |
 
 ### Frontend
 
-| Concern       | Choice                                                                                                     |
-| ------------- | ---------------------------------------------------------------------------------------------------------- |
-| Framework     | Next.js 16.2.9 (latest stable, App Router)                                                                 |
-| Language      | TypeScript (strict mode)                                                                                   |
-| CSS + styling | Tailwind CSS v4                                                                                            |
-| HTTP client   | Axios (single API client with interceptors)                                                                |
-| State         | Zustand (three stores — see Section 7)                                                                     |
-| Theme         | `next-themes` (light/dark, default light)                                                                  |
-| Forms         | React Hook Form + Zod validation                                                                           |
-| Animation     | GSAP — used sparingly now (skeleton shimmer, number count-ups, subtle transitions), not as a design pillar |
-| Icons         | Lucide React                                                                                               |
+| Concern       | Choice                                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| Framework     | Next.js 16.2.9 (latest stable, App Router)                                                             |
+| Language      | TypeScript (strict mode)                                                                               |
+| CSS + styling | Tailwind CSS v4                                                                                        |
+| HTTP client   | Axios (single API client with interceptors)                                                            |
+| State         | Zustand (three stores — see Section 6)                                                                 |
+| Theme         | `next-themes` (light/dark, default light)                                                              |
+| Forms         | React Hook Form + Zod validation                                                                       |
+| Animation     | GSAP — used sparingly (skeleton shimmer, number count-ups, subtle transitions), not as a design pillar |
+| Icons         | Lucide React                                                                                           |
 
 ### Design System
 
 **Enterprise Minimalist.** Clean, scannable, information-dense done well — the opposite of decorative. If a choice doesn't help someone read data faster, it doesn't earn a place.
 
-| Concern         | Spec                                                                                                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Theme mode      | Light + Dark both. Default: **light**. Token variables structured so dark is a straight swap, not an afterthought.                                                             |
-| Light bg        | `#ffffff` surface · `#f8fafc` canvas (page background, one step off-white)                                                                                                     |
-| Dark bg         | `#0f172a` surface · `#020617` canvas (slate-900/950 — cool dark, not pure black)                                                                                               |
-| Primary/Action  | Indigo/slate-blue — `#4f46e5` primary · `#4338ca` hover/active · same hue in both modes                                                                                        |
-| Semantic states | Success `#10b981` (emerald) · Warning `#f59e0b` (amber) · Destructive `#ef4444` (crimson) — used sparingly, only for real signal                                               |
-| Borders         | Thin, low-contrast — `#e2e8f0` light · `#1e293b` dark. Dividers, not boxes.                                                                                                    |
-| Typography      | One family only — Inter or Geist Sans, no separate display font. Strict scale: large tabular numbers for metrics, bold labels for card headers, muted small text for metadata. |
-| Quality target  | Enterprise Minimalist — every screen reads clearly at a glance, nothing competes with the data                                                                                 |
-| Border radius   | Subtle (4–8px), never rounded-full on blocks                                                                                                                                   |
-| Motion          | Restrained and functional — skeleton loading, hover/focus states, smooth number transitions. No entrance choreography, nothing decorative.                                     |
-| Density         | Medium-high — dashboards reward information density over whitespace, but never cramped                                                                                         |
-| Implementation  | CSS variables per theme, consumed via Tailwind `dark:` classes                                                                                                                 |
+| Concern         | Spec                                                                                                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Theme mode      | Light + Dark both. Default: **light**. Token variables structured so dark is a straight swap, not an afterthought.                                                                             |
+| Light bg        | `#ffffff` surface · `#f8fafc` canvas (page background, one step off-white)                                                                                                                     |
+| Dark bg         | `#0f172a` surface · `#020617` canvas (slate-900/950 — cool dark, not pure black)                                                                                                               |
+| Primary/Action  | Indigo/slate-blue — `#4f46e5` primary · `#4338ca` hover/active · same hue in both modes                                                                                                        |
+| Semantic states | Success `#10b981` (emerald) · Warning `#f59e0b` (amber) · Destructive `#ef4444` (crimson) — used sparingly, only for real signal                                                               |
+| Borders         | Thin, low-contrast — `#e2e8f0` light · `#1e293b` dark. Dividers, not boxes.                                                                                                                    |
+| Typography      | One family only — Inter or Geist Sans, no separate display font. Strict scale: large tabular numbers for metrics, bold labels for card headers, muted small text for metadata.                 |
+| Quality target  | Enterprise Minimalist — every screen reads clearly at a glance, nothing competes with the data                                                                                                 |
+| Layout patterns | Two canonical page anatomies — Dashboard Page Pattern (overview/report pages) and Collection View Pattern (entity lists, Notion-style, borderless + inline-editable) — see Section 7 for both. |
+| Border radius   | Subtle (4–8px), never rounded-full on blocks                                                                                                                                                   |
+| Motion          | Restrained and functional — skeleton loading, hover/focus states, smooth number transitions. No entrance choreography, nothing decorative.                                                     |
+| Density         | Medium-high — dashboards reward information density over whitespace, but never cramped                                                                                                         |
+| Implementation  | CSS variables per theme, consumed via Tailwind `dark:` classes                                                                                                                                 |
 
 ### Infrastructure
 
-| Concern    | Choice                                          |
-| ---------- | ----------------------------------------------- |
-| Container  | Docker + Docker Compose                         |
-| CI         | GitHub Actions                                  |
-| Deployment | VPS via Docker Compose (planned)                |
-| Secrets    | GitHub Secrets + `.env` files (never committed) |
+| Concern    | Choice                                               |
+| ---------- | ---------------------------------------------------- |
+| Container  | Docker + Docker Compose                              |
+| CI         | GitHub Actions                                       |
+| Deployment | VPS via Docker Compose (not started — see Section 9) |
+| Secrets    | GitHub Secrets + `.env` files (never committed)      |
 
 ---
 
@@ -169,15 +168,23 @@ backend/
     authz/                    ← RBAC (roles, permissions, memberships, invitations)
     security/                 ← session and login event management
     task/                     ← task CRUD (permission-gated test module)
+    capture/                  ← lead auto-capture (r11)
+      apikeys/                ← org API keys (generate, validate, revoke)
+      public/                 ← /pub/leads public web-form capture endpoint
+      email/                  ← inbound email webhook → lead + per-org addresses
+      social/                 ← social lead-ad webhooks + integrations
+      visitors/               ← website visitor identify + pageview log
     platform/
       contacts/               ← shared contacts + companies (used by CRM and future modules)
-      engagement/             ← shared notes, tasks, activities, emails, timeline
+      engagement/              ← shared notes, tasks, activities, emails, timeline
     crm/
-      leads/                  ← CRM lead management
+      leads/                  ← CRM lead management (now with capture fields + dedup + round-robin)
       pipeline/               ← pipeline and stages
       deals/                  ← deal CRUD + board view
-      reports/                ← CRM analytics endpoints
-    middleware/               ← auth, business context, logger, rate limit, permission, recover
+      reports/                ← CRM analytics endpoints (incl. agenda)
+      templates/              ← email/note snippet templates (post-r10)
+      settings/               ← per-org CRM settings: lead routing round-robin (post-r10)
+    middleware/               ← auth, business context, logger, rate limit, permission, recover, apikey
     database/                 ← postgres pool + redis client
     config/                   ← env loading and validation
     audit/                    ← append-only audit log
@@ -190,6 +197,8 @@ backend/
     token/                    ← opaque token generation
     password/                 ← bcrypt helpers
     response/                 ← standard JSON response helpers
+    logger/                   ← slog helpers
+    pagination/               ← pagination helpers
 ```
 
 ### Layer Rules
@@ -197,20 +206,28 @@ backend/
 - **Handler**: HTTP only. Reads request, calls service, writes response. No SQL, no business logic.
 - **Service**: Business logic only. No HTTP types, no SQL queries. Takes context.
 - **Repository**: SQL only. No business logic. Uses parameterized queries always.
-- **Middleware**: Request-level cross-cutting concerns (auth check, rate limit, permission check).
+- **Middleware**: Request-level cross-cutting concerns (auth check, rate limit, permission check, API key check).
 - **Pkg**: Stateless utilities with zero domain knowledge (jwt, password, token, response).
 
 Never put business logic in handlers. Never put SQL in services. Never put HTTP types in services.
 
-### Middleware Chain (per protected route)
+### Middleware Chains
+
+Org-scoped JWT routes (unchanged):
 
 ```
 RequireAuth → RequireOrganizationParam(:orgId) → RequirePermission(perm)
 ```
 
-`RequireAuth` validates JWT, sets `user_id` and `business_id` in context.
-`RequireOrganizationParam` validates that the `:orgId` param matches `business_id` in the JWT claims (tenant isolation).
-`RequirePermission` resolves the user's effective permissions (role perms + custom + denied) via Redis cache, then checks.
+Public capture routes (r11):
+
+```
+RequireAPIKey(apiKeySvc, scope) → handler
+```
+
+`RequireAPIKey` reads `X-API-Key`, SHA-256 hashes it, looks up `org_api_keys`, checks `is_active` + scope + (post-Fix-Pass-A) expiry + optional per-key origin whitelist, then sets `org_id` and `user_id` (= key creator) in `c.Locals`. It is the API-key parallel of `RequireAuth`.
+
+Webhook routes (`/pub/email/webhook`, `/pub/social/:platform/webhook`) currently run with **no auth middleware** — provider signature verification is Fix Pass B. Until that lands these endpoints must not be exposed to the public internet.
 
 ### Key Patterns
 
@@ -220,15 +237,17 @@ RequireAuth → RequireOrganizationParam(:orgId) → RequirePermission(perm)
 permFn := func(perm string) fiber.Handler {
     return middleware.RequirePermission(authzSvc, perm)
 }
-// Usage in routes:
-tasks.Get("", permFn("tasks.view"), handler.List)
 ```
 
 **Opaque refresh tokens** — raw token is returned once to handler (for httpOnly cookie), only the hash is stored in DB. Token is never logged or included in JSON body.
 
+**Raw API keys** — same show-once discipline: `GenerateKey` returns the raw `bs_live_…` value exactly once in `CreateKeyResponse`; only the SHA-256 hash and a 16-char display prefix are persisted. `KeyHash` carries `json:"-"`.
+
+**Webhook processing pattern (r11)** — inbound webhooks log every payload to a `*_logs` table (`raw_payload` JSONB, `processed` flag, `error_message`), and return 200 even on business failures so providers don't retry-storm. Failures are diagnosed from the log table, not from webhook response codes.
+
 **JWT claims** include: `user_id`, `business_id` (org context), `email`, `role`. Business context is set when user selects/switches org.
 
-**Tenant isolation** — `RequireOrganizationParam` compares `:orgId` in URL against `business_id` in JWT. Cross-org access is blocked at middleware, not just at repository level.
+**Tenant isolation** — `RequireOrganizationParam` compares `:orgId` in URL against `business_id` in JWT. Cross-org access is blocked at middleware, not just at repository level. Capture endpoints resolve org from the API key / inbound address / page_id instead, and every capture-side query is still `org_id`-scoped.
 
 ### Error Handling
 
@@ -298,19 +317,28 @@ Token contract:
 - Frontend never touches the refresh token directly
 - `/refresh` sends cookie, receives new access token in body
 
-**Mobile extension [⚪ QUEUED — spec only, verified r9: zero mobile code exists anywhere in `backend/`]:**
+**MOBILE [🔵 ACTIVE — contract defined, handlers not yet written]:**
 
-```
+Routes to add in `backend/internal/auth/routes.go`, wired into both `RegisterRoutes` and
+`RegisterRoutesWithRateLimit` the same way the existing `/sign-up`, `/sign-in` aliases are —
+rate-limited on the three public ones:
+
 POST /api/v1/auth/mobile/signup
 POST /api/v1/auth/mobile/login
 POST /api/v1/auth/mobile/logout
 POST /api/v1/auth/mobile/refresh
-```
 
-This was previously flagged 🔵 ACTIVE, which was inconsistent with Section 11's Mobile App entry (correctly ⏸️ PAUSED, no code written). Corrected in r9 — this is still just the planned contract, kept here because it's a good plan, not because any of it is built. Promote back to 🔵 ACTIVE when mobile work actually resumes.
+Same `Service`/`Repository` as web auth, zero new business logic — only new handler methods
+(`MobileLogin`, `MobileRefresh`, etc.) that return the refresh token in the JSON body instead of
+setting the `bsaas_refresh` httpOnly cookie, and read it back from the request body on
+`mobile/refresh` / `mobile/logout` instead of the cookie jar. `logout-all`, `password-reset/*`,
+and `me` stay shared as-is — none of them touch tokens, no mobile variant needed.
 
-Planned shape: same underlying service and repository as above — only the handler differs. Web's `login`/`signup`/`logout`/`refresh` keep setting/reading the httpOnly cookie exactly as before, completely unchanged. The `mobile/*` variants would return the refresh token in the JSON response body (for `expo-secure-store`) instead of a cookie, and accept it back in the request body on `mobile/refresh` and `mobile/logout`. `logout-all`, `password-reset/*`, and `me` are shared as-is by both clients — none of them depend on the cookie, so no mobile variant needed.
-Assumption to confirm when this starts: this assumes `signup` currently auto-authenticates (sets the cookie) the same way `login` does. If it doesn't, `mobile/signup` can just create the user and internally call the same login path before returning.
+Resolved (was an open assumption in the r10 draft): `Signup` does not auto-authenticate.
+`frontend/src/app/(auth)/signup/page.tsx` creates the user then calls `login()` separately to
+bootstrap the session. `MobileSignup` should do the same — create the user, return it with no
+tokens, let the client call `mobile/login` right after. Keeps both clients on identical semantics
+instead of giving mobile a second, divergent signup path.
 
 ---
 
@@ -363,7 +391,7 @@ GET   /api/v1/organizations/:orgId/members/:memberId
 PATCH /api/v1/organizations/:orgId/members/:memberId
 PATCH /api/v1/organizations/:orgId/members/:memberId/role
 PATCH /api/v1/organizations/:orgId/members/:memberId/status
-POST  /api/v1/organizations/:orgId/members/:memberId/reset-password   ← r10, admin-initiated, no token/email step
+POST  /api/v1/organizations/:orgId/members/:memberId/reset-password
 
 POST   /api/v1/organizations/:orgId/invitations/:invitationId/resend
 DELETE /api/v1/organizations/:orgId/invitations/:invitationId
@@ -389,11 +417,7 @@ PATCH /api/v1/organizations/:orgId/rbac/members/:memberId/permissions
 Roles: `owner` · `admin` · `manager` · `member` · `viewer`
 Key permissions: `members.view` · `members.update` · `members.invite` · `members.remove` · `members.password_reset` · `roles.view` · `roles.create` · `roles.update` · `roles.delete` · `roles.clone` · `roles.permissions.update` · `members.permissions.view` · `members.permissions.update`
 
-**r10 additions:**
-
-- `members.password_reset` (owner/admin only) — admin sets a new password directly for another member; revokes their sessions; audit-logged as `authz.member_password_reset`.
-- `UpdateMemberPermissions` now rejects `callerID == member.UserID` (`ErrCannotChangeOwnPermissions`) and targeting the owner (`ErrCannotModifyOwner`, already used elsewhere) — both gaps existed since this endpoint shipped, only caught while building its frontend.
-- `organizations.max_seats` (nullable int, migration 00052) — checked in `InviteMember` via `checkSeatLimit`; `ErrSeatLimitReached` → 409. No endpoint to set it yet — direct DB write only.
+Guards: `UpdateMemberPermissions` rejects self-targeting (`ErrCannotChangeOwnPermissions`) and owner-targeting (`ErrCannotModifyOwner`). `members.password_reset` (owner/admin) revokes the target's sessions and is audit-logged. `organizations.max_seats` (nullable, migration 00052) enforced in `InviteMember` → 409 `ErrSeatLimitReached`; no admin UI, direct DB write only.
 
 ---
 
@@ -425,7 +449,6 @@ DELETE /api/v1/organizations/:orgId/tasks/:taskId
 
 Permissions: `tasks.view` · `tasks.create` · `tasks.update` · `tasks.delete`
 Statuses: `todo` · `in_progress` · `done` · `cancelled`
-Fields: `title`, `description`, `status`, `dueDate` (RFC3339), `assignedTo` (user id or email)
 
 ---
 
@@ -434,21 +457,15 @@ Fields: `title`, `description`, `status`, `dueDate` (RFC3339), `assignedTo` (use
 Routes:
 
 ```
-GET    /api/v1/organizations/:orgId/crm/contacts
-POST   /api/v1/organizations/:orgId/crm/contacts
-GET    /api/v1/organizations/:orgId/crm/contacts/:contactId
-PATCH  /api/v1/organizations/:orgId/crm/contacts/:contactId
-DELETE /api/v1/organizations/:orgId/crm/contacts/:contactId
+GET/POST         /api/v1/organizations/:orgId/crm/contacts
+GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/contacts/:contactId
 
-GET    /api/v1/organizations/:orgId/crm/companies
-POST   /api/v1/organizations/:orgId/crm/companies
-GET    /api/v1/organizations/:orgId/crm/companies/:companyId
-PATCH  /api/v1/organizations/:orgId/crm/companies/:companyId
-DELETE /api/v1/organizations/:orgId/crm/companies/:companyId
-GET    /api/v1/organizations/:orgId/crm/companies/:companyId/contacts
+GET/POST         /api/v1/organizations/:orgId/crm/companies
+GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/companies/:companyId
+GET              /api/v1/organizations/:orgId/crm/companies/:companyId/contacts
 ```
 
-Permissions: `crm.contacts.view` · `crm.contacts.create` · `crm.contacts.update` · `crm.contacts.delete` · `crm.companies.view` · `crm.companies.create` · `crm.companies.update` · `crm.companies.delete`
+Permissions: `crm.contacts.*` · `crm.companies.*`
 
 ---
 
@@ -465,25 +482,28 @@ Timeline:   GET /timeline?related_type=&related_id=
 ```
 
 Permissions: `crm.notes.*` · `crm.tasks.*` · `crm.activities.*` · `crm.emails.*`
-Note: These are CRM-scoped. When HRM arrives, same handler is reused with a different module tag.
+Notes are tagged with module `"crm"` — every writer must use that exact tag or the record is invisible to the timeline (the capture dedup path currently violates this; Fix Pass A).
 
 ---
 
-### CRM — LEADS [✅ DONE]
+### CRM — LEADS [✅ DONE — extended r11]
 
 Routes:
 
 ```
-GET    /api/v1/organizations/:orgId/crm/leads
-POST   /api/v1/organizations/:orgId/crm/leads
-GET    /api/v1/organizations/:orgId/crm/leads/:leadId
-PATCH  /api/v1/organizations/:orgId/crm/leads/:leadId
-DELETE /api/v1/organizations/:orgId/crm/leads/:leadId
-POST   /api/v1/organizations/:orgId/crm/leads/:leadId/convert
+GET/POST         /api/v1/organizations/:orgId/crm/leads
+GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/leads/:leadId
+POST             /api/v1/organizations/:orgId/crm/leads/:leadId/convert
 ```
 
 Permissions: `crm.leads.view` · `crm.leads.create` · `crm.leads.update` · `crm.leads.delete` · `crm.leads.convert`
 Statuses: `new` · `contacted` · `qualified` · `unqualified` · `converted`
+
+**Post-r10 extensions:**
+
+- **Round-robin auto-assignment** (00056 + `crm/settings`): when `crm_settings.lead_routing_enabled` and `round_robin_assignees` is non-empty, `CreateLead` rotates `owner_id` via `GetLastAssignedLeadOwner`.
+- **Capture fields** (00058): `custom_fields JSONB` · `capture_source TEXT` · `capture_metadata JSONB` on `crm_leads`, present in model/scan/insert.
+- **Email dedup**: `CreateLead` checks `FindLeadByEmail` first; on match, appends an engagement note to the existing lead and returns it instead of inserting. ⚠️ Currently applies to ALL creates including manual UI creates, match is case-sensitive, and the note uses the wrong module tag — all three are Fix Pass A items (scope to `CaptureSource != nil`, `LOWER()` match, module `"crm"`).
 
 ---
 
@@ -492,14 +512,14 @@ Statuses: `new` · `contacted` · `qualified` · `unqualified` · `converted`
 Routes:
 
 ```
-GET/POST    /api/v1/organizations/:orgId/crm/pipelines
+GET/POST         /api/v1/organizations/:orgId/crm/pipelines
 GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/pipelines/:pipelineId
-GET/POST    /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages
-POST        /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages/reorder
-PATCH/DELETE /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages/:stageId
+GET/POST         /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages
+POST             /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages/reorder
+PATCH/DELETE     /api/v1/organizations/:orgId/crm/pipelines/:pipelineId/stages/:stageId
 ```
 
-Permissions: `crm.deals.view` · `crm.deals.create` · `crm.deals.update` · `crm.deals.delete`
+Permissions: `crm.deals.*`
 
 ---
 
@@ -508,19 +528,46 @@ Permissions: `crm.deals.view` · `crm.deals.create` · `crm.deals.update` · `cr
 Routes:
 
 ```
-GET/POST    /api/v1/organizations/:orgId/crm/deals
+GET/POST         /api/v1/organizations/:orgId/crm/deals
 GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/deals/:dealId
-POST        /api/v1/organizations/:orgId/crm/deals/:dealId/move
-POST        /api/v1/organizations/:orgId/crm/deals/:dealId/won
-POST        /api/v1/organizations/:orgId/crm/deals/:dealId/lost
-GET         /api/v1/organizations/:orgId/crm/deals/:dealId/board
+POST             /api/v1/organizations/:orgId/crm/deals/:dealId/move
+POST             /api/v1/organizations/:orgId/crm/deals/:dealId/won
+POST             /api/v1/organizations/:orgId/crm/deals/:dealId/lost
+GET              /api/v1/organizations/:orgId/crm/deals/:dealId/board
 ```
 
-Permissions: `crm.deals.view` · `crm.deals.create` · `crm.deals.update` · `crm.deals.delete` · `crm.deals.move_stage`
+Permissions: `crm.deals.*` · `crm.deals.move_stage`
 
 ---
 
-### CRM — REPORTS [✅ DONE]
+### CRM — TEMPLATES [✅ DONE — post-r10, folded into doc r11]
+
+Routes:
+
+```
+GET/POST         /api/v1/organizations/:orgId/crm/templates
+GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/templates/:templateId
+```
+
+Permissions: `crm.templates.view` · `crm.templates.create` · `crm.templates.update` · `crm.templates.delete` (seeded 00055)
+Table: `crm_templates` (00054) — `type IN ('email','note')`, optional `subject`, `body`. Email/note snippets for quick insertion by reps.
+
+---
+
+### CRM — SETTINGS [✅ DONE — post-r10, folded into doc r11]
+
+Routes:
+
+```
+GET   /api/v1/organizations/:orgId/crm/settings     ← settings.view
+PATCH /api/v1/organizations/:orgId/crm/settings     ← settings.update
+```
+
+Table: `crm_settings` (00056) — `lead_routing_enabled BOOLEAN`, `round_robin_assignees JSONB`. Backs the lead round-robin (see CRM — LEADS). Uses the generic `settings.*` permissions, not a `crm.settings.*` pair — acceptable for now, revisit if CRM settings grow.
+
+---
+
+### CRM — REPORTS [✅ DONE — agenda added post-r10]
 
 Routes:
 
@@ -532,82 +579,98 @@ GET /api/v1/organizations/:orgId/crm/reports/deals/by-owner
 GET /api/v1/organizations/:orgId/crm/reports/leads/by-source
 GET /api/v1/organizations/:orgId/crm/reports/tasks/overdue
 GET /api/v1/organizations/:orgId/crm/reports/activities/stats
+GET /api/v1/organizations/:orgId/crm/reports/agenda          ← post-r10, backs /crm/agenda page
 ```
 
 Permissions: `crm.reports.view`
 
 ---
 
-### HRM MODULE [✅ DONE — verified against source, r9]
+### CAPTURE [🔵 ACTIVE — backend written r11, Fix Pass A/B pending, frontend not started]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated the same way as CRM (`hrm.<submodule>.<action>`), 25 sub-modules, **201 routes total**. This entry summarizes; it does not reproduce every route — that level of detail belongs in a dedicated `docs/modules/hrm.md` (not yet written, see note at the end of this doc revision).
+New top-level module: `internal/capture/`. All five sources wired in `main.go`; migrations 00057–00064.
 
-**Database:** 40 tables, built across migrations `00020`–`00050`. That's 31 files in that numeric range, but `00048_seed_data_vertex.sql` is a general CRM seed migration (a "Vertex Logistics" test-data scenario), not HRM — so 30 migrations are HRM-specific, out of 50 total. Migration `00049` fixed a missing `'award'` value in an approval-type CHECK constraint; `00050` seeded ~400+ rows of realistic HRM test data.
+**Auth-gated management routes (JWT + org match):**
 
-**Group A — Setup/Config** (`backend/internal/hrm/{departments,positions,salary,approvals,warningtypes,doctemplates,shifts,holidays,contracts}`):
-| Sub-module | Routes | Notes |
-|---|---|---|
-| departments | 5 | CRUD |
-| positions | 5 | CRUD |
-| salary | 15 | Salary components + structures; formula engine via `expr-lang/expr` |
-| approvals | 8 | Approval chain templates/levels; **missing an approval-instance list endpoint** — flagged in a standalone backend issues note, not yet fixed |
-| warningtypes | 9 | Warning type config + escalation rules |
-| doctemplates | 6 | Markdown templates, browser-rendered PDF |
-| shifts | 8 | Work schedules |
-| holidays | 10 | Holiday calendars |
-| contracts | 5 | Employee contracts |
-
-**Group B — Employee Lifecycle** (`{employees,promotions,transfers,resignations,terminations}`):
-| Sub-module | Routes | Notes |
-|---|---|---|
-| employees | 6 | Core employee CRUD |
-| promotions | 8 | Approval-chain gated, implements `HandleApprovalDecision` |
-| transfers | 8 | HR/manager-initiated only, approval-chain gated |
-| resignations | 8 | Notice period pulled from contract |
-| terminations | 7 | Approval-chain gated, immediate access revocation on decision |
-
-**Group C — Disciplinary** (`{warnings,complaints,employeedocs,acknowledgements}`):
-| Sub-module | Routes | Notes |
-|---|---|---|
-| warnings | 10 | Status-gated visibility, lazy expiry, approval-chain gated |
-| complaints | 10 | Person-against-person, required subject |
-| employeedocs | 8 | Bulk send, versioning |
-| acknowledgements | 6 | Polymorphic target, declined status, cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles |
-
-**Group D — Time & Compensation** (`{attendance,payslips}`):
-| Sub-module | Routes | Notes |
-|---|---|---|
-| attendance | 10 | Multi-punch, 3 sources (webhook + API key), regularization via approval chain, nightly absent cron, period lock |
-| payslips | 9 | Payroll runs, `ComputeSlab` progressive tax, attendance period must finalize first, immutable once finalized, dispute via acknowledgement decline |
-
-**Group E — Recognition & Communication** (`{awards,announcements,calendar,milestones}`):
-| Sub-module | Routes | Notes |
-|---|---|---|
-| awards | 7 | Per-type nomination restriction, optional monetary value, approval-chain gated |
-| announcements | 7 | Markdown, audience targeting, scheduling |
-| calendar | 6 | Separate from holiday calendar, simple recurrence, RSVP via acknowledgement |
-| milestones | 5 | Nightly cron, configurable rules, anniversary `year_intervals`, auto-drafts awards/announcements |
-
-**Reports:** `reports` — 3 routes.
-
-**Approval chain wiring (Phase 7.7):** Callback registry pattern on the approvals service (`RegisterCallback`). All five approval-gated modules (terminations, promotions, transfers, warnings, awards) implement `HandleApprovalDecision` and are registered in `main.go`:
-
-```go
-hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
-hrmApprovalsSvc.RegisterCallback("transfer", hrmTransfersSvc.HandleApprovalDecision)
-hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationsSvc.HandleApprovalDecision)
-hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
-hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
+```
+GET/POST /api/v1/organizations/:orgId/capture/apikeys           ← capture.apikeys.view / .create
+DELETE   /api/v1/organizations/:orgId/capture/apikeys/:keyId    ← capture.apikeys.delete
+GET/POST /api/v1/organizations/:orgId/capture/email             ← ⚠️ uses settings.view; switch to capture.email.manage (Fix A)
+DELETE   /api/v1/organizations/:orgId/capture/email/:id
+GET/POST /api/v1/organizations/:orgId/capture/social            ← ⚠️ uses settings.view; switch to capture.social.manage (Fix A)
+DELETE   /api/v1/organizations/:orgId/capture/social/:id
+GET      /api/v1/organizations/:orgId/capture/visitors          ← ⚠️ uses nonexistent crm.view → 403s for everyone; switch to capture.visitors.view (Fix A)
 ```
 
-**Known open item:** a missing approval-instance list endpoint (documented separately) — the only unresolved backend gap found in this module during the r9 audit.
+**Public routes:**
+
+```
+POST /api/v1/pub/leads                       ← RequireAPIKey, scope capture:leads — WORKS (web form / chat)
+POST /api/v1/pub/visitors/identify           ← RequireAPIKey, scope capture:visitors
+POST /api/v1/pub/email/webhook               ← ⚠️ NO verification (Fix B) — do not expose publicly yet
+GET/POST /api/v1/pub/social/:platform/webhook ← ⚠️ NO signature check; GET accepts any verify_token (Fix B)
+```
+
+**API key contract:** raw key `bs_live_<64 hex>`, shown exactly once at creation; SHA-256 hash + 16-char prefix stored; scopes `capture:leads` (+ `capture:visitors`, constant pending); optional per-key `allowed_origins` and `expires_at`.
+
+**Permissions seeded (00062):** `capture.apikeys.view/create/delete` · `capture.email.manage` · `capture.social.manage` · `capture.visitors.view` — granted to owner/admin. Only the apikeys three are actually referenced by routes today (see warnings above).
+
+**Deliberate scope reductions (documented, not bugs):**
+
+- Social is a **webhook skeleton**, not a real Facebook integration — no Graph API `leadgen_id` fetch, no OAuth connect, no field-mapping engine; it maps flat payload fields, which real FB webhooks don't send. Real integration is tracked separately (Section 9).
+- Visitors is **manual identify** (Segment-style: `traits.email/name/company` → lead), not IP→company enrichment. No IPinfo, no Redis queue, no background worker.
+- No hosted form / JS embed endpoint yet (was Step 4 second half) — capture frontend work.
+
+**Known open items (r11 audit — this list IS the current work):**
+
+_Fix Pass A — feature-breaking + correctness:_
+
+1. `CreateLead(ctx, orgID, "", …)` in email/social/visitors → `created_by` gets empty string → invalid-UUID error on every system-generated lead. Fix: migration 00065 drops NOT NULL on `crm_leads.created_by`; model `CreatedBy *string`; pass nil for system captures; UI renders null as "System".
+2. `social/repository.go` INSERTs into `access_token_enc`; column is `access_token` (00060) → connect always fails. Fix repo SQL.
+3. Route permissions → seeded `capture.*` keys (see warnings above); adds `capture:visitors` scope constant + scope/name validation in `GenerateKey`.
+4. `ValidateKey` never checks `expires_at` (`ErrKeyExpired` sentinel unused). Add the check.
+5. Dedup: scope to `req.CaptureSource != nil` only; `LOWER(email)` match; note module `"crm"`; skip note when `userID == ""`; don't swallow the note error silently.
+6. Delete leftover AI-conversation comments in `public/handler.go` and `leads/service.go`.
+7. Minor: `social` model `AccessToken` json tag → `"-"`; `org_api_keys.created_by` ON DELETE CASCADE → RESTRICT; UNIQUE `(org_id, session_id)` on `website_visitors`; UNIQUE on `org_api_keys.key_hash`.
+
+_Fix Pass B — security, required before any public exposure:_ 8. Inbound email webhook HMAC verification (`WEBHOOK_EMAIL_SECRET`). 9. Facebook `X-Hub-Signature-256` verification (`FACEBOOK_APP_SECRET`) + real `hub.verify_token` comparison (`FACEBOOK_VERIFY_TOKEN`). 10. Redis rate limiting on every `/pub/*` route (new `NewPublicCaptureRateLimit` constructor; per-key where a key exists, per-IP on webhooks).
+
+---
+
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10]
+
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), 25 sub-modules, 201 routes (r9 count) **plus 4 employee-status routes added post-r10** (205 total). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+
+**Database:** 41 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053).
+
+**Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 71 routes. Salary formula engine via `expr-lang/expr`. Approvals still missing an approval-instance list endpoint (open since r9).
+
+**Group B — Lifecycle** (`employees, promotions, transfers, resignations, terminations`): 37 routes + 4 new:
+
+```
+GET/POST     /organizations/:orgId/hrm/employee-statuses        ← hrm.employees.view / hrm.employees.manage_setup
+PATCH/DELETE /organizations/:orgId/hrm/employee-statuses/:id    ← hrm.employees.manage_setup
+```
+
+Dynamic statuses (00053): per-org status list with category (`active/inactive/on_leave/terminated`) + color token; `hrm_employees.status_id` FK; migration auto-seeded defaults and mapped existing employees.
+
+**Group C — Disciplinary** (`warnings, complaints, employeedocs, acknowledgements`): 34 routes. Cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles.
+
+**Group D — Time & Compensation** (`attendance, payslips`): 19 routes. Multi-punch attendance, `ComputeSlab` progressive tax, immutable finalized payslips.
+
+**Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences.
+
+**Reports:** 3 routes.
+
+**Approval chain wiring:** callback registry on the approvals service; promotions, transfers, terminations, warnings, awards each register `HandleApprovalDecision` in `main.go`.
+
+**Known open item:** missing approval-instance list endpoint (carried from r9).
 
 ---
 
 ### AUDIT [✅ DONE]
 
 Internal only. Append-only log for security-sensitive events. No public API endpoints.
-Written to by auth service (login, logout, password reset) and task service.
 
 ---
 
@@ -615,49 +678,39 @@ Written to by auth service (login, logout, password reset) and task service.
 
 ### Conventions
 
-- UUID primary keys everywhere (`id` = internal, `public_id` = API-safe)
+- UUID primary keys everywhere (`id` = internal, `public_id` = API-safe where exposed)
 - `created_at`, `updated_at` on every table
 - Indexes on lookup-heavy columns (org_id, user_id, email, status)
 - All schema changes via Goose migration files — never manually
-- Transactions for multi-step operations (org creation, membership changes, password reset)
-- Audit logs are append-only (no update/delete)
+- Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
+- Audit logs and webhook logs are append-only
 
-### Migration Count: 52
+### Migration Count: 64
 
-Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`. 50 as of r9 (HRM, `00021`–`00050`); r10 adds `00051_add_member_password_reset_permission.sql` and `00052_add_organization_max_seats.sql`.
+Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
+r10 ended at 52. Post-r10: `00053` dynamic employee statuses · `00054/00055` CRM templates + permissions · `00056` CRM settings · `00057`–`00064` capture (api keys, lead capture fields, inbound emails, social integrations, website visitors + pageviews, capture permissions, inbound email logs, social lead logs). Next: `00065` (created_by nullable — Fix Pass A).
 
-### Key Tables
+### Key Tables (74 total)
 
-Verified against source, r9. The previous list also had several names wrong — it said `crm_contacts`/`crm_companies`/`crm_notes`/`crm_tasks`/`crm_activities`/`crm_email_logs`, but the actual platform engagement layer uses a `platform_` prefix, not `crm_`, for these shared tables (see Section 4 folder structure — `internal/platform/contacts` and `internal/platform/engagement`).
-
-**Core / auth / org (Phase 1):**
+**Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
 
-**Platform (shared contacts + engagement):**
+**Platform (6):**
 `platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs`
 
-**CRM:**
-`crm_leads` · `crm_pipelines` · `crm_pipeline_stages` · `crm_deals`
+**CRM (6):**
+`crm_leads` (+ `custom_fields`, `capture_source`, `capture_metadata` since 00058) · `crm_pipelines` · `crm_pipeline_stages` · `crm_deals` · `crm_templates` · `crm_settings`
 
-**HRM — Group A (Setup/Config):**
-`hrm_departments` · `hrm_positions` · `hrm_salary_components` · `hrm_salary_structures` · `hrm_salary_structure_components` · `hrm_approval_templates` · `hrm_approval_template_levels` · `hrm_approval_instances` · `hrm_approval_decisions` · `hrm_warning_types` · `hrm_warning_escalation_rules` · `hrm_document_templates` · `hrm_document_bulk_sends` · `hrm_shifts` · `hrm_work_schedule_assignments` · `hrm_holiday_calendars` · `hrm_holidays` · `hrm_calendar_assignments` · `hrm_employee_contracts`
+**Capture (7):**
+`org_api_keys` · `org_inbound_emails` · `social_integrations` · `website_visitors` · `visitor_pageviews` · `inbound_email_logs` · `social_lead_logs`
 
-**HRM — Group B (Lifecycle):**
-`hrm_employees` · `hrm_promotions` · `hrm_transfers` · `hrm_resignations` · `hrm_terminations`
-
-**HRM — Group C (Disciplinary):**
-`hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_documents` · `hrm_acknowledgements`
-
-**HRM — Group D (Time & Compensation):**
-`hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
-
-**HRM — Group E (Recognition & Communication):**
-`hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
-
-**HRM — Leave (standalone, pre-dates Groups A–E):**
-`hrm_leave_types` · `hrm_leave_requests`
-
-That's 19 + 5 + 4 + 6 + 4 + 2 = **40 tables** (corrected in a follow-up pass, r9 — first draft of this list undercounted at 30 and had `hrm_calendar_assignments` misfiled under Group E; it's actually created alongside the holiday-calendar tables in migration `00028` and assigns holiday calendars to departments/orgs, unrelated to the Group E HR-events calendar).
+**HRM (41):**
+Group A (19): `hrm_departments` · `hrm_positions` · `hrm_salary_components` · `hrm_salary_structures` · `hrm_salary_structure_components` · `hrm_approval_templates` · `hrm_approval_template_levels` · `hrm_approval_instances` · `hrm_approval_decisions` · `hrm_warning_types` · `hrm_warning_escalation_rules` · `hrm_document_templates` · `hrm_document_bulk_sends` · `hrm_shifts` · `hrm_work_schedule_assignments` · `hrm_holiday_calendars` · `hrm_holidays` · `hrm_calendar_assignments` · `hrm_employee_contracts`
+Group B (6): `hrm_employees` · `hrm_promotions` · `hrm_transfers` · `hrm_resignations` · `hrm_terminations` · `hrm_employee_statuses`
+Group C (4): `hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_documents` · `hrm_acknowledgements`
+Group D (6): `hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
+Group E (4): `hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
+Leave (2): `hrm_leave_types` · `hrm_leave_requests`
 
 ---
 
@@ -668,50 +721,30 @@ That's 19 + 5 + 4 + 6 + 4 + 2 = **40 tables** (corrected in a follow-up pass, r9
 ```
 frontend/
   src/
-    app/                    ← Next.js App Router pages
-      (auth)/               ← auth layout group (login, signup, reset)
-      (dashboard)/          ← dashboard layout group (all protected pages)
-        [orgId]/            ← org-scoped pages
+    app/
+      (auth)/                 ← login, signup
+      (onboarding)/           ← create-organization, select-organization
+      (dashboard)/
+        [orgId]/
           crm/
-            leads/
-            contacts/
-            companies/
-            pipeline/
-            deals/
-            reports/
+            leads/  pipeline/  reports/  agenda/
+            setup/routing/  setup/templates/
+          contacts/  companies/  companies/[companyId]/
           tasks/
-          settings/
-            members/
-            roles/
-          security/
-      page.tsx              ← redirect to login or dashboard
+          hrm/                ← all HRM pages incl. setup/statuses
+          settings/ (members, roles, profile)
+          security/sessions/
     components/
-      ui/                   ← primitive components (button, input, badge, table, modal)
-      layout/               ← sidebar, topbar, breadcrumb, org switcher
-      auth/                 ← auth-specific components
-      crm/                  ← CRM-specific components
-      tasks/                ← task-specific components
-      rbac/                 ← roles/permissions/members components
+      ui/  layout/  crm/  tasks/  members/  roles/  settings/  hrm/  providers/
+    contexts/DrawerContext.tsx
     lib/
-      api.ts                ← single Axios client with token interceptor + auto-refresh
-      auth.ts               ← auth helpers (silent refresh, logout)
-      constants.ts          ← API base URL, app constants
-      token.ts              ← module-level token variable (never Zustand, never localStorage)
-    stores/
-      authStore.ts          ← user profile, org context, auth status
-      permissionStore.ts    ← current user's effective permissions list
-      uiStore.ts            ← sidebar state, theme preference, transient UI state
-    hooks/
-      useAuth.ts            ← reads authStore, exposes user + org
-      usePermission.ts      ← reads permissionStore, exposes can(perm) helper
-      useOrg.ts             ← reads authStore.currentOrg
-    types/
-      auth.ts               ← AuthUser, TokenPair, SafeUser
-      org.ts                ← Business, Membership, MemberWithUser
-      rbac.ts               ← Role, Permission, Membership models
-      task.ts               ← Task, TaskStatus, TaskListResponse
-      crm.ts                ← Lead, Contact, Company, Pipeline, Deal, etc.
-      api.ts                ← ApiResponse<T>, ApiError
+      api.ts  auth.ts  constants.ts  token.ts  jwt.ts  queryKeys.ts
+      crm/ (leads, contacts, companies, deals, pipelines, reports, settings, templates)
+      hrm/ (…)
+      members.ts  roles.ts  org.ts  profile.ts  security.ts  tasks.ts  permissionGroups.ts
+    stores/ (authStore, permissionStore, uiStore)
+    hooks/ (useIsMobile, …)
+    types/ (api, auth, crm, hrm, org, rbac, task)
 ```
 
 ### Auth Flow (frontend)
@@ -725,8 +758,6 @@ frontend/
 7. On page refresh → silent refresh on app mount: call `/auth/refresh` before rendering any protected UI; if it fails, redirect to login
 
 ### Zustand Store Definitions
-
-Three stores. Each is small and focused.
 
 **`authStore`** — who the user is and which org they're in:
 
@@ -746,7 +777,7 @@ interface AuthStore {
 
 ```ts
 interface PermissionStore {
-  permissions: string[]; // e.g. ["tasks.view", "tasks.create", "crm.leads.view"]
+  permissions: string[];
   setPermissions: (perms: string[]) => void;
   can: (perm: string) => boolean;
   canAny: (perms: string[]) => boolean;
@@ -754,17 +785,7 @@ interface PermissionStore {
 }
 ```
 
-**`uiStore`** — sidebar and theme, nothing else:
-
-```ts
-interface UIStore {
-  sidebarOpen: boolean;
-  theme: "dark" | "light";
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  setTheme: (theme: "dark" | "light") => void;
-}
-```
+**`uiStore`** — sidebar and theme, nothing else.
 
 **Hard rules for Zustand:**
 
@@ -801,9 +822,7 @@ interface UIStore {
 }
 ```
 
-The indigo accent and semantic colors are identical in both modes — only backgrounds, surfaces, and borders shift. Components use `dark:` Tailwind classes — never inline theme checks in JS.
-
-`uiStore.theme` drives the `next-themes` `setTheme()` call and is persisted to localStorage (theme preference is safe to persist).
+Components use `dark:` Tailwind classes — never inline theme checks in JS. `uiStore.theme` drives `setTheme()` and persists to localStorage (safe to persist).
 
 ### Organization Context Flow
 
@@ -817,16 +836,12 @@ The indigo accent and semantic colors are identical in both modes — only backg
 ```tsx
 const { can } = usePermission(); // reads from permissionStore — no API call
 
-// Gates UI — does NOT replace backend enforcement
 {
   can("tasks.create") && <Button onClick={openCreateModal}>New Task</Button>;
 }
-{
-  can("tasks.delete") && <Button onClick={handleDelete}>Delete</Button>;
-}
 ```
 
-`permissionStore` is populated after org switch by calling `GET /api/v1/members/me`, which returns `{ permissions: string[] }`. It is reset when the user switches org or logs out. Backend enforces on every request — frontend gates are UX only.
+`permissionStore` is populated after org switch by `GET /api/v1/members/me`. Backend enforces on every request — frontend gates are UX only.
 
 ### API Client Contract
 
@@ -843,234 +858,471 @@ const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
 });
-
-// Request interceptor → attach Authorization: Bearer <token> from lib/token.ts
-// Response interceptor → on 401: call /auth/refresh → setToken(newToken) → retry
-// withCredentials: true is required for the httpOnly refresh cookie to be sent cross-origin
+// Request interceptor → attach Authorization: Bearer <token>
+// Response interceptor → on 401: /auth/refresh → setToken(new) → retry
 ```
 
-**Why not Zustand for the token:** Zustand state can be accidentally persisted via the `persist` middleware, putting the token in `localStorage`. A plain module variable has no such risk — it lives only in memory and is cleared on page refresh (triggering the silent refresh flow).
+**Why not Zustand for the token:** Zustand state can be accidentally persisted via the `persist` middleware, putting the token in `localStorage`. A plain module variable lives only in memory and is cleared on page refresh (triggering the silent refresh flow).
 
 ### Component Quality Standard
 
-Every component must meet these standards:
-
 - Fully themed — light and dark both look intentional, not just inverted
-- Indigo accent on interactive elements (buttons, links, focus rings) in both modes — used for actions and active states, not decoration
-- One typeface family (Inter or Geist Sans) with a strict scale — large tabular numbers for metrics, bold labels for headers, muted small text for metadata. No separate display font.
-- Clear action hierarchy: primary filled buttons, secondary outlined buttons, tertiary text links — never more than one primary action visible at once
-- Skeleton loading states on every data-fetching component — never a blank box, never a bare spinner where a skeleton would show shape
-- Keyboard accessible: visible focus rings, tab order that matches visual order, escape closes modals
-- Strong text contrast ratios (WCAG AA minimum) and explicit semantic ARIA landmarks on layout regions
+- Indigo accent on interactive elements in both modes — actions and active states, not decoration
+- One typeface family with a strict scale; no separate display font
+- Clear action hierarchy: primary filled, secondary outlined, tertiary text links — never more than one primary action visible at once
+- Skeleton loading states on every data-fetching component
+- Keyboard accessible: visible focus rings, tab order matches visual order, escape closes modals
+- WCAG AA contrast, explicit ARIA landmarks on layout regions
 - Responsive (works on 1280px minimum, designed for 1440px)
 - No placeholder "coming soon" states — if a page is in scope, it is built properly
 - Error states and empty states are designed, not default browser behavior
 
 ### Dashboard Page Pattern
 
-The default anatomy for any data-overview page (CRM Reports, future HRM Reports, org dashboard home) — not a rule for every page, but the template when a page's job is "show me how things are going":
+Default anatomy for data-overview pages (CRM Reports, HRM Reports, org dashboard home):
 
-1. **KPI strip** — 3–4 metric cards in a row: absolute value, small sparkline, percentage change with a directional arrow (`+12.4%` in emerald, `-3.1%` in crimson)
-2. **Data visualization** — split-pane below the strip: a primary time-series line/area chart (the main metric over time) next to a secondary horizontal bar chart (category breakdown)
-3. **Data table** — full-width below the charts: search input, multi-select filters, export action in the header; rows get hover states, status badges, and a `⋯` context menu for inline actions
+1. **KPI strip** — 3–4 metric cards: absolute value, small sparkline, percentage change with directional arrow
+2. **Data visualization** — split-pane: primary time-series chart + secondary category bar chart
+3. **Data table** — full-width: search, multi-select filters, export; hover states, status badges, `⋯` context menu
 
-List views that aren't overview pages (Leads, Tasks, Members) skip the KPI/chart layers and go straight to the table — don't force the full pattern where it doesn't fit.
+List views that aren't overview pages (Leads, Tasks, Members) skip the KPI/chart layers and go straight to the table.
+
+### Collection View Pattern (Notion-style)
+
+Default anatomy for single-entity collection pages where each record is a lightweight,
+frequently-edited item — first example is Tasks. Distinct from the Dashboard Page Pattern:
+no KPI strip, no charts, this is a working list, not a report.
+
+1. **Toolbar** — page title + record count top-left; view switcher (e.g. Grouped/List) +
+   primary "New" action top-right.
+2. **Grouped view (default)** — records grouped by their primary status/category field into
+   collapsible sections; each header shows a status dot, label, count, and a hairline divider —
+   no bordered card around the section.
+3. **List view (alternate)** — flat list with filter tabs above it (same status field), for
+   scanning everything in one scroll.
+4. **Row = borderless, chrome-less** — no grid lines, no card border; hover background is the
+   only structural cue between rows. Primary fields (title, status, date, done-toggle) are
+   inline-editable directly on the row — no separate edit mode. A drawer is reserved for
+   secondary fields (e.g. description) via an explicit "Edit" action.
+5. **Quick-add** — records are created inline at the bottom of a list/group ("+ New …"), not via
+   modal or drawer. Enter commits and keeps the input open for consecutive entries; Escape/blur
+   cancels.
+6. **Status representation** — solid-tint pill (background tint + matching text color, no
+   border), not an outlined badge.
+7. **Loading state** — skeleton rows matching the row's real layout, never a spinner+text.
+
+Applies to: Tasks (shipped). Candidate for CRM Leads, Members, and other simple single-entity
+lists when they're next revisited — this does not retroactively obligate rewriting those pages.
 
 ---
 
 ## 8. FRONTEND MODULE REGISTRY
 
-### AUTH PAGES [🔵 ACTIVE]
+### AUTH PAGES [✅ DONE]
 
-- `/login` — Email + password login form, link to signup
-- `/signup` — Signup form (firstName, lastName, email, password)
-- `/forgot-password` — Request password reset (email input)
-- `/reset-password` — Confirm password reset (token + new password)
+`/login` · `/signup` — own layout, no sidebar. (Forgot/reset-password pages: backend routes exist; page files not present in the current tree — build when email sending lands, see Section 9.)
 
-Auth pages have their own layout. No sidebar. Full-page design — light mode uses the white/slate canvas, dark mode uses the slate-900/950 surfaces. Indigo accents in both.
+### ONBOARDING [✅ DONE]
 
-### ONBOARDING [🔵 ACTIVE]
+`/create-organization` · `/select-organization`
 
-- `/create-organization` — Create first org (name, slug, optional fields)
-- `/select-organization` — Select active org if user has multiple
+### DASHBOARD SHELL [✅ DONE]
 
-These are shown after login when no org context exists.
+Sidebar, Topbar, org switcher, drawer system (`DrawerContext` + `ui/Drawer`), org context in URL.
 
-### DASHBOARD SHELL [🔵 ACTIVE]
+### TASKS [✅ DONE — redesigned to the Collection View Pattern]
 
-- Sidebar with module navigation
-- Topbar with org switcher, user menu, notifications placeholder
-- Org context persisted in URL (`/[orgId]/...`)
-- Collapsible sidebar
+`/[orgId]/tasks` — Grouped (collapsible, by status) and List (flat, filter tabs) view modes,
+inline quick-add, full inline editing (title, status, due date, complete-toggle); drawer
+reserved for secondary-field edits, permission-gated actions.
 
-### TASKS [🔵 ACTIVE]
+### SETTINGS — MEMBERS [✅ DONE]
 
-- `/[orgId]/tasks` — List with filters (status, assignee, sort), permission-gated actions
-- Inline create form, inline edit, delete with confirmation
-- Permission gates: create, update, delete based on user role
+`/[orgId]/settings/members` — members list, invite, role assignment, per-member action menu (reset password, manage/view permissions, remove), invitation resend/revoke. Menu hidden for own row and owner's row, matching backend guards.
 
-### SETTINGS — MEMBERS [🔵 ACTIVE — password reset and permission overrides added, r10]
+### SETTINGS — ROLES & PERMISSIONS [✅ DONE]
 
-- `/[orgId]/settings/members` — members list + invite + role assignment (unchanged)
-- Invitation list with resend/revoke actions (unchanged)
-- Per-member action menu, each item independently permission-gated: Reset password (`ResetPasswordForm.tsx` drawer, warns it revokes all the target's sessions), Manage/View permissions (`MemberPermissionsForm.tsx` drawer), Remove member (unchanged)
-- Menu and all three actions hidden for your own row and the org owner's row, matching the backend guards exactly
+`/[orgId]/settings/roles` — role list with System/Custom badges, create (via `PermissionForm` create mode), edit, clone, delete. Shared `lib/permissionGroups.ts` categorization (includes all HRM resources). ⚠️ `capture.*` permission group not yet added to `permissionGroups.ts` — do this with the capture frontend, or the six capture permissions will be invisible in the picker (same class of bug as the r10 HRM fix).
 
-### SETTINGS — ROLES & PERMISSIONS [✅ DONE — Full RBAC shipped, r10]
+### PROFILE & SECURITY [✅ DONE]
 
-- `/[orgId]/settings/roles` — role list (name, System/Custom badge, description, permission count, Edit/View, Clone, Delete) plus a new "+ New role" button (gated on `roles.create`)
-- Role creation and editing both go through `PermissionForm.tsx` — `role` prop present = edit mode (unchanged from r9), absent + `onCreate` provided = create mode (name + description fields, reserved-name validation mirroring the backend's `roleNamePattern`, empty permission set to start)
-- Permission categorization moved to shared `lib/permissionGroups.ts` (`GROUPS`/`RESOURCE_LABEL`), imported by both this form and the new member override panel — added all 25 HRM resources, which had no picker entry at all before r10
-- No `/[orgId]/settings/roles/:roleId` route — permission editing/creation still happens via drawer, not a separate detail route (unchanged)
-- No permission matrix view (all roles × all permissions) — unchanged gap, not part of this pass
+`/[orgId]/settings/profile` (avatar crop modal included) · `/[orgId]/security/sessions`
 
-### PROFILE & SETTINGS [🔵 ACTIVE]
+### CRM — LEADS [✅ DONE]
 
-- `/settings/profile` — Edit display name, avatar, timezone
-- `/settings/security` — Active sessions list, revoke session, login history
+`/[orgId]/crm/leads` — list, filters, `LeadForm`, `ConvertForm` (contact + deal creation).
 
-### CRM — LEADS [🔵 ACTIVE]
+### CRM — CONTACTS & COMPANIES [✅ DONE]
 
-- `/[orgId]/crm/leads` — Lead list with filters (status, source, owner)
-- Lead detail page or side panel
-- Convert lead flow → creates contact + deal
+`/[orgId]/contacts` · `/[orgId]/companies` · `/[orgId]/companies/:companyId` — note the frontend URLs are NOT nested under `/crm/`; the backend API routes are (`/organizations/:orgId/crm/...`). Known and fine.
 
-### CRM — CONTACTS [✅ DONE — gap closed, verified r9]
+### CRM — PIPELINE & DEALS [✅ DONE]
 
-- `/[orgId]/contacts` — Contacts list with search
-- `/[orgId]/companies` — Companies list
-- `/[orgId]/companies/:companyId` — Company detail with linked contacts
-- **Route-shape correction (r9):** these pages live at `/[orgId]/contacts` and `/[orgId]/companies`, not nested under `/[orgId]/crm/...` as this doc previously implied. The backend API routes are still under `/organizations/:orgId/crm/contacts` and `/organizations/:orgId/crm/companies` (Section 5) — only the frontend URL structure differs from the API path, which is fine, just worth knowing when navigating the codebase.
-- **Previously known gap — confirmed closed:** `main.go` wires `contacts.RegisterRoutes` (line ~460), `frontend/src/lib/crm/contacts.ts` and `.../companies.ts` call the correct paths, and `frontend/src/types/crm.ts` has a single, non-conflicting `Contact` interface.
+`/[orgId]/crm/pipeline` — kanban, drag-to-move, `DealForm`, won/lost.
 
-### CRM — PIPELINE & DEALS [🔵 ACTIVE]
+### CRM — REPORTS [✅ DONE]
 
-- `/[orgId]/crm/pipeline` — Kanban board view (deals by stage), drag-to-move
-- Deal detail side panel or page
-- Mark won/lost
+`/[orgId]/crm/reports` — overview dashboard per the Dashboard Page Pattern.
 
-### CRM — REPORTS [🔵 ACTIVE]
+### CRM — AGENDA [✅ DONE — post-r10, folded into doc r11]
 
-- `/[orgId]/crm/reports` — Overview dashboard
-  - Deals by stage (bar chart)
-  - Deals by owner (table)
-  - Leads by source (pie/donut)
-  - Overdue tasks (list)
-  - Activity stats (summary cards)
+`/[orgId]/crm/agenda` — "today view" over `GET /crm/reports/agenda` (TanStack Query, permission-gated).
 
-### SECURITY [🔵 ACTIVE]
+### CRM — SETUP [✅ DONE — post-r10, folded into doc r11]
 
-- `/[orgId]/security/sessions` — Session list, revoke session
-- `/[orgId]/security/events` — Login event log
+`/[orgId]/crm/setup/routing` — lead round-robin settings (crm_settings)
+`/[orgId]/crm/setup/templates` — template CRUD (`TemplateForm`)
 
-### HRM [✅ DONE — all 8 phases complete, verified r9]
+### CRM — CAPTURE [⚪ NOT STARTED — backend exists, zero frontend]
 
-All under `/[orgId]/hrm/...` (`frontend/src/app/(dashboard)/[orgId]/hrm/`), with matching components in `frontend/src/components/hrm/` and API helpers in `frontend/src/lib/hrm/`.
+Planned (Task.md Steps 8–10): `/[orgId]/crm/setup/capture` (API key list + create drawer with show-once raw key + embed code panel; email + social tabs) and `/[orgId]/crm/capture/visitors` (visitor list). New `lib/crm/capture.ts`, `types/capture.ts`. Must also add the `capture.*` group to `lib/permissionGroups.ts`.
 
-- `/[orgId]/hrm/departments` · `/[orgId]/hrm/positions` — org structure
-- `/[orgId]/hrm/employees` — employee CRUD
-- `/[orgId]/hrm/leave` — leave requests
-- `/[orgId]/hrm/attendance` — attendance records
-- `/[orgId]/hrm/payroll` — payslips, payroll runs
-- `/[orgId]/hrm/lifecycle` — promotions, transfers, resignations, terminations
-- `/[orgId]/hrm/warnings` — employee warnings
-- `/[orgId]/hrm/compliance` — complaints, employee documents, acknowledgements
-- `/[orgId]/hrm/recognition` — awards, announcements
-- `/[orgId]/hrm/reports` — HRM reporting dashboard
-- `/[orgId]/hrm/setup/{approvals,document-templates,holidays,salary,shifts,warning-types}` — configuration screens
+### HRM [✅ DONE — statuses setup added post-r10]
 
-**Approval integration:** `ApprovalInstanceView` drawer (approve/reject actions) is wired into the Warnings, Recognition, and Lifecycle pages wherever a record's `approval_instance_id` is non-null — confirmed present in all three page files.
+All under `/[orgId]/hrm/...`: departments, positions, employees, leave, attendance, payroll, lifecycle, warnings, compliance, recognition, reports, and setup/{approvals, document-templates, holidays, salary, shifts, warning-types, **statuses**}. `ApprovalInstanceView` drawer wired into Warnings, Recognition, and Lifecycle pages.
 
 ---
 
-## 9. MOBILE ARCHITECTURE
+## 9. UNBUILT MODULE REGISTRY
 
-_Status: ⏸️ paused, see Section 11 — architecture below is decided and still valid, implementation just isn't the current priority._
+### MOBILE APP [🔵 ACTIVE — architecture restored, backend contract defined, zero code written]
 
-Expo + React Native client. Ports the same architecture as the web frontend (Section 7) wherever the platform allows, and only diverges where native constraints force it — token storage is the main one.
+Expo + React Native. Full architecture restored from the r10 archive: Section 14 (Mobile
+Architecture) and Section 15 (Mobile Module Registry) — decided, not redesigned. Backend contract
+is a real entry now: Section 5 → AUTH → MOBILE. Suggested starting point: AUTH SCREENS
+(Section 15) paired with the AUTH — MOBILE backend routes, mirroring how every other module here
+starts with auth before anything else.
+
+---
+
+### CRM — ADVANCED FUNCTIONALITY PASS [🔵 ACTIVE — capture in flight]
+
+Mridha's wish list, triaged by buildability. **In flight now:** lead auto-capture (Section 5 → CAPTURE: fix pass + frontend). **Shipped from this list:** lead routing round-robin, templates & snippets, agenda/smart-task view.
+
+**Contained — no new infrastructure or one well-understood integration:**
+
+- Activity metrics reporting (calls/meetings/deals-closed per rep)
+- Sales forecasting (weighted pipeline by historical win rate per stage)
+- Data enrichment on company domain (Clearbit or Apollo — real per-lookup cost)
+- Trigger-based actions — small hardcoded set first ("on Closed Won, do X"), not a rule engine
+
+**Needs new infrastructure first, or a real ongoing vendor cost:**
+
+- Reminders / SLA alerts — needs a background job scheduler and a notification delivery path; neither exists
+- Real Facebook/LinkedIn lead-ad integration (Graph API fetch, OAuth connect, field-mapping UI) — upgrades the current webhook skeleton
+- Visitor IP→company enrichment (IPinfo/Clearbit + Redis queue + worker) — upgrades current manual identify
+- Meeting scheduling via Calendly — mostly a webhook integration
+- Sales velocity (time-in-stage) — needs a stage-transition history table first (`crm_deals` only stores current `stage_id`)
+- SMS via Twilio — contained but new vendor + per-message cost
+
+**Major, multi-week-plus:**
+
+- Two-way email sync (Gmail/Outlook) — reconcile with Email Sending below, don't build twice
+- Telephony / call recording / transcription
+- Automated sequences/cadences — mini workflow engine; depends on email sync for reply detection
+- CPQ + e-signature
+- Invoicing/accounting integration — decide external-integration vs future in-house Accounting module
+- Ticketing/Helpdesk — its own product, wasn't on the original module list
+
+**Likely not worth pursuing:** LinkedIn message sync (no official API; scraping is fragile and ToS-risky).
+
+---
+
+### MFA / 2FA [⚪ NOT STARTED]
+
+TOTP enrollment + verification, backup codes, per-org enforcement policy. Lives in `internal/auth/`; needs a secrets table and a frontend enroll/verify flow.
+
+---
+
+### SOCIAL LOGIN / SSO [⚪ NOT STARTED]
+
+Google / Microsoft / GitHub OAuth flows. `POST /api/v1/auth/oauth/sync` already exists as the backend hook; this item is the provider-specific flow wiring.
+
+---
+
+### EMAIL SENDING [⚪ NOT STARTED]
+
+Transactional provider (SES / Postmark / Resend) for verification, invites, password reset — currently token-only. Also unblocks the forgot/reset-password frontend pages. Distinct from capture's inbound email parsing, but if Postmark is chosen, one account can serve both inbound and outbound — decide together.
+
+---
+
+### RESOURCE-LEVEL PERMISSIONS [⚪ NOT STARTED]
+
+Per-record access control ("only deals they own") beyond module/action RBAC. Touches every repository's query layer — needs its own ADR when it starts.
+
+---
+
+### BILLING & SUBSCRIPTION MANAGEMENT [⚪ NOT STARTED]
+
+Payment provider, plan tiers, usage limits, invoices, billing UI. `organization_usage` and `organizations.max_seats` already exist as head starts.
+
+---
+
+### HRM FUNCTIONALITY PASS [⚪ NOT STARTED]
+
+Post-completion polish pass over the shipped HRM module, same spirit as the CRM pass. Includes the known open item: approval-instance list endpoint.
+
+---
+
+### PROJECT MANAGEMENT MODULE [⚪ NOT STARTED]
+
+Full projects module (milestones, dependencies) — broader than the generic `task` module, which stays a simple RBAC-testing CRUD.
+
+---
+
+### E-COMMERCE ADMIN MODULE [⚪ NOT STARTED]
+
+Per the original long-term vision.
+
+---
+
+### ACCOUNTING MODULE [⚪ NOT STARTED]
+
+Per the original long-term vision.
+
+---
+
+### ERP MODULE [⚪ NOT STARTED — scope undefined]
+
+Umbrella term; may end up being HRM + Accounting + Projects + Inventory combined rather than a standalone build. Real scoping needs those three to exist first, since that's what "ERP" would be built out of.
+
+---
+
+### FULL PRODUCTION DEPLOYMENT [⚪ NOT STARTED]
+
+Confirmed not started (r9 audit; unchanged): no Sentry SDK, no Caddyfile, `deploy.yml` is a stub. Scope when picked up: `docker-compose.prod.yml`, TLS (Caddy), production env/secrets, Sentry, backups, VPS + DNS. **Hard prerequisite:** Capture Fix Pass B must be complete before any deployment — two webhook endpoints are currently unauthenticated.
+
+---
+
+### MOBILE APP [⚪ NOT STARTED]
+
+Expo + React Native. Architecture was fully designed (folder structure, SecureStore token strategy, Expo Router guards, theming, EAS pipeline) and is archived in this doc's r10 revision (git history) — restore those sections when this item starts. Zero code exists. Backend contract sketch lives in Section 5 → AUTH → Mobile variants.
+
+---
+
+## 10. CORE SECURITY STANDARDS
+
+These apply to every line of code in this project. Never compromise on these.
+
+**Backend:**
+
+- Never store plaintext passwords — bcrypt always
+- Never store raw refresh/reset/email tokens — hash first, store hash
+- Never store raw API keys — SHA-256 hash + display prefix only; raw value returned exactly once at creation
+- Never log passwords, tokens, API keys, secrets, or any sensitive data
+- Parameterized SQL only — never string-concatenate SQL
+- Validate all request bodies at handler layer
+- Sanitize and normalize email (lowercase, trim)
+- Return generic errors for login and auth operations — never reveal why login failed
+- Log detailed errors server-side only
+- Secure CORS (explicit origins, no wildcard in production)
+- `HttpOnly: true` on refresh cookie — always, not configurable
+- Transactions for multi-step write operations
+- Audit log for: login attempts, logout, password reset, role changes, permission changes
+- **Webhook endpoints must verify provider signatures (HMAC / X-Hub-Signature-256) before processing — an unverified webhook is an unauthenticated write endpoint** (Fix Pass B closes the current gap)
+- Every public (`/pub/*`) endpoint gets Redis-backed rate limiting — per API key where one exists, per IP otherwise
+- Public endpoints never leak internal state: no validation detail in error responses, no internal IDs beyond `public_id`
+- Third-party access tokens (social integrations) are encrypted at rest once real OAuth lands — never serialized in JSON responses
+
+**Frontend:**
+
+- Access token in `lib/token.ts` module variable only — never Zustand, never localStorage, never sessionStorage
+- Refresh token is httpOnly cookie — frontend never reads it, never stores it
+- Raw API keys shown once, never stored client-side beyond the creation modal
+- Never add `persist` middleware to `authStore` or `permissionStore`
+- `withCredentials: true` on all API requests
+- Never show stack traces or backend error internals in UI
+- Permission checks are UX only — backend enforces on every request
+- No sensitive data in URL query params
+
+---
+
+## 11. DEVELOPMENT WORKFLOW
+
+### Before implementing any feature
+
+1. State what the feature is and which backend routes it uses
+2. Identify which frontend files to create or modify
+3. Identify any backend changes needed (new endpoint, field added, etc.)
+4. Then provide code — complete files, not snippets, unless snippet is explicitly asked for
+
+### When writing code
+
+- Always include file paths as comments at top of file
+- Prefer complete files when practical
+- Use idiomatic Go for backend (`context.Context` in service/repo, explicit error handling)
+- Use idiomatic Next.js + TypeScript for frontend (no `any`, proper async/await)
+- Keep API calls in `lib/api.ts` or module-specific API helpers — not inside components
+- Keep business logic out of components — components should be dumb consumers
+- **Review AI-assisted output before committing** — no stream-of-consciousness comments, no "task says" references, no unresolved "Wait, let me check…" left in source. If a comment asks a question, answer it or delete it. (Added r11 after the capture audit found exactly this, hiding a feature-breaking bug.)
+
+### When reviewing code
+
+1. Score out of 10
+2. What is good
+3. Problems found
+4. Security risks
+5. Refactor suggestions
+6. Corrected code if needed
+7. Final recommendation
+
+### When debugging
+
+1. Ask for or look at the exact error, relevant file, and context
+2. Explain root cause
+3. Provide the smallest safe fix first
+4. Then suggest a better long-term fix if different
+
+---
+
+## 12. RESPONSE FORMAT
+
+### For implementation tasks
+
+1. Goal
+2. Files to create or modify
+3. Code (complete files with path comments)
+4. Explanation of key decisions
+5. Security notes (if relevant)
+6. What to do next
+
+### For architecture questions
+
+1. Simple explanation
+2. Recommended choice for this project
+3. Alternatives considered
+4. Trade-offs
+5. Final decision
+
+### For feature planning / brainstorming
+
+1. Summarize what we're solving
+2. Options or approaches
+3. Recommended approach
+4. What it unlocks next
+
+---
+
+## 13. VERSION AWARENESS
+
+Before writing code that depends on any of these, check for version-specific API differences:
+
+| Package / Framework | Version in use                                                 |
+| ------------------- | -------------------------------------------------------------- |
+| Go                  | 1.25                                                           |
+| Fiber               | v3.2.0                                                         |
+| pgx                 | v5.6.0                                                         |
+| go-redis            | v9.19.0                                                        |
+| golang-jwt/jwt      | v5.3.1                                                         |
+| expr-lang/expr      | v1.17.8                                                        |
+| Next.js             | 16.2.9 (check if unsure)                                       |
+| Tailwind CSS        | v4                                                             |
+| React               | latest stable                                                  |
+| Zustand             | v5                                                             |
+| next-themes         | latest stable                                                  |
+| React Hook Form     | v7                                                             |
+| TanStack Query      | v5                                                             |
+| Axios               | v1                                                             |
+| Expo SDK            | 57 (57.0.7 — confirm exact patch at scaffold time, moves fast) |
+| Expo Router         | bundled with Expo SDK 57                                       |
+| React Native        | 0.86 (bundled with SDK 57) — check package.json after scaffold |
+| expo-secure-store   | latest compatible with SDK 57                                  |
+
+`create-expo-app@latest` without `--template default@sdk-57` currently defaults to SDK 54 during
+the transition window — pass the flag explicitly.
+
+Do not use Fiber v2 API patterns with Fiber v3.
+
+Tailwind v4 syntax — always use these, never the v3 equivalents:
+
+- CSS entry point is `@import "tailwindcss";` — never the three `@tailwind base; @tailwind components; @tailwind utilities;` directives
+- Theme config lives in CSS via `@theme { --color-x: ...; }` (this is already how `globals.css` is set up, Section 7) — never add a `tailwind.config.js` expecting `theme.extend` to work by default; v4 doesn't require one
+- Gradients are `bg-linear-to-r`, `bg-linear-45`, etc. — not `bg-gradient-to-r`
+- Referencing a CSS variable in an arbitrary value uses parentheses — `bg-(--brand-color)`, not `bg-[--brand-color]`. Square brackets stay for literal arbitrary values like `bg-[#4f46e5]`.
+- Default border color is `gray-200`, not `currentColor` — don't assume a bare `border` inherits text color like it did in v3
+- Custom utility classes are defined with `@utility` directly in CSS, not a JS plugin's `addUtilities()` callback
+
+---
+
+## 14. MOBILE ARCHITECTURE
+
+Restored from the r10 archive, r14 — decided, not redesigned. Expo + React Native client. Ports
+the web frontend's architecture (Section 7) wherever the platform allows; diverges only where
+native constraints force it — token storage is the main one.
 
 ### Folder Structure
 
-```
 mobile/
-  app/                        ← Expo Router file-based routes
-    (auth)/
-      login.tsx
-      signup.tsx
-      forgot-password.tsx
-      reset-password.tsx
-    (dashboard)/
-      [orgId]/
-        index.tsx             ← dashboard home
-        tasks/
-        crm/
-          leads/
-          contacts/
-          companies/
-          pipeline/
-          deals/
-          reports/
-        settings/
-          members/
-          roles/
-        security/
-    create-organization.tsx
-    select-organization.tsx
-    _layout.tsx                ← root layout: theme provider + auth gate
-  components/
-    ui/                        ← primitive components (button, input, badge, etc.)
-    layout/                    ← tab bar / header, org switcher
-    crm/
-    tasks/
-    rbac/
-  lib/
-    api.ts                     ← Axios client, same interceptor shape as frontend/lib/api.ts
-    auth.ts                    ← auth helpers, silent refresh, logout
-    secureToken.ts             ← SecureStore-backed refresh token + in-memory access token
-    constants.ts
-  stores/
-    authStore.ts                ← same shape as frontend
-    permissionStore.ts
-    uiStore.ts                  ← persisted via AsyncStorage instead of localStorage
-  hooks/
-    useAuth.ts
-    usePermission.ts
-    useOrg.ts
-  theme/
-    tokens.ts                   ← same colors as globals.css, as a plain JS object
-    ThemeProvider.tsx
-  types/                        ← mirrors frontend/src/types/*
-```
+app/ ← Expo Router file-based routes
+(auth)/
+login.tsx
+signup.tsx
+forgot-password.tsx
+reset-password.tsx
+(dashboard)/
+[orgId]/
+index.tsx ← dashboard home
+tasks/
+crm/
+leads/ contacts/ companies/ pipeline/ deals/ reports/
+settings/
+members/ roles/
+security/
+create-organization.tsx
+select-organization.tsx
+\_layout.tsx ← root layout: theme provider + auth gate
+components/
+ui/ layout/ crm/ tasks/ rbac/
+lib/
+api.ts auth.ts secureToken.ts constants.ts
+stores/
+authStore.ts permissionStore.ts uiStore.ts
+hooks/
+useAuth.ts usePermission.ts useOrg.ts
+theme/
+tokens.ts ThemeProvider.tsx
+types/ ← mirrors frontend/src/types/\*
 
 ### Auth Flow (mobile)
 
-1. Login → POST `/api/v1/auth/mobile/login` → receive `{ access_token, refresh_token, expires_in }` in the body — no cookie involved
-2. Store `refresh_token` via `expo-secure-store`; keep `access_token` in an in-memory module variable (`lib/secureToken.ts`) — same separation principle as web, different storage mechanism
+1. Login → `POST /api/v1/auth/mobile/login` → `{ access_token, refresh_token, expires_in }` in
+   the body, no cookie involved
+2. Store `refresh_token` via `expo-secure-store`; keep `access_token` in an in-memory module
+   variable (`lib/secureToken.ts`) — same separation principle as web, different storage mechanism
 3. Set user + org in `authStore`, permissions in `permissionStore` — identical shape to web
 4. Axios request interceptor attaches `Authorization: Bearer <token>`
-5. On 401 → response interceptor reads the refresh token from SecureStore → POST `/api/v1/auth/mobile/refresh` with `{ refresh_token }` → store the new (possibly rotated) tokens → retry the original request
-6. Logout → read refresh token from SecureStore → POST `/api/v1/auth/mobile/logout` with `{ refresh_token }` → clear SecureStore + in-memory token → reset all stores
-7. On cold start → read refresh token from SecureStore → if present, call `mobile/refresh` before rendering any protected route; if it fails or is absent, route into `(auth)`
+5. On 401 → read the refresh token from SecureStore → `POST mobile/refresh` → store the new
+   (possibly rotated) tokens → retry the original request
+6. Logout → read refresh token from SecureStore → `POST mobile/logout` with `{ refresh_token }` →
+   clear SecureStore + in-memory token → reset all stores
+7. Cold start → read refresh token from SecureStore → if present, call `mobile/refresh` before
+   rendering any protected route; if it fails or is absent, route into `(auth)`
 
 ### Navigation & Route Protection
 
 - Expo Router — file-based, same mental model as the Next.js App Router already in use
-- `(auth)` and `(dashboard)` groups mirror the web's layout groups; `[orgId]` dynamic segment mirrors the web's URL-based org context
-- Gate the `(dashboard)` group with Expo Router's Protected Routes, keyed off `authStore.status === 'authenticated'`
+- `(auth)` / `(dashboard)` groups mirror the web's layout groups; `[orgId]` mirrors the web's
+  URL-based org context
+- Gate `(dashboard)` with Expo Router's Protected Routes, keyed off
+  `authStore.status === 'authenticated'`
 
 ### State Management
 
 Same three Zustand stores as web, ported with identical interfaces:
 
-- `authStore`, `permissionStore` — same hard rule: never add `persist` middleware, ever
-- `uiStore` may persist (theme, nav state) — via `@react-native-async-storage/async-storage`, since `localStorage` doesn't exist in React Native
+- `authStore`, `permissionStore` — never add `persist` middleware, ever
+- `uiStore` may persist (theme, nav state) via `@react-native-async-storage/async-storage`, since
+  `localStorage` doesn't exist in React Native
 
 ### Theming
 
-- No CSS variables on native. Port the same values from `globals.css` into a plain `theme/tokens.ts` object with `dark` and `light` variants
-- RN's built-in `useColorScheme()` supplies the OS-level default; `uiStore.theme` overrides it once the user picks explicitly — same behavior as `next-themes`, different mechanism
-- Load Inter via `expo-font` (`useFonts`) — one typeface family, matching web. Without this, text silently falls back to system fonts and breaks visual consistency.
-- Plain `StyleSheet.create` for a first pass rather than pulling in a Tailwind-for-RN library — keeps the surface area small; revisit if styling velocity becomes a problem
+- No CSS variables on native — port `globals.css` values into a plain `theme/tokens.ts` object
+  with `dark`/`light` variants
+- RN's `useColorScheme()` supplies the OS-level default; `uiStore.theme` overrides it once picked
+  — same behavior as `next-themes`, different mechanism
+- Load Inter via `expo-font` (`useFonts`) — one typeface family, matching web
+- Plain `StyleSheet.create` for a first pass rather than a Tailwind-for-RN library — revisit only
+  if styling velocity becomes a real problem
 
 ### API Client Contract
 
@@ -1100,326 +1352,92 @@ const api = axios.create({ baseURL: process.env.EXPO_PUBLIC_API_URL });
 ### Component Quality Standard (mobile)
 
 - Fully themed dark/light, same design tokens as web
-- Indigo accent on interactive elements
-- One typeface (Inter), same scale hierarchy as web — no separate display font
-- Native feel over pixel-parity — respect iOS vs Android navigation conventions, safe areas, haptics (`expo-haptics`) on key actions
+- Indigo accent on interactive elements, one typeface (Inter), same scale hierarchy as web
+- Native feel over pixel-parity — iOS vs Android navigation conventions, safe areas, haptics
+  (`expo-haptics`) on key actions
 - Designed loading/empty/error states, not default RN placeholders
-- A screen isn't done until it's been checked on both iOS and Android
+- A screen isn't done until checked on both iOS and Android
 
 ### Deployment
 
-- EAS Build for iOS/Android binaries, EAS Submit for store submission, EAS Update for OTA JS updates between store releases
-- Expo Go is fine for early development only — move to development builds well before anything resembling production; Expo Go tracks only the latest SDK and isn't meant for shipped apps
+- EAS Build for iOS/Android binaries, EAS Submit for store submission, EAS Update for OTA JS
+  updates between store releases
+- Expo Go for early development only — move to development builds before anything
+  production-like; Expo Go tracks only the latest SDK
+
+### Version note (added r14)
+
+Current stable is **Expo SDK 57** (57.0.7 as of this week), riding **React Native 0.86** /
+**React 19.2** — confirms the number this doc guessed pre-r10. One scaffolding gotcha:
+`create-expo-app@latest` without a template flag is still defaulting to **SDK 54** during the
+transition window — use `--template default@sdk-57` explicitly. Re-confirm both numbers the day
+you actually scaffold; Expo SDKs move fast enough that this note itself may be stale by then.
+
+## 15. MOBILE MODULE REGISTRY
+
+Same status convention as Section 5/8/9. Nothing built yet — flips to `🔵 ACTIVE` per screen
+group as work starts on it, same promotion pattern as Section 9.
+
+Scope note (added r14): this v1 list predates several web features shipped since r10 — Agenda,
+Setup/Routing, Templates, Capture. They're intentionally not represented here; decide inclusion
+explicitly when this registry is next revisited, don't assume either way.
 
 ---
 
-## 10. MOBILE MODULE REGISTRY
-
-Same status convention as Section 5/8. Nothing here is built yet — everything starts `⚪ QUEUED` and flips to `🔵 ACTIVE` the moment work starts on it, one screen group at a time.
-
-Suggested v1 scope below is the highest-value, most mobile-native slice rather than a full port of every admin screen — Settings/Roles and Security are flagged lower priority. Override freely.
-
----
-
-### AUTH SCREENS [⚪ QUEUED]
+### AUTH SCREENS [⚪ NOT STARTED — natural starting point]
 
 Login, signup, forgot password, reset password — same fields as web (Section 8, AUTH PAGES).
+Pairs with Section 5 → AUTH → MOBILE on the backend.
 
 ---
 
-### ONBOARDING [⚪ QUEUED]
+### ONBOARDING [⚪ NOT STARTED]
 
 Create organization, select organization — shown after login when no org context exists.
 
 ---
 
-### DASHBOARD SHELL [⚪ QUEUED]
+### DASHBOARD SHELL [⚪ NOT STARTED]
 
 Tab bar or drawer navigation (mobile equivalent of the web sidebar), org switcher, profile menu.
 
 ---
 
-### TASKS [⚪ QUEUED]
+### TASKS [⚪ NOT STARTED]
 
 List with filters, create/edit, permission-gated actions — same permission set as web (`tasks.*`).
 
 ---
 
-### CRM — LEADS & PIPELINE [⚪ QUEUED]
+### CRM — LEADS & PIPELINE [⚪ NOT STARTED]
 
-Lead list + detail, convert flow, pipeline board (list view first — a full drag-to-reorder Kanban is a lot of native gesture work for v1; move-via-menu instead of drag, revisit later).
+Lead list + detail, convert flow, pipeline board (list view first — full drag-to-reorder Kanban is
+a lot of native gesture work for v1; move-via-menu instead of drag, revisit later).
 
 ---
 
-### CRM — CONTACTS [⚪ QUEUED]
+### CRM — CONTACTS [⚪ NOT STARTED]
 
 Contacts and companies list + detail.
 
 ---
 
-### CRM — REPORTS [⚪ QUEUED — v1: summary cards only]
+### CRM — REPORTS [⚪ NOT STARTED — v1: summary cards only]
 
-Full charts (Section 8's bar/pie breakdowns) are a lot of screen real estate for mobile — start with summary numbers, add charts later if it earns its place.
+Full charts (Section 8's bar/pie breakdowns) are a lot of screen real estate for mobile — start
+with summary numbers, add charts later if they earn their place.
 
 ---
 
-### SETTINGS — MEMBERS, ROLES & PERMISSIONS [⚪ QUEUED — lower priority]
+### SETTINGS — MEMBERS, ROLES & PERMISSIONS [⚪ NOT STARTED — lower priority]
 
 Admin-heavy screens, arguably fine to stay web-only for v1. Revisit after the above ships.
 
 ---
 
-### SECURITY [⚪ QUEUED — lower priority]
+### SECURITY [⚪ NOT STARTED — lower priority]
 
 Session list, revoke, login events. Likely fine as web-only initially too.
-
----
-
-## 11. UPCOMING MODULES — BUILD QUEUE
-
-Everything below is real, planned work — not a do-not-touch list. `⚪ QUEUED` means no code exists yet; the moment one of these starts, it gets promoted here to `🔵 ACTIVE` and gets a full entry in Section 5 and/or Section 8 with real routes and permissions, the same as any other module. Working through this list is the current priority, one item at a time — see Section 2 for which one is active now.
-
----
-
-### MFA / 2FA [⚪ QUEUED]
-
-TOTP enrollment + verification, backup codes, per-org enforcement policy. Would live in `internal/auth/`; needs a new table for secrets and a frontend enrollment/verify flow. Nothing blocking a start.
-
----
-
-### SOCIAL LOGIN / SSO [⚪ QUEUED]
-
-Google / Microsoft / GitHub OAuth flows — consent screen, token exchange. `POST /api/v1/auth/oauth/sync` already exists as a backend hook (Section 5, AUTH) but no provider-specific flow is wired end-to-end. This item is that remaining work, not a from-scratch build.
-
----
-
-### EMAIL SENDING [⚪ QUEUED]
-
-Transactional email provider integration (SES / Postmark / Resend / etc.) for verification, invites, and password reset — currently all token-only. Distinct from the CRM lead auto-capture system's inbound email parsing, which is a separate, already-designed initiative. Unblocks real invite delivery and real password-reset UX once built.
-
----
-
-### CRM — ADVANCED FUNCTIONALITY PASS [⚪ QUEUED — being scoped, r10]
-
-Mridha's full wish list (r10), organized by buildability rather than the original 5-category order — more useful for sequencing. Nothing started.
-
-**Contained — no new infrastructure, no new vendor relationship, or one well-understood API integration:**
-
-- Lead routing/assignment (round-robin, territory rules)
-- Templates & snippets
-- Smart task dashboard (priority-ranked "today's tasks" over existing data)
-- Activity metrics reporting (calls/meetings/deals-closed per rep)
-- Sales forecasting (weighted pipeline by historical win rate per stage, not a flat sum)
-- Data enrichment on company domain (Clearbit or Apollo — single integration point, real per-lookup cost)
-- Trigger-based actions — start as a small hardcoded set ("on Closed Won, do X/Y/Z"), not a general rule engine
-
-**Needs new infrastructure first, or a real ongoing vendor cost:**
-
-- Reminders / SLA alerts ("no contact in 48h", "stuck in stage 14 days") — needs a background job scheduler and a notification delivery path, neither exists yet; blocked on that, not on CRM logic
-- Meeting scheduling via Calendly — moderate, mostly a webhook integration
-- Sales velocity (time-in-stage) — confirmed no stage-transition history exists (`crm_deals` only stores current `stage_id`, no log table); needs a schema addition before it's buildable at all
-- SMS via Twilio — contained, but a new vendor relationship + per-message cost
-
-**Major, multi-week-plus, each closer to its own product than a CRM feature:**
-
-- Two-way email sync (Gmail/Outlook) — real OAuth/sync complexity, and overlaps with the already-designed-but-unbuilt lead auto-capture email parsing (Email Sending entry, above) — reconcile into one plan, don't build twice
-- Telephony / call recording / transcription — vendor integration, per-minute cost, recording storage (fits an attachments-style pattern), a transcription provider
-- Automated sequences/cadences — a mini workflow engine (multi-step, wait conditions, branch on reply) — probably the single most complex item here, and depends on email sync for reply detection
-- CPQ + e-signature (DocuSign) — a full quoting/proposal product in its own right
-- Invoicing/accounting integration (Stripe/QuickBooks/Xero) — overlaps with the already-deferred Accounting and Billing modules (below); worth deciding if this means "integrate with external tools" or "this is part of the future in-house Accounting module"
-- Ticketing/Helpdesk — a full support-ticketing system, not a CRM feature; wasn't on the original long-term module list (CRM/HRM/Accounting/Projects/E-commerce) at all
-
-**Likely not worth pursuing at this stack/scale:**
-
-- LinkedIn message sync — no official third-party API; competitors mostly rely on browser-extension scraping, fragile and ToS-risky
-
-Next step: pick a tier, or specific items. Nothing prioritized within a tier yet.
-
----
-
-### RESOURCE-LEVEL PERMISSIONS [⚪ QUEUED]
-
-Per-record access control (e.g. "can only see deals they own"), beyond today's module/action-level RBAC. Large surface area — touches every repository's query layer. Give this its own ADR when it starts.
-
----
-
-### BILLING & SUBSCRIPTION MANAGEMENT [⚪ QUEUED]
-
-Payment provider integration, plan tiers, usage limits, invoices, billing settings UI. The `organization_usage` table already exists in the schema (Section 6) — likely a head start for usage-based limits.
-
----
-
-### HRM MODULE — ✅ DONE, shipped (r9)
-
-Both backend and frontend complete, verified against source. Full detail lives in Section 5 (Backend Module Registry → HRM MODULE) and Section 8 (Frontend Module Registry → HRM). Kept here briefly for historical record per this doc's own update convention:
-
-- Backend: 30 HRM-specific migrations within the `00020`–`00050` range (one file in that range, `00048`, is unrelated CRM seed data), 40 tables, 25 sub-modules, 201 routes, Groups A–E plus a standalone Leave pair all shipped in the order originally planned (A → B → C → D → E) — confirmed by the seed-permission migrations (`00030`, `00035`, `00039`, `00042`, `00047`) marking the end of each group in sequence.
-- Frontend: all 8 phases shipped — every screen listed in Section 8's HRM entry exists and was found on disk.
-- Approval chain integration (Phase 7.7) wired end-to-end: callback registry pattern, all 5 gated modules registered in `main.go`, `ApprovalInstanceView` drawer live on the 3 relevant frontend pages.
-- One known open item carried forward: a missing approval-instance list endpoint (documented separately, not yet fixed).
-
----
-
-### PROJECT MANAGEMENT MODULE [⚪ QUEUED]
-
-A full projects module (milestones, dependencies, etc.) — broader than the existing generic `task` module, which stays a simple RBAC-testing CRUD.
-
----
-
-### E-COMMERCE ADMIN MODULE [⚪ QUEUED]
-
-Per the original long-term vision (CRM, HRM, Accounting, Projects, E-commerce).
-
----
-
-### ACCOUNTING MODULE [⚪ QUEUED]
-
-Part of the stated long-term vision; added here alongside the rest — drop it if it shouldn't be tracked.
-
----
-
-### ERP MODULE [⚪ QUEUED — scope undefined]
-
-"ERP" is an umbrella term rather than a concretely scoped module like HRM or CRM. It may end up being the combination of HRM + Accounting + Projects + Inventory rather than a standalone build — worth pinning down scope before this one gets picked up.
-
----
-
-### FULL PRODUCTION DEPLOYMENT [⚪ QUEUED — confirmed not started, r9]
-
-Previously documented as substantially done (`docker-compose.prod.yml`, Caddy TLS, `.env.production`, Sentry, nightly rclone backup — all supposedly done, with only VPS/DNS/secrets/deploy left). The r9 audit found none of that in the repo — no Sentry SDK, no Caddyfile, `deploy.yml` still literally says "No real deployment happens yet." **Confirmed by Mridha (r9): not actually started.** That earlier "in progress" status was simply wrong.
-
-**Deliberately last in the queue.** Mridha's confirmed priority order (r9) is RBAC → CRM functionality pass → HRM functionality pass → (rest of this queue, unordered) → Production Deployment. This is not being worked on now and shouldn't be treated as close.
-
----
-
-### MOBILE APP [⏸️ PAUSED]
-
-Expo + React Native. Architecture decided — see Section 9 (Mobile Architecture) and Section 10 (Mobile Module Registry), both still valid for whenever this resumes. Paused, not abandoned: no code written yet, so nothing is being left mid-flight. Deprioritized in favor of RBAC overrides + CRM/HRM completion (Section 2, Current Focus).
-
----
-
-## 12. CORE SECURITY STANDARDS
-
-These apply to every line of code in this project. Never compromise on these.
-
-**Backend:**
-
-- Never store plaintext passwords — bcrypt always
-- Never store raw refresh/reset/email tokens — hash first, store hash
-- Never log passwords, tokens, secrets, or any sensitive data
-- Parameterized SQL only — never string-concatenate SQL
-- Validate all request bodies at handler layer
-- Sanitize and normalize email (lowercase, trim)
-- Return generic errors for login and auth operations — never reveal why login failed
-- Log detailed errors server-side only
-- Secure CORS (explicit origins, no wildcard in production)
-- `HttpOnly: true` on refresh cookie — always, not configurable
-- Transactions for multi-step write operations
-- Audit log for: login attempts, logout, password reset, role changes, permission changes
-
-**Frontend:**
-
-- Access token in `lib/token.ts` module variable only — never Zustand, never localStorage, never sessionStorage
-- Refresh token is httpOnly cookie — frontend never reads it, never stores it
-- Never add `persist` middleware to `authStore` or `permissionStore`
-- `withCredentials: true` on all API requests (needed for cookie to send)
-- Never show stack traces or backend error internals in UI
-- Permission checks are UX only — backend enforces on every request
-- No sensitive data in URL query params
-
----
-
-## 13. DEVELOPMENT WORKFLOW
-
-### Before implementing any feature
-
-1. State what the feature is and which backend routes it uses
-2. Identify which frontend files to create or modify
-3. Identify any backend changes needed (new endpoint, field added, etc.)
-4. Then provide code — complete files, not snippets, unless snippet is explicitly asked for
-
-### When writing code
-
-- Always include file paths as comments at top of file
-- Prefer complete files when practical
-- Use idiomatic Go for backend (`context.Context` in service/repo, explicit error handling)
-- Use idiomatic Next.js + TypeScript for frontend (no `any`, proper async/await)
-- Keep API calls in `lib/api.ts` or module-specific API helpers — not inside components
-- Keep business logic out of components — components should be dumb consumers
-
-### When reviewing code
-
-1. Score out of 10
-2. What is good
-3. Problems found
-4. Security risks
-5. Refactor suggestions
-6. Corrected code if needed
-7. Final recommendation
-
-### When debugging
-
-1. Ask for or look at the exact error, relevant file, and context
-2. Explain root cause
-3. Provide the smallest safe fix first
-4. Then suggest a better long-term fix if different
-
----
-
-## 14. RESPONSE FORMAT
-
-### For implementation tasks
-
-1. Goal
-2. Files to create or modify
-3. Code (complete files with path comments)
-4. Explanation of key decisions
-5. Security notes (if relevant)
-6. What to do next
-
-### For architecture questions
-
-1. Simple explanation
-2. Recommended choice for this project
-3. Alternatives considered
-4. Trade-offs
-5. Final decision
-
-### For feature planning / brainstorming
-
-1. Summarize what we're solving
-2. Options or approaches
-3. Recommended approach
-4. What it unlocks next
-
----
-
-## 15. VERSION AWARENESS
-
-Before writing code that depends on any of these, check for version-specific API differences:
-
-| Package / Framework | Version in use                                                           |
-| ------------------- | ------------------------------------------------------------------------ |
-| Go                  | 1.25                                                                     |
-| Fiber               | v3.2.0                                                                   |
-| pgx                 | v5.6.0                                                                   |
-| go-redis            | v9.19.0                                                                  |
-| golang-jwt/jwt      | v5.3.1                                                                   |
-| Next.js             | latest stable (check if unsure)                                          |
-| Tailwind CSS        | v4                                                                       |
-| React               | latest stable                                                            |
-| Zustand             | v5 (latest stable)                                                       |
-| next-themes         | latest stable                                                            |
-| React Hook Form     | v7                                                                       |
-| Axios               | v1                                                                       |
-| Expo SDK            | 57 (confirm exact patch via `npx create-expo-app` at scaffold time)      |
-| Expo Router         | bundled with Expo SDK 57                                                 |
-| React Native        | whatever SDK 57 pins — check `package.json` after scaffold, don't assume |
-| expo-secure-store   | latest compatible with SDK 57                                            |
-
-Do not use Fiber v2 API patterns with Fiber v3. Do not use Tailwind v3 class patterns that don't exist in v4. Expo SDK numbers move fast (three releases a year) — re-check the current version before scaffolding `mobile/`, don't trust this table blindly by the time you get to it.
-
----
 
 ## HOW TO UPDATE THIS DOCUMENT
 
@@ -1430,62 +1448,66 @@ When phase status changes:
 
 When a new backend module is added:
 
-- Add a new entry to Section 5 (Backend Module Registry) with its routes and permissions
+- Add a new entry to Section 5 with its routes and permissions
 
 When a new frontend page is built:
 
-- Update Section 8 (Frontend Module Registry)
+- Update Section 8
 
 When a new mobile screen is built:
 
-- Update Section 10 (Mobile Module Registry), same status convention as Section 5/8
-- Note any deviation from the architecture in Section 9 (Mobile Architecture) if the plan changes mid-build
+- Update Section 15 (Mobile Module Registry)
+- Note any deviation from Section 14 (Mobile Architecture) in Section 14 itself if the plan
+  changes mid-build — don't let the decided architecture silently drift from what's implemented
 
 When a Zustand store gains new fields:
 
-- Update the store interface in Section 7 (Zustand Store Definitions)
+- Update the store interface in Section 7
 - Never add token or sensitive credential fields — see hard rules
 
 When a major architectural decision is made:
 
 - Add a note to the relevant section (3, 4, or 7)
 
-When design tokens change (colors, spacing, radius):
+When design tokens change:
 
-- Update Section 3 (Design System) and `globals.css` together — keep them in sync
+- Update Section 3 and `globals.css` together — keep them in sync
 
-When something in the build queue starts real work:
+When something in the unbuilt module registry starts real work:
 
-- Update its status from `⚪ QUEUED` to `🔵 ACTIVE` in Section 11 (Upcoming Modules — Build Queue)
-- Add a proper entry to Section 5 and/or Section 8 with real routes and permissions
-- Mark it `✅ DONE` in Section 11 (or remove the entry) once it ships
+- Promote it in Section 9 (`⚪ NOT STARTED` → `🔵 ACTIVE`) and add a proper Section 5/8 entry
+- Mark it `✅ DONE` in Section 9 (or remove the entry) once it ships
 - Update Section 2's phase status if it changes the active phase
 
-When something _existing_ is modified, not added (r9):
+When something existing is modified, not added:
 
-- Route shape changes (a path moves, a param renames) — update the route block in Section 5/8/9/10 in place, don't leave the old shape sitting there uncorrected
-- A permission key is renamed, split, or merged — update every place it's listed (Section 5 module entry, Section 5 AUTHZ/RBAC key-permissions line if relevant)
-- A status flag becomes inconsistent across sections (e.g. Section 5 says `🔵 ACTIVE` for something Section 11 says is `⏸️ PAUSED` with no code) — this is a real bug in the document, not a style choice; fix it on sight, don't wait for a dedicated audit pass
+- Route shape changes — update the route block in Section 5/8 in place
+- A permission key is renamed, split, or merged — update every place it's listed
+- A status flag becomes inconsistent across sections — fix it on sight, don't wait for an audit pass
 
-When a documented assumption gets resolved (r9):
+When a documented assumption gets resolved:
 
-- Every "Assumption to confirm" note (e.g. the mobile signup/cookie one in Section 5) needs to be either deleted once confirmed true, or corrected with the real behavior once confirmed false — an unresolved assumption sitting in the doc for multiple revisions is a sign it was never checked
+- Delete once confirmed true, or correct with the real behavior once confirmed false — an unresolved assumption sitting for multiple revisions means it was never checked
 
-When the DB schema changes (r9):
+When the DB schema changes:
 
-- New table → add it to Section 6 Key Tables under the right group
-- Migration count changes → update Section 6's "Migration Count" line same-day, not on the next big audit — this number goes stale fastest of anything in the doc
-- A CHECK constraint, enum, or column is added/changed on an existing table in a way that affects API behavior → note it in the relevant Section 5 module entry, not just the migration file
+- New table → Section 6 Key Tables under the right group
+- Migration count changes → update Section 6 same-day — this number goes stale fastest of anything in the doc
+- A CHECK constraint, enum, or column change that affects API behavior → note it in the relevant Section 5 module entry
 
-When a new dependency is added (r9):
+When a new dependency is added:
 
-- Backend: add it to Section 15 (Version Awareness) with the version pinned
-- Frontend: same, plus note in Section 3 (Tech Stack) if it's a new category of tool (not just a version bump of something already listed)
+- Backend: Section 13 with version pinned
+- Frontend: same, plus Section 3 if it's a new category of tool
 
-Periodic structural drift audit (r9):
+When a module ships with known defects (r11):
 
-- Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence the way this r9 pass did, _then_ reconcile. The document has been wrong about migration counts, route counts, and ACTIVE/DONE status multiple times in a row; assume drift by default rather than assuming the doc is current
-- Cross-check Section 5 (backend) against Section 8 (frontend) against Section 11 (build queue) for the same module — these three have gone out of sync with each other (not just with the codebase) more than once
-- A doc pasted into a chat conversation is not guaranteed to be the same version as what's committed in the repo (`docs/Project_Instruction.md`) — confirmed happening at least once (r9). Whichever copy is more recent should overwrite the other after an update; don't let two versions silently diverge further
+- Ship status stays `🔵 ACTIVE`, never `✅ DONE`, until the known-open-items list is empty — a module that compiles but can't perform its core function is not done. Embed the defect list in the module's Section 5 entry so it can't be forgotten (see CAPTURE for the pattern).
+
+Periodic structural drift audit:
+
+- Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence, then reconcile. This document has been wrong about counts and statuses in every single revision audit so far (r9: HRM/deployment; r11: four whole shipped features missing). Assume drift by default.
+- Cross-check Section 5 (backend) against Section 8 (frontend) against Section 9 (unbuilt module registry) for the same module.
+- A doc pasted into a chat conversation is not guaranteed to be the committed `docs/Project_Instruction.md` — whichever copy is more recent should overwrite the other after an update.
 
 Keep this document current. A stale instruction is worse than no instruction.

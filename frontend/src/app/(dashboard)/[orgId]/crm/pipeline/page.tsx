@@ -25,6 +25,7 @@ import {
   Trophy,
   X,
   Pencil,
+  Trash2,
   Building2,
   User,
   Calendar,
@@ -35,11 +36,19 @@ import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { toast } from "sonner";
-import { listPipelines, listStages } from "@/lib/crm/pipelines";
+import {
+  listPipelines,
+  listStages,
+  createStage,
+  updateStage,
+  deleteStage,
+  deletePipeline,
+} from "@/lib/crm/pipelines";
 import {
   listDeals,
   createDeal,
   updateDeal,
+  deleteDeal,
   moveDeal,
   markDealWon,
   markDealLost,
@@ -48,6 +57,7 @@ import { listContacts } from "@/lib/crm/contacts";
 import { listCompanies } from "@/lib/crm/companies";
 import { queryKeys } from "@/lib/queryKeys";
 import DealForm from "@/components/crm/deals/DealForm";
+import { Select } from "@/components/ui/Select";
 import type {
   Deal,
   Stage,
@@ -91,6 +101,7 @@ interface MobileDealCardProps {
   onMove: (dealId: string, stageId: string) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
 }
 
 function MobileDealCard({
@@ -102,6 +113,7 @@ function MobileDealCard({
   onMove,
   onWon,
   onLost,
+  onDelete,
 }: MobileDealCardProps) {
   const [moveOpen, setMoveOpen] = useState(false);
   const contact = contactMap.get(deal.contact_id ?? "");
@@ -109,47 +121,55 @@ function MobileDealCard({
   const otherStages = stages.filter((s) => s.id !== deal.stage_id);
 
   return (
-    <div className="rounded-2xl p-4 border bg-[var(--bg-surface)] border-[var(--border)] active:scale-[0.99] transition-transform">
+    <div className="rounded-2xl p-4 border bg-(--bg-surface) border-(--border) active:scale-[0.99] transition-transform">
       {/* Title row */}
       <div className="flex items-start justify-between gap-2 mb-1">
         <p
-          className="text-sm font-semibold text-[var(--text-primary)] leading-snug"
+          className="text-sm font-semibold text-(--text-primary) leading-snug"
           style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
         >
           {deal.title}
         </p>
-        <button
-          onClick={() => onEdit(deal)}
-          className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] flex-shrink-0 transition-colors"
-        >
-          <Pencil size={12} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onEdit(deal)}
+            className="p-1.5 rounded-lg text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            onClick={() => onDelete(deal)}
+            className="p-1.5 rounded-lg text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Value */}
-      <p className="text-xl font-bold text-[var(--text-primary)] mb-3">
+      <p className="text-xl font-bold text-(--text-primary) mb-3">
         {formatCurrency(deal.value, deal.currency)}
       </p>
 
       {/* Meta */}
       <div className="space-y-1.5 mb-4">
         {company && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <Building2 size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <Building2 size={11} className="shrink-0" />
             <span className="truncate">{company.name}</span>
           </div>
         )}
         {contact && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <User size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <User size={11} className="shrink-0" />
             <span className="truncate">
               {contact.first_name} {contact.last_name ?? ""}
             </span>
           </div>
         )}
         {deal.close_date && (
-          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-            <Calendar size={11} className="flex-shrink-0" />
+          <div className="flex items-center gap-2 text-xs text-(--text-muted)">
+            <Calendar size={11} className="shrink-0" />
             <span>{formatDate(deal.close_date)}</span>
           </div>
         )}
@@ -157,7 +177,7 @@ function MobileDealCard({
 
       {/* Actions */}
       {deal.status === "open" ? (
-        <div className="flex items-center gap-2 pt-3 border-t border-[var(--border)]">
+        <div className="flex items-center gap-2 pt-3 border-t border-(--border)">
           <button
             onClick={() => onWon(deal)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 active:bg-emerald-500/20 transition-colors"
@@ -178,7 +198,7 @@ function MobileDealCard({
             <div className="relative ml-auto">
               <button
                 onClick={() => setMoveOpen((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] bg-[var(--bg-elevated)] border border-[var(--border)] active:bg-[var(--bg-base)] transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-(--text-secondary) bg-(--bg-elevated) border border-(--border) active:bg-(--bg-base) transition-colors"
               >
                 Move
                 <ChevronDown
@@ -200,10 +220,10 @@ function MobileDealCard({
                   />
                   {/* Stage list — appears above button */}
                   <div
-                    className="absolute right-0 bottom-full mb-2 w-52 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-2xl z-20"
+                    className="absolute right-0 bottom-full mb-2 w-52 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-2xl z-20"
                     style={{ maxHeight: "60vh", overflowY: "auto" }}
                   >
-                    <p className="px-3 py-2 text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-wider border-b border-[var(--border)]">
+                    <p className="px-3 py-2 text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-wider border-b border-(--border)">
                       Move to stage
                     </p>
                     {otherStages.map((stage) => (
@@ -213,12 +233,12 @@ function MobileDealCard({
                           onMove(deal.id, stage.id);
                           setMoveOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 px-3 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] transition-colors text-left"
+                        className="w-full flex items-center gap-2 px-3 py-3 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) transition-colors text-left"
                         style={{
                           fontFamily: "var(--font-inter, Inter, sans-serif)",
                         }}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 flex-shrink-0" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
                         {stage.name}
                       </button>
                     ))}
@@ -229,7 +249,7 @@ function MobileDealCard({
           )}
         </div>
       ) : (
-        <div className="pt-3 border-t border-[var(--border)]">
+        <div className="pt-3 border-t border-(--border)">
           <span
             className={`text-xs font-semibold ${STATUS_COLOR[deal.status]}`}
           >
@@ -252,6 +272,7 @@ interface DealCardProps {
   onEdit: (deal: Deal) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
   isDragOverlay?: boolean;
 }
 
@@ -262,6 +283,7 @@ function DealCard({
   onEdit,
   onWon,
   onLost,
+  onDelete,
   isDragOverlay,
 }: DealCardProps) {
   const {
@@ -299,7 +321,7 @@ function DealCard({
       {...attributes}
       className={`
         rounded-xl p-3.5 border select-none
-        bg-[var(--bg-surface)] border-[var(--border)]
+        bg-(--bg-surface) border-(--border)
         hover:border-purple-500/30 hover:shadow-md
         transition-colors duration-150
         ${isDragOverlay ? "shadow-2xl border-purple-500/40 rotate-1" : ""}
@@ -309,47 +331,59 @@ function DealCard({
       {/* Title + edit */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <p
-          className="text-sm font-medium text-[var(--text-primary)] leading-snug"
+          className="text-sm font-medium text-(--text-primary) leading-snug"
           style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
         >
           {deal.title}
         </p>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(deal);
-          }}
-          className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] flex-shrink-0 transition-colors"
-        >
-          <Pencil size={11} />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(deal);
+            }}
+            className="p-1 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
+          >
+            <Pencil size={11} />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(deal);
+            }}
+            className="p-1 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
       </div>
 
       {/* Value */}
-      <p className="text-base font-bold text-[var(--text-primary)] mb-2">
+      <p className="text-base font-bold text-(--text-primary) mb-2">
         {formatCurrency(deal.value, deal.currency)}
       </p>
 
       {/* Meta */}
       <div className="space-y-1 mb-3">
         {company && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <Building2 size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <Building2 size={10} className="shrink-0" />
             <span className="truncate">{company.name}</span>
           </div>
         )}
         {contact && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <User size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <User size={10} className="shrink-0" />
             <span className="truncate">
               {contact.first_name} {contact.last_name ?? ""}
             </span>
           </div>
         )}
         {deal.close_date && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-            <Calendar size={10} className="flex-shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs text-(--text-muted)">
+            <Calendar size={10} className="shrink-0" />
             <span>{formatDate(deal.close_date)}</span>
           </div>
         )}
@@ -406,6 +440,9 @@ interface KanbanColumnProps {
   onEdit: (deal: Deal) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
+  onEditStage: (stage: Stage) => void;
+  onDeleteStage: (stage: Stage) => void;
   canCreate: boolean;
 }
 
@@ -418,6 +455,9 @@ function KanbanColumn({
   onEdit,
   onWon,
   onLost,
+  onDelete,
+  onEditStage,
+  onDeleteStage,
   canCreate,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -430,37 +470,60 @@ function KanbanColumn({
 
   return (
     <div
-      className="flex flex-col flex-shrink-0 h-full min-h-0"
+      className="flex flex-col shrink-0 h-full min-h-0"
       style={{ width: 272 }}
     >
-      {/* Header — flex-shrink-0 so only the card list scrolls */}
-      <div className="flex items-center justify-between px-1 mb-3 flex-shrink-0">
+      {/* Header — shrink-0 so only the card list scrolls */}
+      <div className="flex items-center justify-between px-1 mb-3 shrink-0">
         <div>
           <p
-            className="text-sm font-semibold text-[var(--text-primary)]"
+            className="text-sm font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
           >
-            {stage.name} <span className="text-xs text-[var(--text-muted)] font-normal ml-1">({stage.probability}%)</span>
+            {stage.name}{" "}
+            <span className="text-xs text-(--text-muted) font-normal ml-1">
+              ({stage.probability}%)
+            </span>
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             {orderedDeals.length} deal{orderedDeals.length !== 1 ? "s" : ""}
             {totalValue > 0 && ` · ${formatCurrency(totalValue)}`}
-            {totalValue > 0 && stage.probability > 0 && stage.probability < 100 && (
-              <span className="text-purple-400">
-                {` · Expected: ${formatCurrency(totalValue * (stage.probability / 100))}`}
-              </span>
-            )}
+            {totalValue > 0 &&
+              stage.probability > 0 &&
+              stage.probability < 100 && (
+                <span className="text-purple-400">
+                  {` · Expected: ${formatCurrency(totalValue * (stage.probability / 100))}`}
+                </span>
+              )}
           </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => onNewDeal(stage)}
-            className="p-1 rounded-md text-[var(--text-muted)] hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
-            title={`Add deal to ${stage.name}`}
-          >
-            <Plus size={14} />
-          </button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {canCreate && (
+            <>
+              <button
+                onClick={() => onEditStage(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                title="Edit stage"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                onClick={() => onDeleteStage(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Delete stage"
+              >
+                <Trash2 size={13} />
+              </button>
+              <button
+                onClick={() => onNewDeal(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                title={`Add deal to ${stage.name}`}
+              >
+                <Plus size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Drop zone — independently scrollable */}
@@ -472,7 +535,7 @@ function KanbanColumn({
           ${
             isOver
               ? "bg-purple-500/8 border border-purple-500/30"
-              : "bg-[var(--bg-elevated)]/50 border border-[var(--border)]/60"
+              : "bg-(--bg-elevated)/50 border border-(--border)/60"
           }
         `}
       >
@@ -489,13 +552,14 @@ function KanbanColumn({
               onEdit={onEdit}
               onWon={onWon}
               onLost={onLost}
+              onDelete={onDelete}
             />
           ))}
         </SortableContext>
 
         {orderedDeals.length === 0 && (
           <div className="flex items-center justify-center h-24">
-            <p className="text-xs text-[var(--text-muted)]">Drop deals here</p>
+            <p className="text-xs text-(--text-muted)">Drop deals here</p>
           </div>
         )}
       </div>
@@ -752,6 +816,119 @@ export default function PipelinePage({
     onError: () => toast.error("Failed to mark deal as lost."),
   });
 
+  const deleteDealMutation = useMutation({
+    mutationFn: (dealId: string) => deleteDeal(orgId, dealId),
+    onSuccess: (deletedId, variables) => {
+      queryClient.setQueryData<Deal[]>(dealsKey, (old) =>
+        (old ?? []).filter((d) => d.id !== variables),
+      );
+      toast.success("Deal deleted.");
+    },
+    onError: () => toast.error("Failed to delete deal."),
+  });
+
+  const createStageMutation = useMutation({
+    mutationFn: (payload: {
+      name: string;
+      position?: number;
+      probability?: number;
+    }) => createStage(orgId, activePipelineId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage created.");
+    },
+    onError: () => toast.error("Failed to create stage."),
+  });
+
+  const updateStageMutation = useMutation({
+    mutationFn: ({
+      stageId,
+      payload,
+    }: {
+      stageId: string;
+      payload: { name?: string; position?: number; probability?: number };
+    }) => updateStage(orgId, activePipelineId, stageId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage updated.");
+    },
+    onError: () => toast.error("Failed to update stage."),
+  });
+
+  const deleteStageMutation = useMutation({
+    mutationFn: (stageId: string) =>
+      deleteStage(orgId, activePipelineId, stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage deleted.");
+    },
+    onError: () =>
+      toast.error("Failed to delete stage. Make sure it contains no deals."),
+  });
+
+  const deletePipelineMutation = useMutation({
+    mutationFn: (pipelineId: string) => deletePipeline(orgId, pipelineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.list(orgId),
+      });
+      setSelectedPipe(""); // Reset to default
+      toast.success("Pipeline deleted.");
+    },
+    onError: () =>
+      toast.error("Failed to delete pipeline. Make sure it contains no deals."),
+  });
+
+  const handleAddStage = () => {
+    const name = window.prompt("New stage name:");
+    if (name?.trim()) {
+      createStageMutation.mutate({
+        name: name.trim(),
+        position: sortedStages.length,
+        probability: 0,
+      });
+    }
+  };
+
+  const handleEditStage = (stage: Stage) => {
+    const name = window.prompt("Rename stage:", stage.name);
+    if (name?.trim() && name !== stage.name) {
+      updateStageMutation.mutate({
+        stageId: stage.id,
+        payload: { name: name.trim() },
+      });
+    }
+  };
+
+  const handleDeleteStage = (stage: Stage) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete the stage "${stage.name}"?`,
+      )
+    ) {
+      deleteStageMutation.mutate(stage.id);
+    }
+  };
+
+  const handleDeletePipeline = () => {
+    const activePipeline = pipelines.find((p) => p.id === activePipelineId);
+    if (!activePipeline) return;
+
+    if (
+      window.confirm(
+        `Are you sure you want to delete the pipeline "${activePipeline.name}"? This cannot be undone.`,
+      )
+    ) {
+      deletePipelineMutation.mutate(activePipeline.id);
+    }
+  };
+
   // ── DnD handlers (desktop only) ───────────────────────────────────────────
   const handleDragStart = (event: DragStartEvent) => {
     const deal = pipelineDeals.find((d) => d.id === event.active.id);
@@ -818,7 +995,7 @@ export default function PipelinePage({
           defaultStageId={stage?.id}
           onSave={async (values) => {
             await createDealMutation.mutateAsync({
-              title: values.title,
+              title: values.title || "New Deal",
               value: values.value,
               currency: values.currency,
               pipeline_id: values.pipeline_id,
@@ -861,6 +1038,15 @@ export default function PipelinePage({
 
   const handleWon = (deal: Deal) => wonMutation.mutate(deal.id);
   const handleLost = (deal: Deal) => lostMutation.mutate(deal.id);
+  const handleDeleteDeal = (deal: Deal) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete the deal "${deal.title}"?`,
+      )
+    ) {
+      deleteDealMutation.mutate(deal.id);
+    }
+  };
   const handleMove = (dealId: string, stageId: string) =>
     moveDealMutation.mutate({ dealId, stageId });
 
@@ -883,11 +1069,11 @@ export default function PipelinePage({
 
   // ── Header (shared) ───────────────────────────────────────────────────────
   const header = (
-    <div className="flex items-center justify-between px-4 md:px-8 pt-5 pb-4 flex-shrink-0 gap-3">
+    <div className="flex items-center justify-between px-4 md:px-8 pt-5 pb-4 shrink-0 gap-3">
       <div className="flex items-center gap-3 min-w-0">
         <div className="min-w-0">
           <h1
-            className="text-xl md:text-2xl font-bold text-[var(--text-primary)] truncate"
+            className="text-xl md:text-2xl font-bold text-(--text-primary) truncate"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -896,7 +1082,7 @@ export default function PipelinePage({
             Pipeline
           </h1>
           {!isBoardLoading && (
-            <p className="text-xs md:text-sm text-[var(--text-muted)] truncate">
+            <p className="text-xs md:text-sm text-(--text-muted) truncate">
               {openDealCount} open
               {totalOpenValue > 0 && ` · ${formatCurrency(totalOpenValue)}`}
             </p>
@@ -904,31 +1090,37 @@ export default function PipelinePage({
         </div>
 
         {pipelines.length > 0 && (
-          <select
-            value={activePipelineId}
-            onChange={(e) => {
-              setSelectedPipe(e.target.value);
-              setMobileStageId(""); // reset mobile tab on pipeline change
-            }}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-purple-500 transition-colors flex-shrink-0"
-          >
-            {pipelines.map((p) => (
-              <option
-                key={p.id}
-                value={p.id}
-                style={{ background: "var(--bg-elevated)" }}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            <div className="w-52">
+              <Select
+                value={activePipelineId}
+                onChange={(v) => {
+                  setSelectedPipe(v);
+                  setMobileStageId(""); // reset mobile tab on pipeline change
+                }}
+                options={pipelines.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
+              />
+            </div>
+            {canCreate && (
+              <button
+                onClick={handleDeletePipeline}
+                className="p-2 rounded-lg text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all shrink-0"
+                title="Delete this pipeline"
               >
-                {p.name}
-              </option>
-            ))}
-          </select>
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       {canCreate && (
         <button
           onClick={() => openCreate()}
-          className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg text-xs md:text-sm font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shrink-0"
         >
           <Plus size={14} />
           <span className="hidden sm:inline">New deal</span>
@@ -944,22 +1136,22 @@ export default function PipelinePage({
       {header}
 
       {bannerError && (
-        <div className="mx-4 md:mx-8 mb-3 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20 flex-shrink-0">
+        <div className="mx-4 md:mx-8 mb-3 px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/8 border border-red-500/20 shrink-0">
           {bannerError}
         </div>
       )}
 
       {isBoardLoading ? (
-        <div className="flex items-center gap-3 px-8 py-16 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 px-8 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading board…
         </div>
       ) : sortedStages.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center px-8">
-          <p className="text-sm text-[var(--text-muted)] mb-1">
+          <p className="text-sm text-(--text-muted) mb-1">
             No stages in this pipeline
           </p>
-          <p className="text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-(--text-muted)">
             Add stages to your pipeline to start tracking deals
           </p>
         </div>
@@ -968,7 +1160,7 @@ export default function PipelinePage({
         <div className="flex flex-col flex-1 min-h-0">
           {/* Stage tab strip */}
           <div
-            className="flex gap-2 px-4 py-3 border-b border-[var(--border)] flex-shrink-0 overflow-x-auto"
+            className="flex gap-2 px-4 py-3 border-b border-(--border) shrink-0 overflow-x-auto"
             style={{ scrollbarWidth: "none" }}
           >
             {sortedStages.map((stage) => {
@@ -979,12 +1171,12 @@ export default function PipelinePage({
                   key={stage.id}
                   onClick={() => setMobileStageId(stage.id)}
                   className={`
-                    flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
+                    shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold
                     transition-colors
                     ${
                       active
                         ? "bg-purple-600 text-white"
-                        : "bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                        : "bg-(--bg-elevated) text-(--text-muted) hover:text-(--text-secondary)"
                     }
                   `}
                 >
@@ -994,7 +1186,7 @@ export default function PipelinePage({
                       className={`text-[0.6rem] px-1.5 py-0.5 rounded-full ${
                         active
                           ? "bg-white/20 text-white"
-                          : "bg-[var(--bg-base)] text-[var(--text-muted)]"
+                          : "bg-(--bg-base) text-(--text-muted)"
                       }`}
                     >
                       {count}
@@ -1018,16 +1210,17 @@ export default function PipelinePage({
                 onMove={handleMove}
                 onWon={handleWon}
                 onLost={handleLost}
+                onDelete={handleDeleteDeal}
               />
             ))}
 
             {getOrderedDeals(activeMobileStageId).length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-[var(--text-muted)] mb-1">
+                <p className="text-sm text-(--text-muted) mb-1">
                   No deals in this stage
                 </p>
                 {canCreate && (
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-(--text-muted)">
                     Tap &ldquo;New&rdquo; to add one
                   </p>
                 )}
@@ -1042,7 +1235,7 @@ export default function PipelinePage({
                     sortedStages.find((s) => s.id === activeMobileStageId),
                   )
                 }
-                className="w-full py-3.5 rounded-2xl border-2 border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:border-purple-500/40 hover:text-purple-400 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-3.5 rounded-2xl border-2 border-dashed border-(--border) text-sm text-(--text-muted) hover:border-purple-500/40 hover:text-purple-400 transition-colors flex items-center justify-center gap-2"
               >
                 <Plus size={14} />
                 Add deal to this stage
@@ -1070,9 +1263,24 @@ export default function PipelinePage({
                   onEdit={openEdit}
                   onWon={handleWon}
                   onLost={handleLost}
+                  onDelete={handleDeleteDeal}
+                  onEditStage={handleEditStage}
+                  onDeleteStage={handleDeleteStage}
                   canCreate={canCreate}
                 />
               ))}
+
+              {canCreate && pipelines.length > 0 && (
+                <div className="shrink-0" style={{ width: 272 }}>
+                  <button
+                    onClick={handleAddStage}
+                    className="w-full flex items-center justify-center gap-2 h-[42px] rounded-xl border border-dashed border-(--border) text-sm font-medium text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-surface) hover:border-purple-500/40 transition-all"
+                  >
+                    <Plus size={16} />
+                    Add stage
+                  </button>
+                </div>
+              )}
             </div>
 
             <DragOverlay>
@@ -1084,6 +1292,7 @@ export default function PipelinePage({
                   onEdit={() => {}}
                   onWon={() => {}}
                   onLost={() => {}}
+                  onDelete={() => {}}
                   isDragOverlay
                 />
               )}

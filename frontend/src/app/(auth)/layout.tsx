@@ -1,5 +1,7 @@
 // src/app/(auth)/layout.tsx
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "BusinessSAAS",
@@ -44,6 +46,16 @@ export default function AuthLayout({
             "radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.22) 0%, transparent 68%)",
         }}
       />
+
+      {/* Back to Home Button */}
+      <Link
+        href="/"
+        className="absolute top-6 left-6 sm:top-8 sm:left-8 z-20 flex items-center gap-2 text-sm font-medium text-[#888] hover:text-white transition-colors"
+        style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
+      >
+        <ArrowLeft size={16} />
+        Back to home
+      </Link>
 
       <div className="relative z-10 w-full">{children}</div>
     </div>

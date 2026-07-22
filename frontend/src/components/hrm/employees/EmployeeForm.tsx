@@ -62,14 +62,14 @@ interface EmployeeFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
 
 const sectionLabelCls =
-  "text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] pt-2";
+  "text-xs font-semibold uppercase tracking-wide text-(--text-muted) pt-2";
 
 // Backend dates are RFC3339 ("2026-07-09T00:00:00Z"); <input type="date"> needs "YYYY-MM-DD"
 function toDateInput(iso?: string) {
@@ -166,7 +166,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               First name <span className="text-red-400">*</span>
             </label>
             <input
@@ -182,7 +182,7 @@ export default function EmployeeForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Last name
             </label>
             <input
@@ -195,7 +195,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Date of birth
             </label>
             <input
@@ -205,7 +205,7 @@ export default function EmployeeForm({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Gender
             </label>
             <select {...register("gender")} className={inputCls}>
@@ -227,7 +227,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Personal email
             </label>
             <input
@@ -241,7 +241,7 @@ export default function EmployeeForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Work email
             </label>
             <input
@@ -260,7 +260,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Phone
             </label>
             <input
@@ -271,7 +271,7 @@ export default function EmployeeForm({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Work phone
             </label>
             <input
@@ -284,7 +284,7 @@ export default function EmployeeForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Address
           </label>
           <input
@@ -296,7 +296,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               City
             </label>
             <input
@@ -306,7 +306,7 @@ export default function EmployeeForm({
             />
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Country
             </label>
             <input
@@ -321,7 +321,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Hire date <span className="text-red-400">*</span>
             </label>
             <input
@@ -334,7 +334,7 @@ export default function EmployeeForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Employee number
             </label>
             <input
@@ -347,7 +347,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Employment type
             </label>
             <select {...register("employment_type")} className={inputCls}>
@@ -364,7 +364,7 @@ export default function EmployeeForm({
           </div>
           {isEdit && (
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
+              <label className="block text-sm font-medium text-(--text-secondary)">
                 Status
               </label>
               <select {...register("status_id")} className={inputCls}>
@@ -385,7 +385,7 @@ export default function EmployeeForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Department
             </label>
             <select {...register("department_id")} className={inputCls}>
@@ -402,7 +402,7 @@ export default function EmployeeForm({
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Position
             </label>
             <select {...register("position_id")} className={inputCls}>
@@ -421,7 +421,7 @@ export default function EmployeeForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Manager
           </label>
           <select {...register("manager_id")} className={inputCls}>
@@ -439,7 +439,7 @@ export default function EmployeeForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Notes
           </label>
           <textarea
@@ -451,11 +451,11 @@ export default function EmployeeForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

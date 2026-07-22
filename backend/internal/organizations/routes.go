@@ -10,6 +10,7 @@ func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Han
 	organizations.Post("", handler.Create)
 	organizations.Get("", handler.List)
 	organizations.Get("/:id", handler.Get)
+	organizations.Put("/:id", handler.Update)
 	organizations.Post("/:id/switch", handler.Switch)
 
 	// Backward-compatible aliases while older frontend code is migrated.
@@ -17,5 +18,6 @@ func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Han
 	businesses.Post("", handler.Create)
 	businesses.Get("", handler.List)
 	businesses.Get("/:id", handler.Get)
+	businesses.Put("/:id", handler.Update)
 	businesses.Post("/:id/switch", handler.Switch)
 }

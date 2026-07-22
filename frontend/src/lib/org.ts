@@ -6,6 +6,7 @@ import type {
   MyMembershipResponse,
   SwitchOrgResponse,
   CreateOrgRequest,
+  UpdateOrgRequest,
 } from "@/types/org";
 
 // GET /api/v1/organizations → data.organizations: MembershipWithRole[]
@@ -34,6 +35,18 @@ export async function getOrganization(id: string): Promise<Business> {
     success: boolean;
     data: { organization: Business };
   }>(`/api/v1/organizations/${id}`);
+  return res.data.data.organization;
+}
+
+// PUT /api/v1/organizations/:id → data.organization: Business
+export async function updateOrganization(
+  id: string,
+  body: UpdateOrgRequest,
+): Promise<Business> {
+  const res = await api.put<{
+    success: boolean;
+    data: { organization: Business };
+  }>(`/api/v1/organizations/${id}`, body);
   return res.data.data.organization;
 }
 

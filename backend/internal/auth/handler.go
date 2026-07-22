@@ -376,6 +376,194 @@ func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
 }
 
 // -------------------------------------------------------------------
+// Mobile
+//
+// Same Service as the web handlers above — zero new business logic. The
+// only difference is token transport: mobile has no cookie jar, so the
+// refresh token travels in the JSON body instead of the bsaas_refresh
+// httpOnly cookie, both outbound (MobileTokenPair) and inbound (body field
+// refresh_token instead of the cookie). See model.go for the new types.
+// -------------------------------------------------------------------
+
+// MobileSignup godoc
+//
+//	@Summary		Sign up (mobile)
+//	@Description	Mobile counterpart of Signup — identical behaviour. Creates the user and
+//	@Description	returns the safe profile only; issues no tokens, exactly like web. The
+//	@Description	client is expected to call MobileLogin right after with the same
+//	@Description	credentials, mirroring what the web frontend already does in
+//	@Description	frontend/src/app/(auth)/signup/page.tsx.
+//	@Description
+//	@Description	**Error codes:** same as Signup — `VALIDATION_ERROR`, `EMAIL_ALREADY_EXISTS`.
+//	@Tags			Auth - Mobile
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		SignupRequest	true	"Registration details"
+//	@Success		201		{object}	response.Created{data=SignupResponseData}
+//	@Failure		400		{object}	response.Error	"VALIDATION_ERROR"
+//	@Failure		409		{object}	response.Error	"EMAIL_ALREADY_EXISTS"
+//	@Failure		429		{object}	response.Error	"RATE_LIMITED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/mobile/signup [post]
+func (h *Handler) MobileSignup(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	var req SignupRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+
+	if err := validateSignupRequest(req); err != nil {
+		return response.BadRequest(c, "VALIDATION_ERROR", err.Error())
+	}
+
+	u, err := h.service.Signup(c.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrEmailAlreadyExists):
+			return response.Conflict(c, "EMAIL_ALREADY_EXISTS", "An account with this email already exists")
+		default:
+			log.Error("auth: mobile signup failed",
+				slog.String("layer", "handler"),
+				slog.Any("error", err),
+			)
+			return response.InternalServerError(c)
+		}
+	}
+
+	return response.Created(c, fiber.Map{"user": u}, "Account created successfully")
+}
+
+// MobileLogin godoc
+//
+//	@Summary		Log in (mobile)
+//	@Description	Mobile counterpart of Login — same credential check, same TokenPair issuance.
+//	@Description
+//	@Description	**On success:** returns access_token, refresh_token, and expires_in in the
+//	@Description	response body. No cookie is set — the client stores refresh_token in
+//	@Description	expo-secure-store immediately (see Section 14, docs/Project_Instruction.md).
+//	@Description
+//	@Description	**Error codes:** same as Login — INVALID_CREDENTIALS, ACCOUNT_LOCKED, ACCOUNT_DISABLED.
+//	@Tags			Auth - Mobile
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		LoginRequest						true	"Login credentials"
+//	@Success		200		{object}	response.OK{data=MobileTokenPair}	"Tokens issued"
+//	@Failure		400		{object}	response.Error						"INVALID_BODY"
+//	@Failure		401		{object}	response.Error						"INVALID_CREDENTIALS / ACCOUNT_LOCKED / ACCOUNT_DISABLED"
+//	@Failure		429		{object}	response.Error						"RATE_LIMITED"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/mobile/login [post]
+func (h *Handler) MobileLogin(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	var req LoginRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+	}
+
+	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
+		return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+	}
+
+	ip := c.IP()
+	userAgent := string(c.Request().Header.Peek("User-Agent"))
+
+	pair, err := h.service.Login(c.Context(), req, ip, userAgent)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCredentials):
+			return response.Unauthorized(c, "INVALID_CREDENTIALS", "Invalid email or password")
+		case errors.Is(err, ErrAccountLocked):
+			return response.Unauthorized(c, "ACCOUNT_LOCKED", "Account temporarily locked. Please try again later.")
+		case errors.Is(err, ErrAccountDisabled):
+			return response.Unauthorized(c, "ACCOUNT_DISABLED", "Your account has been disabled.")
+		default:
+			log.Error("auth: mobile login error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	// No cookie — mobile has no cookie jar. The raw refresh token travels in
+	// the JSON body exactly once; the client moves it into SecureStore.
+	return response.OK(c, pair.ToMobileClient(), "Login successful")
+}
+
+// MobileRefresh godoc
+//
+//	@Summary		Refresh access token (mobile)
+//	@Description	Mobile counterpart of Refresh. The refresh token is read from the JSON body
+//	@Description	(field refresh_token) — NOT a cookie, since mobile has none.
+//	@Description
+//	@Description	Rotated on every successful refresh, same as web: old token revoked, new
+//	@Description	one issued and returned in the body for SecureStore to overwrite.
+//	@Description
+//	@Description	**Error codes:**
+//	@Description	- `MISSING_TOKEN` — refresh_token field empty or absent
+//	@Description	- `INVALID_TOKEN` — token expired, revoked, or not found
+//	@Tags			Auth - Mobile
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		MobileRefreshRequest				true	"Refresh token"
+//	@Success		200		{object}	response.OK{data=MobileTokenPair}	"New token pair"
+//	@Failure		401		{object}	response.Error						"MISSING_TOKEN / INVALID_TOKEN"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/mobile/refresh [post]
+func (h *Handler) MobileRefresh(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	var req MobileRefreshRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.Unauthorized(c, "MISSING_TOKEN", "Refresh token is required")
+	}
+	rawToken := strings.TrimSpace(req.RefreshToken)
+	if rawToken == "" {
+		return response.Unauthorized(c, "MISSING_TOKEN", "Refresh token is required")
+	}
+
+	pair, err := h.service.Refresh(c.Context(), rawToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCredentials),
+			errors.Is(err, ErrSessionNotFound),
+			errors.Is(err, ErrSessionRevoked),
+			errors.Is(err, ErrSessionExpired):
+			return response.Unauthorized(c, "INVALID_TOKEN", "Invalid or expired refresh token")
+		default:
+			log.Error("auth: mobile refresh error", slog.Any("error", err))
+			return response.InternalServerError(c)
+		}
+	}
+
+	// No cookie to rotate — the new pair goes straight back in the body.
+	return response.OK(c, pair.ToMobileClient(), "Token refreshed")
+}
+
+// MobileLogout godoc
+//
+//	@Summary		Log out (mobile)
+//	@Description	Mobile counterpart of Logout. Revokes the session tied to the refresh token
+//	@Description	supplied in the body — NOT a cookie, since mobile has none.
+//	@Description
+//	@Description	**Always returns 204** — even if the token was already invalid, missing, or
+//	@Description	the body failed to parse. Logout must never fail visibly to the user, same
+//	@Description	contract as web.
+//	@Tags			Auth - Mobile
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body	MobileLogoutRequest	false	"Refresh token to revoke"
+//	@Success		204		"Session revoked"
+//	@Failure		500		{object}	response.Error
+//	@Router			/auth/mobile/logout [post]
+func (h *Handler) MobileLogout(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	var req MobileLogoutRequest
+	if err := c.Bind().JSON(&req); err == nil && strings.TrimSpace(req.RefreshToken) != "" {
+		if err := h.service.Logout(c.Context(), req.RefreshToken); err != nil {
+			log.Error("auth: mobile logout error", slog.Any("error", err))
+		}
+	}
+	return response.NoContent(c)
+}
+
+// -------------------------------------------------------------------
 // Cookie helpers
 // -------------------------------------------------------------------
 

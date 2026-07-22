@@ -31,8 +31,8 @@ interface ShiftAssignmentFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -97,7 +97,7 @@ export default function ShiftAssignmentForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Shift <span className="text-red-400">*</span>
           </label>
           <select {...register("shift_id")} autoFocus className={inputCls}>
@@ -118,7 +118,7 @@ export default function ShiftAssignmentForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Applies to
           </label>
           <select {...register("assignee_type")} className={inputCls}>
@@ -145,7 +145,7 @@ export default function ShiftAssignmentForm({
 
         {assigneeType === "department" && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Department
             </label>
             <select {...register("assignee_id")} className={inputCls}>
@@ -170,7 +170,7 @@ export default function ShiftAssignmentForm({
 
         {assigneeType === "employee" && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Employee
             </label>
             <select {...register("assignee_id")} className={inputCls}>
@@ -195,7 +195,7 @@ export default function ShiftAssignmentForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Effective date <span className="text-red-400">*</span>
             </label>
             <input
@@ -210,7 +210,7 @@ export default function ShiftAssignmentForm({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               End date
             </label>
             <input {...register("end_date")} type="date" className={inputCls} />
@@ -218,11 +218,11 @@ export default function ShiftAssignmentForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

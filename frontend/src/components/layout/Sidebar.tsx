@@ -37,6 +37,10 @@ import {
   ListTree,
   Settings,
   Route,
+  Key,
+  Webhook,
+  UserCheck,
+  Globe,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -82,6 +86,12 @@ function buildModules(orgId: string): Module[] {
           href: `/${orgId}/crm/leads`,
           icon: Funnel,
           permission: "crm.leads.view",
+        },
+        {
+          label: "Web Visitors",
+          href: `/${orgId}/crm/visitors`,
+          icon: Globe,
+          permission: "crm.view",
         },
         {
           label: "Pipeline",
@@ -281,6 +291,12 @@ const PLATFORM_ITEMS: NavItem[] = [
 
 const SETTINGS: NavItem[] = [
   {
+    label: "Workspace",
+    href: "settings/workspace",
+    icon: Building2,
+    permission: "settings.view",
+  },
+  {
     label: "Members",
     href: "settings/members",
     icon: Users,
@@ -291,6 +307,18 @@ const SETTINGS: NavItem[] = [
     href: "settings/roles",
     icon: Shield,
     permission: "roles.view",
+  },
+  {
+    label: "API Keys",
+    href: "settings/apikeys",
+    icon: Key,
+    permission: "settings.view", // or apikeys.view if that exists, but settings is safe
+  },
+  {
+    label: "Integrations",
+    href: "settings/integrations",
+    icon: Webhook,
+    permission: "settings.view",
   },
   {
     label: "Security",
@@ -312,8 +340,24 @@ function LogoMark() {
         aria-hidden="true"
       >
         <rect x="2" y="2" width="6" height="6" rx="1.5" fill="white" />
-        <rect x="10" y="2" width="6" height="6" rx="1.5" fill="white" fillOpacity="0.5" />
-        <rect x="2" y="10" width="6" height="6" rx="1.5" fill="white" fillOpacity="0.5" />
+        <rect
+          x="10"
+          y="2"
+          width="6"
+          height="6"
+          rx="1.5"
+          fill="white"
+          fillOpacity="0.5"
+        />
+        <rect
+          x="2"
+          y="10"
+          width="6"
+          height="6"
+          rx="1.5"
+          fill="white"
+          fillOpacity="0.5"
+        />
         <rect x="10" y="10" width="6" height="6" rx="1.5" fill="white" />
       </svg>
     </div>
@@ -358,7 +402,14 @@ interface NavLinkProps {
   compact?: boolean;
 }
 
-function NavLink({ href, icon: Icon, label, active, closed, compact }: NavLinkProps) {
+function NavLink({
+  href,
+  icon: Icon,
+  label,
+  active,
+  closed,
+  compact,
+}: NavLinkProps) {
   return (
     <Link
       href={href}
@@ -366,33 +417,38 @@ function NavLink({ href, icon: Icon, label, active, closed, compact }: NavLinkPr
       className={`
         group relative flex items-center rounded-md no-underline
         transition-colors duration-100 mb-0.5
-        ${closed
-          ? `justify-center py-2.5 px-0 w-full ${active
-            ? "bg-purple-50 dark:bg-purple-700/10"
-            : "hover:bg-gray-100 dark:hover:bg-white/4"
-          }`
-          : `gap-2.5 border-l-2 ${compact ? "py-1.5 px-2" : "py-2 px-2"} ${active
-            ? "bg-purple-50 dark:bg-purple-700/10 border-purple-600 dark:border-[#7c3aed]"
-            : "border-transparent hover:bg-gray-100 dark:hover:bg-white/4"
-          }`
+        ${
+          closed
+            ? `justify-center py-2.5 px-0 w-full ${
+                active
+                  ? "bg-purple-50 dark:bg-purple-700/10"
+                  : "hover:bg-gray-100 dark:hover:bg-white/4"
+              }`
+            : `gap-2.5 border-l-2 ${compact ? "py-1.5 px-2" : "py-2 px-2"} ${
+                active
+                  ? "bg-purple-50 dark:bg-purple-700/10 border-purple-600 dark:border-[#7c3aed]"
+                  : "border-transparent hover:bg-gray-100 dark:hover:bg-white/4"
+              }`
         }
       `}
     >
       <Icon
         size={compact ? 13 : 15}
-        className={`shrink-0 ${active
-          ? "text-purple-600 dark:text-[#7c3aed]"
-          : "text-gray-700 dark:text-[#cfcfcf]"
-          }`}
+        className={`shrink-0 ${
+          active
+            ? "text-purple-600 dark:text-[#7c3aed]"
+            : "text-gray-700 dark:text-[#cfcfcf]"
+        }`}
       />
       {!closed && (
         <span
           className={`
             whitespace-nowrap
             ${compact ? "text-[0.78rem]" : "text-[0.8rem]"}
-            ${active
-              ? "text-gray-900 dark:text-white font-medium"
-              : "text-gray-700 dark:text-[#cfcfcf] font-normal"
+            ${
+              active
+                ? "text-gray-900 dark:text-white font-medium"
+                : "text-gray-700 dark:text-[#cfcfcf] font-normal"
             }
           `}
         >
@@ -413,7 +469,13 @@ interface ModuleRowProps {
   onClick: () => void;
 }
 
-function ModuleRow({ module, isOpen, isActive, closed, onClick }: ModuleRowProps) {
+function ModuleRow({
+  module,
+  isOpen,
+  isActive,
+  closed,
+  onClick,
+}: ModuleRowProps) {
   const Icon = module.icon;
   const soon = module.status === "soon";
 
@@ -424,32 +486,39 @@ function ModuleRow({ module, isOpen, isActive, closed, onClick }: ModuleRowProps
         className={`
           w-full flex items-center rounded-md transition-colors duration-100
           ${closed ? "justify-center py-2.5 px-0" : "gap-2.5 px-2 py-2"}
-          ${soon
-            ? "cursor-not-allowed"
-            : isActive
-              ? "bg-purple-50 dark:bg-purple-700/10 cursor-pointer"
-              : "hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer"
+          ${
+            soon
+              ? "cursor-not-allowed"
+              : isActive
+                ? "bg-purple-50 dark:bg-purple-700/10 cursor-pointer"
+                : "hover:bg-gray-100 dark:hover:bg-white/4 cursor-pointer"
           }
         `}
-        title={closed ? `${module.label}${soon ? ` — Coming ${module.eta}` : ""}` : undefined}
+        title={
+          closed
+            ? `${module.label}${soon ? ` — Coming ${module.eta}` : ""}`
+            : undefined
+        }
       >
         <Icon
           size={15}
-          className={`shrink-0 ${isActive && !soon
-            ? "text-purple-600 dark:text-[#7c3aed]"
-            : "text-gray-400 dark:text-[#555]"
-            }`}
+          className={`shrink-0 ${
+            isActive && !soon
+              ? "text-purple-600 dark:text-[#7c3aed]"
+              : "text-gray-400 dark:text-[#555]"
+          }`}
         />
         {!closed && (
           <>
             <span
               className={`
                 flex-1 text-left text-[0.8rem]
-                ${isActive && !soon
-                  ? "text-gray-900 dark:text-white font-medium"
-                  : soon
-                    ? "text-gray-400 dark:text-[#666]"
-                    : "text-gray-500 dark:text-[#ddd] font-normal"
+                ${
+                  isActive && !soon
+                    ? "text-gray-900 dark:text-white font-medium"
+                    : soon
+                      ? "text-gray-400 dark:text-[#666]"
+                      : "text-gray-500 dark:text-[#ddd] font-normal"
                 }
               `}
             >
@@ -462,8 +531,9 @@ function ModuleRow({ module, isOpen, isActive, closed, onClick }: ModuleRowProps
             ) : (
               <ChevronRight
                 size={12}
-                className={`shrink-0 transition-transform duration-200 text-gray-300 dark:text-[#444] ${isOpen ? "rotate-90" : ""
-                  }`}
+                className={`shrink-0 transition-transform duration-200 text-gray-300 dark:text-[#444] ${
+                  isOpen ? "rotate-90" : ""
+                }`}
               />
             )}
           </>
@@ -500,8 +570,11 @@ function NavTree({
 }) {
   return (
     <div
-      className={`space-y-0.5 ${level > 0 ? "ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5" : ""
-        }`}
+      className={`space-y-0.5 ${
+        level > 0
+          ? "ml-3 pl-3 border-l border-gray-100 dark:border-white/6 py-0.5"
+          : ""
+      }`}
     >
       {items.map((item) => {
         if (item.permission && !hasPermission(item.permission)) return null;
@@ -535,8 +608,9 @@ function NavTree({
                       </span>
                       <ChevronRight
                         size={11}
-                        className={`shrink-0 transition-transform duration-200 text-gray-400 dark:text-[#555] ${isOpen ? "rotate-90" : ""
-                          }`}
+                        className={`shrink-0 transition-transform duration-200 text-gray-400 dark:text-[#555] ${
+                          isOpen ? "rotate-90" : ""
+                        }`}
                       />
                     </>
                   )}
@@ -556,8 +630,9 @@ function NavTree({
 
             {hasChildren && !closed && (
               <div
-                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                  }`}
+                className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                  isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
               >
                 <div className="overflow-hidden min-h-0">
                   <NavTree
@@ -815,8 +890,9 @@ export default function Sidebar({ orgId }: { orgId: string }) {
 
                   {m.status === "live" && !closed && (
                     <div
-                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                        }`}
+                      className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                        isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
                     >
                       <div className="overflow-hidden min-h-0">
                         <NavTree

@@ -12,15 +12,17 @@ import {
   User,
   Building2,
   ChevronDown,
-  Menu,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useUiStore } from "@/stores/uiStore";
+import { useCommandStore } from "@/stores/commandStore";
 import { logout } from "@/lib/auth";
 import { setToken } from "@/lib/token";
+import { resolveAssetUrl } from "@/lib/constants";
+import CommandMenu from "@/components/ui/CommandMenu";
 
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
 const FONT_SYNE = "var(--font-syne, Syne, sans-serif)";
@@ -51,7 +53,8 @@ export default function Topbar({ orgId }: { orgId: string }) {
   // `theme` can be undefined during SSR / before hydration.
   // `resolvedTheme` is always the actual applied value after mount.
   const { resolvedTheme, setTheme } = useTheme();
-  const { setUiTheme, toggleMobileMenu } = useUiStore();
+  const { setUiTheme } = useUiStore();
+  const { setOpen: setCommandOpen } = useCommandStore();
   const { user, reset: resetAuth } = useAuthStore();
   const { reset: resetPerms } = usePermissionStore();
   const queryClient = useQueryClient();
@@ -136,30 +139,60 @@ export default function Topbar({ orgId }: { orgId: string }) {
           zIndex: 10,
         }}
       >
-        {/* ── Hamburger (mobile only) + page title ─ */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <TopbarBtn
-            className="lg:hidden"
-            onClick={toggleMobileMenu}
-            title="Open menu"
-          >
-            <Menu size={18} style={{ color: "var(--text-muted)" }} />
-          </TopbarBtn>
-          <span
-            style={{
-              fontFamily: FONT_INTER,
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "var(--text-secondary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {pageTitle}
-          </span>
+        <div
+          style={{ display: "flex", alignItems: "center", flex: 1, gap: 24 }}
+        >
+          {/* ── Hamburger (mobile only) + page title ─ */}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                fontFamily: FONT_INTER,
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                color: "var(--text-secondary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {pageTitle}
+            </span>
+          </div>
         </div>
 
         {/* ── Right actions ───────────────── */}
         <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {/* ── Search & Quick Actions Trigger ─ */}
+          <div className="hidden sm:flex items-center gap-2 mr-2">
+            <button
+              onClick={() => setCommandOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-(--border) bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors text-sm text-(--text-muted) w-48 lg:w-64"
+            >
+              <span className="flex-1 text-left">Quick actions...</span>
+              <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-(--border) bg-(--bg-base) px-1.5 font-mono text-[10px] font-medium text-(--text-muted)">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </button>
+            <button
+              onClick={() => setCommandOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-(--border) bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors text-(--text-muted)"
+              title="Search (/)"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+            </button>
+          </div>
+
           {/* Notifications placeholder */}
           <TopbarBtn title="Notifications">
             <Bell size={15} style={{ color: "var(--text-muted)" }} />
@@ -223,9 +256,22 @@ export default function Topbar({ orgId }: { orgId: string }) {
                   fontSize: "0.72rem",
                   fontWeight: 700,
                   color: "white",
+                  overflow: "hidden",
                 }}
               >
-                {initial}
+                {user?.photoURL ? (
+                  <img
+                    src={resolveAssetUrl(user.photoURL) || ""}
+                    alt={user?.displayName || "Profile"}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+                ) : (
+                  initial
+                )}
               </div>
               <ChevronDown
                 size={12}
@@ -337,6 +383,9 @@ export default function Topbar({ orgId }: { orgId: string }) {
           </div>
         </div>
       </header>
+
+      {/* Command Menu Modal */}
+      <CommandMenu />
     </>
   );
 }

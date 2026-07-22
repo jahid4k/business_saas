@@ -21,6 +21,7 @@ type Service interface {
 	GetByID(ctx context.Context, businessID, requestingUserID string) (*Business, error)
 	ListForUser(ctx context.Context, userID string) ([]*MembershipWithRole, error)
 	Switch(ctx context.Context, businessID, userID string) (accessToken string, role string, err error)
+	Update(ctx context.Context, orgID, userID string, req UpdateBusinessRequest) (*Business, error)
 }
 
 type serviceImpl struct {
@@ -120,6 +121,53 @@ func (s *serviceImpl) GetByID(ctx context.Context, businessID, requestingUserID 
 	}
 	if membership == nil || membership.Status != "active" || membership.InvitationStatus != "accepted" {
 		return nil, ErrNotMember
+	}
+	return b, nil
+}
+
+func (s *serviceImpl) Update(ctx context.Context, orgID, userID string, req UpdateBusinessRequest) (*Business, error) {
+	// 1. Verify membership and permissions
+	membership, err := s.authzRepo.GetMembership(ctx, userID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("organization: Update: get membership: %w", err)
+	}
+	if membership == nil || membership.Status != "active" || membership.InvitationStatus != "accepted" {
+		return nil, ErrNotMember
+	}
+	// Basic RBAC check - only owners and admins can update org settings
+	if membership.RoleKey != authz.RoleOwner && membership.RoleKey != authz.RoleAdmin {
+		return nil, errors.New("insufficient permissions to update organization")
+	}
+
+	// 2. Validate request
+	req.Name = strings.TrimSpace(req.Name)
+	if len(req.Name) < 2 || len(req.Name) > 100 {
+		return nil, ErrInvalidName
+	}
+
+	// 3. Fetch existing org
+	b, err := s.repo.FindByID(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("organization: Update: find org: %w", err)
+	}
+	if b == nil {
+		return nil, ErrNotFound
+	}
+
+	// 4. Update fields
+	b.Name = req.Name
+	b.LegalName = strings.TrimSpace(req.LegalName)
+	b.Type = strings.TrimSpace(req.Type)
+	b.Industry = strings.TrimSpace(req.Industry)
+	b.Website = strings.TrimSpace(req.Website)
+	b.LogoURL = strings.TrimSpace(req.LogoURL)
+	b.Country = strings.TrimSpace(req.Country)
+	b.Timezone = strings.TrimSpace(req.Timezone)
+	b.Currency = strings.TrimSpace(req.Currency)
+
+	// 5. Save changes
+	if err := s.repo.Update(ctx, b); err != nil {
+		return nil, fmt.Errorf("organization: Update: %w", err)
 	}
 	return b, nil
 }

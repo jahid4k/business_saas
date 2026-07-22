@@ -54,8 +54,8 @@ interface SalaryComponentFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -172,7 +172,7 @@ export default function SalaryComponentForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -187,7 +187,7 @@ export default function SalaryComponentForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description
           </label>
           <input
@@ -199,7 +199,7 @@ export default function SalaryComponentForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Type
             </label>
             <select {...register("component_type")} className={inputCls}>
@@ -223,7 +223,7 @@ export default function SalaryComponentForm({
             />
             <label
               htmlFor="is_taxable"
-              className="text-sm text-[var(--text-secondary)]"
+              className="text-sm text-(--text-secondary)"
             >
               Taxable
             </label>
@@ -231,7 +231,7 @@ export default function SalaryComponentForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Calculation method
           </label>
           <select {...register("calc_method")} className={inputCls}>
@@ -251,7 +251,7 @@ export default function SalaryComponentForm({
           calcMethod === "pct_of_basic" ||
           calcMethod === "pct_of_gross") && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               {calcMethod === "fixed" ? "Fixed amount" : "Percentage"}
             </label>
             <input
@@ -268,7 +268,7 @@ export default function SalaryComponentForm({
 
         {calcMethod === "formula" && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Formula expression
             </label>
             <input
@@ -276,7 +276,7 @@ export default function SalaryComponentForm({
               placeholder="e.g. BASIC * 0.40"
               className={`${inputCls} font-mono`}
             />
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-(--text-muted)">
               Available variables: BASIC, GROSS, PRESENT_DAYS, WORK_DAYS,
               TENURE_YEARS
             </p>
@@ -301,7 +301,7 @@ export default function SalaryComponentForm({
 
         {calcMethod === "slab" && (
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            <label className="block text-sm font-medium text-(--text-secondary)">
               Slab config (JSON)
             </label>
             <textarea
@@ -321,11 +321,11 @@ export default function SalaryComponentForm({
         )}
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

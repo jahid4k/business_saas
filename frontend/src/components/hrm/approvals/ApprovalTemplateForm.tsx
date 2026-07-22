@@ -68,8 +68,8 @@ interface ApprovalTemplateFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -143,7 +143,7 @@ export default function ApprovalTemplateForm({
         )}
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -158,7 +158,7 @@ export default function ApprovalTemplateForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Applies to
           </label>
           <select {...register("action_type")} className={inputCls}>
@@ -175,7 +175,7 @@ export default function ApprovalTemplateForm({
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description
           </label>
           <input
@@ -194,7 +194,7 @@ export default function ApprovalTemplateForm({
           />
           <label
             htmlFor="is_default"
-            className="text-sm text-[var(--text-secondary)]"
+            className="text-sm text-(--text-secondary)"
           >
             Default template for this action type
           </label>
@@ -202,7 +202,7 @@ export default function ApprovalTemplateForm({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            <p className="text-xs font-semibold uppercase tracking-wide text-(--text-muted)">
               Approval levels (in order)
             </p>
             <button
@@ -227,10 +227,10 @@ export default function ApprovalTemplateForm({
             return (
               <div
                 key={field.id}
-                className="p-3 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] space-y-2"
+                className="p-3 rounded-lg bg-(--bg-elevated) border border-(--border) space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-[var(--text-muted)]">
+                  <span className="text-xs font-medium text-(--text-muted)">
                     Level {index + 1}
                   </span>
                   {fields.length > 1 && (
@@ -293,7 +293,7 @@ export default function ApprovalTemplateForm({
                 )}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="block text-xs text-[var(--text-muted)]">
+                    <label className="block text-xs text-(--text-muted)">
                       SLA (hours)
                     </label>
                     <input
@@ -304,7 +304,7 @@ export default function ApprovalTemplateForm({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs text-[var(--text-muted)]">
+                    <label className="block text-xs text-(--text-muted)">
                       On SLA breach
                     </label>
                     <select
@@ -332,11 +332,11 @@ export default function ApprovalTemplateForm({
         </div>
       </form>
 
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

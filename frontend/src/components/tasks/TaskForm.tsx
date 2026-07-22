@@ -3,8 +3,8 @@
 // Drawer shell is handled by Drawer.tsx.
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { Select } from "@/components/ui/Select";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import type { Task, TaskStatus } from "@/types/task";
@@ -32,12 +32,14 @@ interface TaskFormProps {
 
 export default function TaskForm({ task, onSave }: TaskFormProps) {
   const { closeDrawer } = useDrawer();
-  const [saveError, setSaveError] = useState<string | null>(null);
   const isEdit = !!task;
 
   const {
     register,
     handleSubmit,
+    setError,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(schema),
@@ -50,12 +52,11 @@ export default function TaskForm({ task, onSave }: TaskFormProps) {
   });
 
   const onSubmit = async (values: TaskFormValues) => {
-    setSaveError(null);
     try {
       await onSave(values);
       closeDrawer(); // form closes itself after successful save
     } catch {
-      setSaveError("Failed to save. Please try again.");
+      setError("root", { message: "Failed to save. Please try again." });
     }
   };
 
@@ -68,15 +69,15 @@ export default function TaskForm({ task, onSave }: TaskFormProps) {
         noValidate
         className="flex-1 overflow-y-auto px-6 py-5 space-y-5"
       >
-        {saveError && (
+        {errors.root && (
           <div className="px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">
-            {saveError}
+            {errors.root.message}
           </div>
         )}
 
         {/* Title */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Title <span className="text-red-400">*</span>
           </label>
           <input
@@ -84,7 +85,7 @@ export default function TaskForm({ task, onSave }: TaskFormProps) {
             type="text"
             placeholder="What needs to be done?"
             autoFocus
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
           />
           {errors.title && (
             <p className="text-xs text-red-400">{errors.title.message}</p>
@@ -93,9 +94,9 @@ export default function TaskForm({ task, onSave }: TaskFormProps) {
 
         {/* Description */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Description
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-xs font-normal text-(--text-muted)">
               optional
             </span>
           </label>
@@ -103,56 +104,45 @@ export default function TaskForm({ task, onSave }: TaskFormProps) {
             {...register("description")}
             rows={4}
             placeholder="Add more details…"
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all resize-none"
+            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) placeholder:text-(--text-muted) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all resize-none"
           />
         </div>
 
         {/* Status */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Status
           </label>
-          <select
-            {...register("status")}
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option
-                key={o.value}
-                value={o.value}
-                style={{
-                  background: "var(--bg-elevated)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {o.label}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("status")} />
+          <Select
+            value={watch("status")}
+            onChange={(v) => setValue("status", v as TaskStatus)}
+            options={STATUS_OPTIONS}
+          />
         </div>
 
         {/* Due date */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          <label className="block text-sm font-medium text-(--text-secondary)">
             Due date
-            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
+            <span className="ml-2 text-xs font-normal text-(--text-muted)">
               optional
             </span>
           </label>
           <input
             {...register("dueDate")}
             type="date"
-            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)] outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
+            className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
           />
         </div>
       </form>
 
       {/* Footer — always pinned to bottom */}
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

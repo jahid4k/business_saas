@@ -18,6 +18,7 @@ import {
   resetMemberPassword,
   updateMemberPermissions,
 } from "@/lib/members";
+import { listRoles } from "@/lib/roles";
 import { toast } from "sonner";
 import { queryKeys } from "@/lib/queryKeys";
 import InviteForm from "@/components/members/InviteForm";
@@ -48,8 +49,6 @@ const ROLE_STYLE: Record<string, { label: string; cls: string }> = {
   },
 };
 
-const ASSIGNABLE_ROLES: MemberRole[] = ["admin", "manager", "member", "viewer"];
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
@@ -63,7 +62,7 @@ function Avatar({ name, email }: { name: string; email: string }) {
   const hue = email.split("").reduce((n, c) => n + c.charCodeAt(0), 0) % 360;
   return (
     <div
-      className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-xs font-bold text-white"
       style={{ background: `hsl(${hue},55%,42%)` }}
     >
       {initial}
@@ -106,6 +105,14 @@ export default function MembersPage({
   const active = members.filter((m) => m.status === "active");
   const pending = members.filter((m) => m.status === "pending");
 
+  const rolesKey = queryKeys.roles.list(orgId);
+  const rolesQuery = useQuery({
+    queryKey: rolesKey,
+    queryFn: () => listRoles(orgId),
+  });
+  const allRoles = rolesQuery.data ?? [];
+  const assignableRoles = allRoles.filter((r) => r.role.name !== "owner");
+
   // ── GSAP ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (membersQuery.isPending || !listRef.current) return;
@@ -139,6 +146,7 @@ export default function MembersPage({
       width: "md",
       content: (
         <InviteForm
+          orgRoles={allRoles.map((r) => r.role)}
           onSave={async (email, role) => {
             await inviteMember(orgId, { email, role });
             // inviteMember returns void; invalidate to get the new pending member
@@ -181,6 +189,9 @@ export default function MembersPage({
             await updateMemberPermissions(orgId, m.membershipId, {
               customPermissions,
               deniedPermissions,
+            });
+            await queryClient.invalidateQueries({
+              queryKey: queryKeys.members.permissions(orgId, m.membershipId),
             });
             toast.success(`Permissions updated for ${m.displayName}.`);
           }}
@@ -251,7 +262,7 @@ export default function MembersPage({
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -259,7 +270,7 @@ export default function MembersPage({
           >
             Members
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             {active.length} active · {pending.length} pending
           </p>
         </div>
@@ -281,7 +292,7 @@ export default function MembersPage({
       )}
 
       {membersQuery.isPending ? (
-        <div className="flex items-center gap-3 py-16 text-sm text-[var(--text-muted)]">
+        <div className="flex items-center gap-3 py-16 text-sm text-(--text-muted)">
           <Loader2 size={15} className="animate-spin text-purple-500" />
           Loading members…
         </div>
@@ -290,14 +301,14 @@ export default function MembersPage({
           {/* Active members */}
           <section>
             <p
-              className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
+              className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-widest mb-3"
               style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
             >
               Active members ({active.length}) fasdfasd
             </p>
-            <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
+            <div className="rounded-xl border border-(--border) divide-y divide-(--border)">
               {active.length === 0 ? (
-                <p className="px-5 py-8 text-sm text-center text-[var(--text-muted)]">
+                <p className="px-5 py-8 text-sm text-center text-(--text-muted)">
                   No active members yet.
                 </p>
               ) : (
@@ -306,19 +317,21 @@ export default function MembersPage({
                   const isOwner = m.role === "owner";
                   const menuOpen = openMenu === m.membershipId;
                   const confirming = confirm === m.membershipId;
-                  const roleStyle = ROLE_STYLE[m.role];
+                  const roleStyle = ROLE_STYLE[m.role] || {
+                    label: m.role.charAt(0).toUpperCase() + m.role.slice(1),
+                    cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
+                  };
 
                   return (
                     <div
                       key={m.membershipId}
-                      className={`member-row group flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-elevated)] transition-colors ${
-                        menuOpen ? "relative z-50" : "relative z-0"
-                      }`}
+                      className={`member-row group flex items-center gap-4 px-5 py-3.5 bg-(--bg-surface) hover:bg-(--bg-elevated) transition-colors ${menuOpen ? "relative z-50" : "relative z-0"
+                        }`}
                     >
                       <Avatar name={m.displayName} email={m.email} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                          <p className="text-sm font-medium text-(--text-primary) truncate">
                             {m.displayName}
                           </p>
                           {isMe && (
@@ -327,7 +340,7 @@ export default function MembersPage({
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-[var(--text-muted)] truncate">
+                        <p className="text-xs text-(--text-muted) truncate">
                           {m.email}
                         </p>
                       </div>
@@ -346,15 +359,16 @@ export default function MembersPage({
                               handleRoleChange(m, e.target.value as MemberRole)
                             }
                             disabled={roleLoading === m.membershipId}
-                            className="text-xs px-2.5 py-1.5 rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-secondary)] outline-none focus:border-purple-500 transition-colors cursor-pointer disabled:opacity-50"
+                            className="text-xs px-2.5 py-1.5 rounded-md bg-(--bg-elevated) border border-(--border) text-(--text-secondary) outline-none focus:border-purple-500 transition-colors cursor-pointer disabled:opacity-50"
                           >
-                            {ASSIGNABLE_ROLES.map((r) => (
+                            {assignableRoles.map((r) => (
                               <option
-                                key={r}
-                                value={r}
+                                key={r.role.id}
+                                value={r.role.name}
                                 style={{ background: "var(--bg-elevated)" }}
                               >
-                                {ROLE_STYLE[r].label}
+                                {r.role.name.charAt(0).toUpperCase() +
+                                  r.role.name.slice(1)}
                               </option>
                             ))}
                           </select>
@@ -367,13 +381,13 @@ export default function MembersPage({
                         </span>
                       )}
 
-                      <span className="text-xs text-[var(--text-muted)] flex-shrink-0 hidden sm:block">
+                      <span className="text-xs text-(--text-muted) shrink-0 hidden sm:block">
                         {formatDate(m.joinedAt)}
                       </span>
 
                       {confirming ? (
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-xs text-[var(--text-muted)]">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-(--text-muted)">
                             Remove?
                           </span>
                           <button
@@ -384,19 +398,19 @@ export default function MembersPage({
                           </button>
                           <button
                             onClick={() => setConfirm(null)}
-                            className="px-2.5 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] transition-colors"
+                            className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated) transition-colors"
                           >
                             No
                           </button>
                         </div>
                       ) : (canRemove ||
-                          canResetPassword ||
-                          canViewMemberPerms ||
-                          canEditMemberPerms) &&
+                        canResetPassword ||
+                        canViewMemberPerms ||
+                        canEditMemberPerms) &&
                         !isMe &&
                         !isOwner ? (
                         <div
-                          className="relative flex-shrink-0"
+                          className="relative shrink-0"
                           ref={(el) => {
                             if (el) menuRefs.current.set(m.membershipId, el);
                             else menuRefs.current.delete(m.membershipId);
@@ -406,16 +420,16 @@ export default function MembersPage({
                             onClick={() =>
                               setOpenMenu(menuOpen ? null : m.membershipId)
                             }
-                            className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] transition-all"
+                            className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:bg-(--bg-elevated) transition-all"
                           >
                             <MoreHorizontal size={15} />
                           </button>
                           {menuOpen && (
-                            <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                            <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                               {canResetPassword && (
                                 <button
                                   onClick={() => handleResetPassword(m)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors text-left"
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) transition-colors text-left"
                                 >
                                   Reset password
                                 </button>
@@ -423,7 +437,7 @@ export default function MembersPage({
                               {(canViewMemberPerms || canEditMemberPerms) && (
                                 <button
                                   onClick={() => handleManagePermissions(m)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] transition-colors text-left"
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) transition-colors text-left"
                                 >
                                   {canEditMemberPerms
                                     ? "Manage permissions"
@@ -445,7 +459,7 @@ export default function MembersPage({
                           )}
                         </div>
                       ) : (
-                        <div className="w-[30px] flex-shrink-0" />
+                        <div className="w-[30px] shrink-0" />
                       )}
                     </div>
                   );
@@ -458,42 +472,42 @@ export default function MembersPage({
           {pending.length > 0 && (
             <section>
               <p
-                className="text-[0.65rem] font-semibold text-[var(--text-muted)] uppercase tracking-widest mb-3"
+                className="text-[0.65rem] font-semibold text-(--text-muted) uppercase tracking-widest mb-3"
                 style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
               >
                 Pending invitations ({pending.length})
               </p>
-              <div className="rounded-xl border border-[var(--border)] divide-y divide-[var(--border)]">
+              <div className="rounded-xl border border-(--border) divide-y divide-(--border)">
                 {pending.map((m) => {
-                  const roleStyle = ROLE_STYLE[m.role];
+                  const roleStyle = ROLE_STYLE[m.role] || {
+                    label: m.role.charAt(0).toUpperCase() + m.role.slice(1),
+                    cls: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
+                  };
                   return (
                     <div
                       key={m.membershipId}
-                      className="member-row flex items-center gap-4 px-5 py-3.5 bg-[var(--bg-surface)]"
+                      className="member-row flex items-center gap-4 px-5 py-3.5 bg-(--bg-surface)"
                     >
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-[var(--bg-elevated)] border border-[var(--border)]">
-                        <Mail size={13} className="text-[var(--text-muted)]" />
+                      <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center bg-(--bg-elevated) border border-(--border)">
+                        <Mail size={13} className="text-(--text-muted)" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[var(--text-secondary)] truncate">
+                        <p className="text-sm font-medium text-(--text-secondary) truncate">
                           {m.email}
                         </p>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <Clock
-                            size={10}
-                            className="text-[var(--text-muted)]"
-                          />
-                          <p className="text-xs text-[var(--text-muted)]">
+                          <Clock size={10} className="text-(--text-muted)" />
+                          <p className="text-xs text-(--text-muted)">
                             Invited {formatDate(m.joinedAt)}
                           </p>
                         </div>
                       </div>
                       <span
-                        className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${roleStyle.cls}`}
+                        className={`text-[0.65rem] font-semibold border px-2 py-0.5 rounded-full shrink-0 ${roleStyle.cls}`}
                       >
                         {roleStyle.label}
                       </span>
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         {canInvite && (
                           <button
                             onClick={() => handleResend(m.membershipId)}
@@ -505,7 +519,7 @@ export default function MembersPage({
                         {canInvite && (
                           <button
                             onClick={() => handleCancelInvite(m.membershipId)}
-                            className="text-xs text-[var(--text-muted)] hover:text-red-400 transition-colors"
+                            className="text-xs text-(--text-muted) hover:text-red-400 transition-colors"
                           >
                             Cancel
                           </button>

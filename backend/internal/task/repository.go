@@ -38,11 +38,11 @@ func NewRepository(db *pgxpool.Pool) Repository {
 	return &repoImpl{db: db}
 }
 
-const taskSelect = `id, public_id, org_id, title, description, status, due_date, created_by, assigned_to, created_at, updated_at`
+const taskSelect = `id, public_id, org_id, title, description, status, due_date, created_by, assigned_to, related_type, related_id, created_at, updated_at`
 
 func scanTask(row pgx.Row) (*Task, error) {
 	t := &Task{}
-	err := row.Scan(&t.ID, &t.PublicID, &t.OrgID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.CreatedBy, &t.AssignedTo, &t.CreatedAt, &t.UpdatedAt)
+	err := row.Scan(&t.ID, &t.PublicID, &t.OrgID, &t.Title, &t.Description, &t.Status, &t.DueDate, &t.CreatedBy, &t.AssignedTo, &t.RelatedType, &t.RelatedID, &t.CreatedAt, &t.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -75,6 +75,18 @@ func buildListWhere(orgID string, filter ListFilter) (string, []any) {
 	if filter.AssignedTo != "" {
 		args = append(args, filter.AssignedTo)
 		clauses = append(clauses, fmt.Sprintf("assigned_to = $%d", len(args)))
+	}
+	if filter.InvolvedUserID != "" {
+		args = append(args, filter.InvolvedUserID)
+		clauses = append(clauses, fmt.Sprintf("(assigned_to = $%d OR created_by = $%d)", len(args), len(args)))
+	}
+	if filter.RelatedType != "" {
+		args = append(args, filter.RelatedType)
+		clauses = append(clauses, fmt.Sprintf("related_type = $%d", len(args)))
+	}
+	if filter.RelatedID != "" {
+		args = append(args, filter.RelatedID)
+		clauses = append(clauses, fmt.Sprintf("related_id = $%d", len(args)))
 	}
 	return strings.Join(clauses, " AND "), args
 }
@@ -147,11 +159,11 @@ func (r *repoImpl) FindByRef(ctx context.Context, orgID, taskRef string) (*Task,
 // Create inserts a new task row and populates generated fields.
 func (r *repoImpl) Create(ctx context.Context, t *Task) error {
 	const q = `
-		INSERT INTO tasks (org_id, title, description, status, due_date, created_by, assigned_to)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO tasks (org_id, title, description, status, due_date, created_by, assigned_to, related_type, related_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING ` + taskSelect
 
-	created, err := scanTask(r.db.QueryRow(ctx, q, t.OrgID, t.Title, t.Description, t.Status, t.DueDate, t.CreatedBy, t.AssignedTo))
+	created, err := scanTask(r.db.QueryRow(ctx, q, t.OrgID, t.Title, t.Description, t.Status, t.DueDate, t.CreatedBy, t.AssignedTo, t.RelatedType, t.RelatedID))
 	if err != nil {
 		return fmt.Errorf("task: Create: %w", err)
 	}
@@ -166,11 +178,11 @@ func (r *repoImpl) Create(ctx context.Context, t *Task) error {
 func (r *repoImpl) Update(ctx context.Context, t *Task) error {
 	const q = `
 		UPDATE tasks
-		SET title = $1, description = $2, status = $3, due_date = $4, assigned_to = $5, updated_at = NOW()
-		WHERE id = $6 AND org_id = $7
+		SET title = $1, description = $2, status = $3, due_date = $4, assigned_to = $5, related_type = $6, related_id = $7, updated_at = NOW()
+		WHERE id = $8 AND org_id = $9
 		RETURNING ` + taskSelect
 
-	updated, err := scanTask(r.db.QueryRow(ctx, q, t.Title, t.Description, t.Status, t.DueDate, t.AssignedTo, t.ID, t.OrgID))
+	updated, err := scanTask(r.db.QueryRow(ctx, q, t.Title, t.Description, t.Status, t.DueDate, t.AssignedTo, t.RelatedType, t.RelatedID, t.ID, t.OrgID))
 	if err != nil {
 		return fmt.Errorf("task: Update: %w", err)
 	}

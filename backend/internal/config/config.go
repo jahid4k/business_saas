@@ -30,6 +30,17 @@ type Config struct {
 	JWT      JWTConfig
 	CORS     CORSConfig
 	Cookie   CookieConfig // NEW: controls httpOnly refresh token cookie behaviour
+	Social   SocialConfig // OAuth & Webhook credentials
+}
+
+// SocialConfig holds third-party integration credentials.
+type SocialConfig struct {
+	OAuthRedirectBaseURL   string
+	MetaClientID           string
+	MetaClientSecret       string
+	MetaWebhookVerifyToken string
+	LinkedInClientID       string
+	LinkedInClientSecret   string
 }
 
 // AppConfig holds general application settings.
@@ -119,6 +130,18 @@ func Load() (*Config, error) {
 		Name: getEnv("APP_NAME", "BusinessSAAS"),
 		Env:  getEnv("APP_ENV", "development"),
 		Port: getEnv("APP_PORT", "8080"),
+	}
+
+	// ----------------------------------------------------------
+	// Social
+	// ----------------------------------------------------------
+	cfg.Social = SocialConfig{
+		OAuthRedirectBaseURL:   getEnv("OAUTH_REDIRECT_BASE_URL", "http://localhost:8080"),
+		MetaClientID:           getEnv("META_CLIENT_ID", ""),
+		MetaClientSecret:       getEnv("META_CLIENT_SECRET", ""),
+		MetaWebhookVerifyToken: getEnv("META_WEBHOOK_VERIFY_TOKEN", ""),
+		LinkedInClientID:       getEnv("LINKEDIN_CLIENT_ID", ""),
+		LinkedInClientSecret:   getEnv("LINKEDIN_CLIENT_SECRET", ""),
 	}
 
 	// ----------------------------------------------------------

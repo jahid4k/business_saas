@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { listPipelines, listStages } from "@/lib/crm/pipelines";
 import type { Lead, Pipeline, Stage } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 interface ConvertFormProps {
   lead: Lead;
@@ -21,8 +22,8 @@ interface ConvertFormProps {
 
 const inputCls = `
   w-full px-3.5 py-2.5 rounded-lg text-sm
-  bg-[var(--bg-elevated)] border border-[var(--border)]
-  text-[var(--text-primary)] placeholder:text-[var(--text-muted)]
+  bg-(--bg-elevated) border border-(--border)
+  text-(--text-primary) placeholder:text-(--text-muted)
   outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15
   transition-all
 `;
@@ -57,27 +58,44 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
         setPipelines(p);
         // Auto-select default pipeline
         const def = p.find((x) => x.is_default) ?? p[0];
-        if (def) setPipelineId(def.id);
+        if (def) {
+          setPipelineId(def.id);
+          setLoadingStages(true);
+        }
       })
       .finally(() => setLoadingPipes(false));
   }, [orgId]);
 
   // Fetch stages when pipeline changes
   useEffect(() => {
-    if (!pipelineId) {
-      setStages([]);
-      setStageId("");
-      return;
-    }
-    setLoadingStages(true);
-    setStageId("");
+    if (!pipelineId) return;
+
+    let active = true;
     listStages(orgId, pipelineId)
       .then((s) => {
+        if (!active) return;
         setStages(s);
         if (s.length > 0) setStageId(s[0].id);
       })
-      .finally(() => setLoadingStages(false));
+      .finally(() => {
+        if (active) setLoadingStages(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [pipelineId, orgId]);
+
+  const handlePipelineChange = (id: string) => {
+    setPipelineId(id);
+    setStages([]);
+    setStageId("");
+    if (id) {
+      setLoadingStages(true);
+    } else {
+      setLoadingStages(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -103,18 +121,18 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {/* Lead summary */}
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]">
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-(--bg-elevated) border border-(--border)">
           <div
-            className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-bold text-white"
+            className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-sm font-bold text-white"
             style={{ background: "linear-gradient(135deg, #7c3aed, #a855f7)" }}
           >
             {lead.first_name[0].toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-medium text-[var(--text-primary)]">
+            <p className="text-sm font-medium text-(--text-primary)">
               {lead.first_name} {lead.last_name}
             </p>
-            <p className="text-xs text-[var(--text-muted)]">
+            <p className="text-xs text-(--text-muted)">
               {lead.company_name ?? lead.email ?? "No company"}
             </p>
           </div>
@@ -128,7 +146,7 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
 
         {/* ── Create contact ── */}
         <div
-          className={`rounded-xl border transition-colors ${createContact ? "border-purple-500/30 bg-purple-500/5" : "border-[var(--border)]"}`}
+          className={`rounded-xl border transition-colors ${createContact ? "border-purple-500/30 bg-purple-500/5" : "border-(--border)"}`}
         >
           <label className="flex items-start gap-3 p-4 cursor-pointer">
             <input
@@ -138,13 +156,13 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
                 setCreateContact(e.target.checked);
                 if (!e.target.checked) setCreateDeal(false);
               }}
-              className="mt-0.5 accent-purple-500 flex-shrink-0"
+              className="mt-0.5 accent-purple-500 shrink-0"
             />
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-(--text-primary)">
                 Create contact
               </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              <p className="text-xs text-(--text-muted) mt-0.5">
                 Add {lead.first_name} {lead.last_name} to your contacts
               </p>
             </div>
@@ -155,10 +173,10 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
         <div
           className={`rounded-xl border transition-all ${
             !createContact
-              ? "opacity-40 pointer-events-none border-[var(--border)]"
+              ? "opacity-40 pointer-events-none border-(--border)"
               : createDeal
                 ? "border-purple-500/30 bg-purple-500/5"
-                : "border-[var(--border)]"
+                : "border-(--border)"
           }`}
         >
           <label className="flex items-start gap-3 p-4 cursor-pointer">
@@ -167,13 +185,13 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
               checked={createDeal}
               onChange={(e) => setCreateDeal(e.target.checked)}
               disabled={!createContact}
-              className="mt-0.5 accent-purple-500 flex-shrink-0"
+              className="mt-0.5 accent-purple-500 shrink-0"
             />
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
+              <p className="text-sm font-medium text-(--text-primary)">
                 Create deal
               </p>
-              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              <p className="text-xs text-(--text-muted) mt-0.5">
                 Add an opportunity to your pipeline
               </p>
             </div>
@@ -181,10 +199,10 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
 
           {/* Deal fields — shown when createDeal is true */}
           {createDeal && createContact && (
-            <div className="px-4 pb-4 space-y-3 border-t border-[var(--border)] pt-3">
+            <div className="px-4 pb-4 space-y-3 border-t border-(--border) pt-3">
               {/* Deal title */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                <label className="block text-xs font-medium text-(--text-secondary)">
                   Deal title
                 </label>
                 <input
@@ -197,11 +215,11 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
 
               {/* Deal value */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                <label className="block text-xs font-medium text-(--text-secondary)">
                   Deal value (optional)
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-[var(--text-muted)]">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-(--text-muted)">
                     $
                   </span>
                   <input
@@ -217,65 +235,54 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
 
               {/* Pipeline */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                <label className="block text-xs font-medium text-(--text-secondary)">
                   Pipeline (optional)
                 </label>
                 {loadingPipes ? (
-                  <p className="text-xs text-[var(--text-muted)] py-2">
+                  <p className="text-xs text-(--text-muted) py-2">
                     Loading pipelines…
                   </p>
                 ) : pipelines.length === 0 ? (
-                  <p className="text-xs text-[var(--text-muted)] py-2">
+                  <p className="text-xs text-(--text-muted) py-2">
                     No pipelines found
                   </p>
                 ) : (
-                  <select
+                  <Select
                     value={pipelineId}
-                    onChange={(e) => setPipelineId(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">No pipeline</option>
-                    {pipelines.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        style={{ background: "var(--bg-elevated)" }}
-                      >
-                        {p.name}
-                        {p.is_default ? " (default)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={handlePipelineChange}
+                    options={[
+                      { value: "", label: "No pipeline" },
+                      ...pipelines.map((p) => ({
+                        value: p.id,
+                        label: p.name + (p.is_default ? " (default)" : ""),
+                      })),
+                    ]}
+                  />
                 )}
               </div>
 
               {/* Stage */}
               {pipelineId && (
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                  <label className="block text-xs font-medium text-(--text-secondary)">
                     Stage (optional)
                   </label>
                   {loadingStages ? (
-                    <p className="text-xs text-[var(--text-muted)] py-2">
+                    <p className="text-xs text-(--text-muted) py-2">
                       Loading stages…
                     </p>
                   ) : (
-                    <select
+                    <Select
                       value={stageId}
-                      onChange={(e) => setStageId(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">No stage</option>
-                      {stages.map((s) => (
-                        <option
-                          key={s.id}
-                          value={s.id}
-                          style={{ background: "var(--bg-elevated)" }}
-                        >
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setStageId}
+                      options={[
+                        { value: "", label: "No stage" },
+                        ...stages.map((s) => ({
+                          value: s.id,
+                          label: s.name,
+                        })),
+                      ]}
+                    />
                   )}
                 </div>
               )}
@@ -285,11 +292,11 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center gap-3 px-6 py-4 border-t border-[var(--border)] flex-shrink-0">
+      <div className="flex items-center gap-3 px-6 py-4 border-t border-(--border) shrink-0">
         <button
           type="button"
           onClick={closeDrawer}
-          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-[var(--text-secondary)] border border-[var(--border)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="flex-1 py-2.5 rounded-lg text-sm font-medium text-(--text-secondary) border border-(--border) hover:bg-(--bg-elevated) transition-colors"
         >
           Cancel
         </button>

@@ -106,7 +106,7 @@ export default function RecognitionPage({
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1
-            className="text-2xl font-bold text-[var(--text-primary)] mb-1"
+            className="text-2xl font-bold text-(--text-primary) mb-1"
             style={{
               fontFamily: "var(--font-syne, Syne, sans-serif)",
               letterSpacing: "-0.02em",
@@ -114,13 +114,13 @@ export default function RecognitionPage({
           >
             Recognition
           </h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-(--text-muted)">
             Awards, announcements, calendar, and milestones
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] w-fit flex-wrap">
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-lg bg-(--bg-elevated) border border-(--border) w-fit flex-wrap">
         {(
           ["awards", "announcements", "calendar", "milestones"] as TabKey[]
         ).map((key) => (
@@ -130,7 +130,7 @@ export default function RecognitionPage({
             className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
               tab === key
                 ? "bg-purple-600 text-white"
-                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                : "text-(--text-secondary) hover:text-(--text-primary)"
             }`}
           >
             {key === "awards"
@@ -314,16 +314,16 @@ function AwardsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <AwardIcon size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <AwardIcon size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No awards yet
           </p>
         </div>
@@ -340,23 +340,23 @@ function AwardsView({
             return (
               <div
                 key={a.id}
-                className={`aw-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`aw-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <AwardIcon size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {a.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {empName(a.employee_id)} · {a.award_type.replace("_", " ")}
                     {a.points > 0 ? ` · ${a.points} pts` : ""}
                     {a.monetary_value
                       ? ` · ${a.monetary_value} ${a.currency}`
                       : ""}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                  <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                     {a.description}
                   </p>
                   <div className="mt-2">
@@ -369,7 +369,7 @@ function AwardsView({
 
                 {showMenu && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(a.id, el);
                       else menuRefs.current.delete(a.id);
@@ -377,12 +377,12 @@ function AwardsView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : a.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {a.approval_instance_id && (
                           <button
                             onClick={() => {
@@ -397,7 +397,7 @@ function AwardsView({
                               });
                               setOpenMenuId(null);
                             }}
-                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                           >
                             View approval
                           </button>
@@ -405,7 +405,7 @@ function AwardsView({
                         {canApprove && a.status === "draft" && (
                           <button
                             onClick={() => handleSubmit(a)}
-                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                           >
                             Submit
                           </button>
@@ -569,16 +569,16 @@ function AnnouncementsView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <Megaphone size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <Megaphone size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No announcements yet
           </p>
         </div>
@@ -589,21 +589,21 @@ function AnnouncementsView({
             return (
               <div
                 key={a.id}
-                className={`an-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`an-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <Megaphone size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {a.is_pinned && "📌 "}
                     {a.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {a.category.replace("_", " ")} · {a.scope_type}
                     {a.requires_acknowledgement ? " · Requires ack" : ""}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                  <p className="text-xs text-(--text-muted) mt-0.5 line-clamp-1">
                     {a.content}
                   </p>
                   <div className="mt-2">
@@ -619,7 +619,7 @@ function AnnouncementsView({
                     a.status === "scheduled" ||
                     a.status === "published") && (
                     <div
-                      className="relative flex-shrink-0"
+                      className="relative shrink-0"
                       ref={(el) => {
                         if (el) menuRefs.current.set(a.id, el);
                         else menuRefs.current.delete(a.id);
@@ -627,12 +627,12 @@ function AnnouncementsView({
                     >
                       <button
                         onClick={() => setOpenMenuId(menuOpen ? null : a.id)}
-                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                        className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                       >
                         <MoreHorizontal size={15} />
                       </button>
                       {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                        <div className="absolute right-0 top-full mt-1.5 w-40 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                           {a.status === "draft" && (
                             <button
                               onClick={() => handlePublish(a)}
@@ -644,7 +644,7 @@ function AnnouncementsView({
                           {a.status === "draft" && (
                             <button
                               onClick={() => handleSchedule(a)}
-                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                              className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                             >
                               Schedule
                             </button>
@@ -790,16 +790,16 @@ function CalendarView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <CalendarHeart size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <CalendarHeart size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No calendar events
           </p>
         </div>
@@ -810,16 +810,16 @@ function CalendarView({
             return (
               <div
                 key={e.id}
-                className={`cal-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:border-[var(--text-muted)]/25 transition-all duration-150 ${menuOpen ? "z-30 border-[var(--text-muted)]/30" : "z-10"}`}
+                className={`cal-row group relative flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border) hover:border-(--text-muted)/25 transition-all duration-150 ${menuOpen ? "z-30 border-(--text-muted)/30" : "z-10"}`}
               >
                 <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                   <CalendarHeart size={15} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                  <p className="text-sm font-medium leading-snug text-(--text-primary)">
                     {e.title}
                   </p>
-                  <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  <p className="text-xs text-(--text-muted) mt-0.5">
                     {fmtDate(e.start_date)}
                     {e.end_date !== e.start_date
                       ? ` – ${fmtDate(e.end_date)}`
@@ -838,7 +838,7 @@ function CalendarView({
 
                 {canManage && e.status === "upcoming" && (
                   <div
-                    className="relative flex-shrink-0"
+                    className="relative shrink-0"
                     ref={(el) => {
                       if (el) menuRefs.current.set(e.id, el);
                       else menuRefs.current.delete(e.id);
@@ -846,16 +846,16 @@ function CalendarView({
                   >
                     <button
                       onClick={() => setOpenMenuId(menuOpen ? null : e.id)}
-                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-all"
+                      className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-all"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                     {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-[var(--bg-elevated)] border border-[var(--border)] shadow-xl z-20">
+                      <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl overflow-hidden bg-(--bg-elevated) border border-(--border) shadow-xl z-20">
                         {e.requires_rsvp && (
                           <button
                             onClick={() => handleRsvp(e)}
-                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] text-left"
+                            className="w-full flex items-center px-3.5 py-2.5 text-sm text-(--text-secondary) hover:bg-(--bg-surface) hover:text-(--text-primary) text-left"
                           >
                             Send RSVP requests
                           </button>
@@ -994,7 +994,7 @@ function MilestonesView({
             <select
               value={genMonth}
               onChange={(e) => setGenMonth(Number(e.target.value))}
-              className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
             >
               {MONTHS.map((m, i) => (
                 <option
@@ -1009,7 +1009,7 @@ function MilestonesView({
             <select
               value={genYear}
               onChange={(e) => setGenYear(Number(e.target.value))}
-              className="px-3 py-2 rounded-lg text-sm bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary)"
             >
               {[genYear - 1, genYear, genYear + 1].map((y) => (
                 <option
@@ -1043,16 +1043,16 @@ function MilestonesView({
       </div>
 
       {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--text-muted)] gap-3">
+        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
           <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
           Loading…
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-center mb-4">
-            <PartyPopper size={20} className="text-[var(--text-muted)]" />
+          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+            <PartyPopper size={20} className="text-(--text-muted)" />
           </div>
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
+          <p className="text-sm font-medium text-(--text-secondary)">
             No milestones yet
           </p>
         </div>
@@ -1061,16 +1061,16 @@ function MilestonesView({
           {items.map((m) => (
             <div
               key={m.id}
-              className="ms-row flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]"
+              className="ms-row flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
             >
               <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
                 <PartyPopper size={15} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium leading-snug text-[var(--text-primary)]">
+                <p className="text-sm font-medium leading-snug text-(--text-primary)">
                   {m.title}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                <p className="text-xs text-(--text-muted) mt-0.5">
                   {empName(m.employee_id)} ·{" "}
                   {m.milestone_type.replace("_", " ")} ·{" "}
                   {fmtDate(m.milestone_date)}
@@ -1086,7 +1086,7 @@ function MilestonesView({
               {!m.is_acknowledged && canManage && (
                 <button
                   onClick={() => handleAcknowledge(m)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 flex-shrink-0"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10 shrink-0"
                 >
                   Acknowledge
                 </button>

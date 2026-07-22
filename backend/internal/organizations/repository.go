@@ -15,6 +15,7 @@ type Repository interface {
 	FindByID(ctx context.Context, businessID string) (*Business, error)
 	FindBySlug(ctx context.Context, slug string) (*Business, error)
 	FindByUserID(ctx context.Context, userID string) ([]*MembershipWithRole, error)
+	Update(ctx context.Context, b *Business) error
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 }
 
@@ -41,6 +42,19 @@ func (r *repoImpl) CreateTx(ctx context.Context, tx pgx.Tx, b *Business) error {
 		return fmt.Errorf("organization: CreateTx: %w", err)
 	}
 	b.Status = "active"
+	return nil
+}
+
+func (r *repoImpl) Update(ctx context.Context, b *Business) error {
+	const q = `
+		UPDATE organizations
+		SET name = $1, legal_name = NULLIF($2, ''), type = NULLIF($3, ''), industry = NULLIF($4, ''), website = NULLIF($5, ''), logo_url = NULLIF($6, ''), country = NULLIF($7, ''), timezone = COALESCE(NULLIF($8, ''), 'UTC'), currency = COALESCE(NULLIF($9, ''), 'USD'), updated_at = NOW()
+		WHERE id = $10 AND deleted_at IS NULL
+		RETURNING updated_at`
+	err := r.db.QueryRow(ctx, q, b.Name, b.LegalName, b.Type, b.Industry, b.Website, b.LogoURL, b.Country, b.Timezone, b.Currency, b.ID).Scan(&b.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("organization: Update: %w", err)
+	}
 	return nil
 }
 
