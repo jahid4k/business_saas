@@ -14,7 +14,7 @@ import (
 // Service defines the business logic interface for contacts and companies.
 type Service interface {
 	// Contacts
-	ListContacts(ctx context.Context, orgID string, p pagination.Params) (*ContactListResponse, error)
+	ListContacts(ctx context.Context, orgID string, p pagination.Params, search string) (*ContactListResponse, error)
 	GetContact(ctx context.Context, orgID, contactID string) (*Contact, error)
 	CreateContact(ctx context.Context, orgID, userID string, req CreateContactRequest) (*Contact, error)
 	// CreateContactTx inserts a contact inside an existing pgx.Tx.
@@ -25,7 +25,7 @@ type Service interface {
 	GetContactsByCompany(ctx context.Context, orgID, companyID string) ([]*Contact, error)
 
 	// Companies
-	ListCompanies(ctx context.Context, orgID string, p pagination.Params) (*CompanyListResponse, error)
+	ListCompanies(ctx context.Context, orgID string, p pagination.Params, search string) (*CompanyListResponse, error)
 	GetCompany(ctx context.Context, orgID, companyID string) (*Company, error)
 	CreateCompany(ctx context.Context, orgID, userID string, req CreateCompanyRequest) (*Company, error)
 	UpdateCompany(ctx context.Context, orgID, companyID string, req UpdateCompanyRequest) (*Company, error)
@@ -47,15 +47,15 @@ func NewService(repo Repository) Service {
 // Contacts
 // ============================================================
 
-func (s *serviceImpl) ListContacts(ctx context.Context, orgID string, p pagination.Params) (*ContactListResponse, error) {
-	contacts, err := s.repo.FindContacts(ctx, orgID, p)
+func (s *serviceImpl) ListContacts(ctx context.Context, orgID string, p pagination.Params, search string) (*ContactListResponse, error) {
+	contacts, err := s.repo.FindContacts(ctx, orgID, p, search)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: ListContacts: %w", err)
 	}
 	if contacts == nil {
 		contacts = []*Contact{}
 	}
-	total, err := s.repo.CountContacts(ctx, orgID)
+	total, err := s.repo.CountContacts(ctx, orgID, search)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: ListContacts: count: %w", err)
 	}
@@ -204,15 +204,15 @@ func (s *serviceImpl) GetContactsByCompany(ctx context.Context, orgID, companyID
 // Companies
 // ============================================================
 
-func (s *serviceImpl) ListCompanies(ctx context.Context, orgID string, p pagination.Params) (*CompanyListResponse, error) {
-	companies, err := s.repo.FindCompanies(ctx, orgID, p)
+func (s *serviceImpl) ListCompanies(ctx context.Context, orgID string, p pagination.Params, search string) (*CompanyListResponse, error) {
+	companies, err := s.repo.FindCompanies(ctx, orgID, p, search)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: ListCompanies: %w", err)
 	}
 	if companies == nil {
 		companies = []*Company{}
 	}
-	total, err := s.repo.CountCompanies(ctx, orgID)
+	total, err := s.repo.CountCompanies(ctx, orgID, search)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: ListCompanies: count: %w", err)
 	}

@@ -25,6 +25,7 @@ import {
   Trophy,
   X,
   Pencil,
+  Trash2,
   Building2,
   User,
   Calendar,
@@ -35,11 +36,19 @@ import { usePermissionStore } from "@/stores/permissionStore";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { toast } from "sonner";
-import { listPipelines, listStages } from "@/lib/crm/pipelines";
+import {
+  listPipelines,
+  listStages,
+  createStage,
+  updateStage,
+  deleteStage,
+  deletePipeline,
+} from "@/lib/crm/pipelines";
 import {
   listDeals,
   createDeal,
   updateDeal,
+  deleteDeal,
   moveDeal,
   markDealWon,
   markDealLost,
@@ -48,6 +57,7 @@ import { listContacts } from "@/lib/crm/contacts";
 import { listCompanies } from "@/lib/crm/companies";
 import { queryKeys } from "@/lib/queryKeys";
 import DealForm from "@/components/crm/deals/DealForm";
+import { Select } from "@/components/ui/Select";
 import type {
   Deal,
   Stage,
@@ -91,6 +101,7 @@ interface MobileDealCardProps {
   onMove: (dealId: string, stageId: string) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
 }
 
 function MobileDealCard({
@@ -102,6 +113,7 @@ function MobileDealCard({
   onMove,
   onWon,
   onLost,
+  onDelete,
 }: MobileDealCardProps) {
   const [moveOpen, setMoveOpen] = useState(false);
   const contact = contactMap.get(deal.contact_id ?? "");
@@ -118,12 +130,20 @@ function MobileDealCard({
         >
           {deal.title}
         </p>
-        <button
-          onClick={() => onEdit(deal)}
-          className="p-1.5 rounded-lg text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) shrink-0 transition-colors"
-        >
-          <Pencil size={12} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onEdit(deal)}
+            className="p-1.5 rounded-lg text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            onClick={() => onDelete(deal)}
+            className="p-1.5 rounded-lg text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
       </div>
 
       {/* Value */}
@@ -252,6 +272,7 @@ interface DealCardProps {
   onEdit: (deal: Deal) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
   isDragOverlay?: boolean;
 }
 
@@ -262,6 +283,7 @@ function DealCard({
   onEdit,
   onWon,
   onLost,
+  onDelete,
   isDragOverlay,
 }: DealCardProps) {
   const {
@@ -314,16 +336,28 @@ function DealCard({
         >
           {deal.title}
         </p>
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(deal);
-          }}
-          className="p-1 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) shrink-0 transition-colors"
-        >
-          <Pencil size={11} />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(deal);
+            }}
+            className="p-1 rounded-md text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-elevated) transition-colors"
+          >
+            <Pencil size={11} />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(deal);
+            }}
+            className="p-1 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
       </div>
 
       {/* Value */}
@@ -406,6 +440,9 @@ interface KanbanColumnProps {
   onEdit: (deal: Deal) => void;
   onWon: (deal: Deal) => void;
   onLost: (deal: Deal) => void;
+  onDelete: (deal: Deal) => void;
+  onEditStage: (stage: Stage) => void;
+  onDeleteStage: (stage: Stage) => void;
   canCreate: boolean;
 }
 
@@ -418,6 +455,9 @@ function KanbanColumn({
   onEdit,
   onWon,
   onLost,
+  onDelete,
+  onEditStage,
+  onDeleteStage,
   canCreate,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
@@ -440,27 +480,50 @@ function KanbanColumn({
             className="text-sm font-semibold text-(--text-primary)"
             style={{ fontFamily: "var(--font-inter, Inter, sans-serif)" }}
           >
-            {stage.name} <span className="text-xs text-(--text-muted) font-normal ml-1">({stage.probability}%)</span>
+            {stage.name}{" "}
+            <span className="text-xs text-(--text-muted) font-normal ml-1">
+              ({stage.probability}%)
+            </span>
           </p>
           <p className="text-xs text-(--text-muted)">
             {orderedDeals.length} deal{orderedDeals.length !== 1 ? "s" : ""}
             {totalValue > 0 && ` · ${formatCurrency(totalValue)}`}
-            {totalValue > 0 && stage.probability > 0 && stage.probability < 100 && (
-              <span className="text-purple-400">
-                {` · Expected: ${formatCurrency(totalValue * (stage.probability / 100))}`}
-              </span>
-            )}
+            {totalValue > 0 &&
+              stage.probability > 0 &&
+              stage.probability < 100 && (
+                <span className="text-purple-400">
+                  {` · Expected: ${formatCurrency(totalValue * (stage.probability / 100))}`}
+                </span>
+              )}
           </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={() => onNewDeal(stage)}
-            className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
-            title={`Add deal to ${stage.name}`}
-          >
-            <Plus size={14} />
-          </button>
-        )}
+        <div className="flex items-center gap-0.5">
+          {canCreate && (
+            <>
+              <button
+                onClick={() => onEditStage(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                title="Edit stage"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                onClick={() => onDeleteStage(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                title="Delete stage"
+              >
+                <Trash2 size={13} />
+              </button>
+              <button
+                onClick={() => onNewDeal(stage)}
+                className="p-1 rounded-md text-(--text-muted) hover:text-purple-400 hover:bg-purple-500/10 transition-colors"
+                title={`Add deal to ${stage.name}`}
+              >
+                <Plus size={14} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Drop zone — independently scrollable */}
@@ -489,6 +552,7 @@ function KanbanColumn({
               onEdit={onEdit}
               onWon={onWon}
               onLost={onLost}
+              onDelete={onDelete}
             />
           ))}
         </SortableContext>
@@ -752,6 +816,119 @@ export default function PipelinePage({
     onError: () => toast.error("Failed to mark deal as lost."),
   });
 
+  const deleteDealMutation = useMutation({
+    mutationFn: (dealId: string) => deleteDeal(orgId, dealId),
+    onSuccess: (deletedId, variables) => {
+      queryClient.setQueryData<Deal[]>(dealsKey, (old) =>
+        (old ?? []).filter((d) => d.id !== variables),
+      );
+      toast.success("Deal deleted.");
+    },
+    onError: () => toast.error("Failed to delete deal."),
+  });
+
+  const createStageMutation = useMutation({
+    mutationFn: (payload: {
+      name: string;
+      position?: number;
+      probability?: number;
+    }) => createStage(orgId, activePipelineId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage created.");
+    },
+    onError: () => toast.error("Failed to create stage."),
+  });
+
+  const updateStageMutation = useMutation({
+    mutationFn: ({
+      stageId,
+      payload,
+    }: {
+      stageId: string;
+      payload: { name?: string; position?: number; probability?: number };
+    }) => updateStage(orgId, activePipelineId, stageId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage updated.");
+    },
+    onError: () => toast.error("Failed to update stage."),
+  });
+
+  const deleteStageMutation = useMutation({
+    mutationFn: (stageId: string) =>
+      deleteStage(orgId, activePipelineId, stageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.stages(orgId, activePipelineId),
+      });
+      toast.success("Stage deleted.");
+    },
+    onError: () =>
+      toast.error("Failed to delete stage. Make sure it contains no deals."),
+  });
+
+  const deletePipelineMutation = useMutation({
+    mutationFn: (pipelineId: string) => deletePipeline(orgId, pipelineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.crm.pipelines.list(orgId),
+      });
+      setSelectedPipe(""); // Reset to default
+      toast.success("Pipeline deleted.");
+    },
+    onError: () =>
+      toast.error("Failed to delete pipeline. Make sure it contains no deals."),
+  });
+
+  const handleAddStage = () => {
+    const name = window.prompt("New stage name:");
+    if (name?.trim()) {
+      createStageMutation.mutate({
+        name: name.trim(),
+        position: sortedStages.length,
+        probability: 0,
+      });
+    }
+  };
+
+  const handleEditStage = (stage: Stage) => {
+    const name = window.prompt("Rename stage:", stage.name);
+    if (name?.trim() && name !== stage.name) {
+      updateStageMutation.mutate({
+        stageId: stage.id,
+        payload: { name: name.trim() },
+      });
+    }
+  };
+
+  const handleDeleteStage = (stage: Stage) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete the stage "${stage.name}"?`,
+      )
+    ) {
+      deleteStageMutation.mutate(stage.id);
+    }
+  };
+
+  const handleDeletePipeline = () => {
+    const activePipeline = pipelines.find((p) => p.id === activePipelineId);
+    if (!activePipeline) return;
+
+    if (
+      window.confirm(
+        `Are you sure you want to delete the pipeline "${activePipeline.name}"? This cannot be undone.`,
+      )
+    ) {
+      deletePipelineMutation.mutate(activePipeline.id);
+    }
+  };
+
   // ── DnD handlers (desktop only) ───────────────────────────────────────────
   const handleDragStart = (event: DragStartEvent) => {
     const deal = pipelineDeals.find((d) => d.id === event.active.id);
@@ -818,7 +995,7 @@ export default function PipelinePage({
           defaultStageId={stage?.id}
           onSave={async (values) => {
             await createDealMutation.mutateAsync({
-              title: values.title,
+              title: values.title || "New Deal",
               value: values.value,
               currency: values.currency,
               pipeline_id: values.pipeline_id,
@@ -861,6 +1038,15 @@ export default function PipelinePage({
 
   const handleWon = (deal: Deal) => wonMutation.mutate(deal.id);
   const handleLost = (deal: Deal) => lostMutation.mutate(deal.id);
+  const handleDeleteDeal = (deal: Deal) => {
+    if (
+      window.confirm(
+        `Are you sure you want to delete the deal "${deal.title}"?`,
+      )
+    ) {
+      deleteDealMutation.mutate(deal.id);
+    }
+  };
   const handleMove = (dealId: string, stageId: string) =>
     moveDealMutation.mutate({ dealId, stageId });
 
@@ -904,24 +1090,30 @@ export default function PipelinePage({
         </div>
 
         {pipelines.length > 0 && (
-          <select
-            value={activePipelineId}
-            onChange={(e) => {
-              setSelectedPipe(e.target.value);
-              setMobileStageId(""); // reset mobile tab on pipeline change
-            }}
-            className="hidden sm:block px-3 py-1.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-secondary) outline-none focus:border-purple-500 transition-colors shrink-0"
-          >
-            {pipelines.map((p) => (
-              <option
-                key={p.id}
-                value={p.id}
-                style={{ background: "var(--bg-elevated)" }}
+          <div className="hidden sm:flex items-center gap-2 shrink-0">
+            <div className="w-52">
+              <Select
+                value={activePipelineId}
+                onChange={(v) => {
+                  setSelectedPipe(v);
+                  setMobileStageId(""); // reset mobile tab on pipeline change
+                }}
+                options={pipelines.map((p) => ({
+                  value: p.id,
+                  label: p.name,
+                }))}
+              />
+            </div>
+            {canCreate && (
+              <button
+                onClick={handleDeletePipeline}
+                className="p-2 rounded-lg text-(--text-muted) hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all shrink-0"
+                title="Delete this pipeline"
               >
-                {p.name}
-              </option>
-            ))}
-          </select>
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -1018,6 +1210,7 @@ export default function PipelinePage({
                 onMove={handleMove}
                 onWon={handleWon}
                 onLost={handleLost}
+                onDelete={handleDeleteDeal}
               />
             ))}
 
@@ -1070,9 +1263,24 @@ export default function PipelinePage({
                   onEdit={openEdit}
                   onWon={handleWon}
                   onLost={handleLost}
+                  onDelete={handleDeleteDeal}
+                  onEditStage={handleEditStage}
+                  onDeleteStage={handleDeleteStage}
                   canCreate={canCreate}
                 />
               ))}
+
+              {canCreate && pipelines.length > 0 && (
+                <div className="shrink-0" style={{ width: 272 }}>
+                  <button
+                    onClick={handleAddStage}
+                    className="w-full flex items-center justify-center gap-2 h-[42px] rounded-xl border border-dashed border-(--border) text-sm font-medium text-(--text-muted) hover:text-(--text-primary) hover:bg-(--bg-surface) hover:border-purple-500/40 transition-all"
+                  >
+                    <Plus size={16} />
+                    Add stage
+                  </button>
+                </div>
+              )}
             </div>
 
             <DragOverlay>
@@ -1084,6 +1292,7 @@ export default function PipelinePage({
                   onEdit={() => {}}
                   onWon={() => {}}
                   onLost={() => {}}
+                  onDelete={() => {}}
                   isDragOverlay
                 />
               )}

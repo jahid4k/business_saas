@@ -236,10 +236,7 @@ function LeadCard({
       <div className="space-y-3 flex-1 mb-5">
         {lead.email && (
           <div className="flex items-center gap-2.5">
-            <Mail
-              size={14}
-              className="text-(--text-muted) shrink-0"
-            />
+            <Mail size={14} className="text-(--text-muted) shrink-0" />
             <span className="text-xs text-(--text-secondary) truncate">
               {lead.email}
             </span>
@@ -247,10 +244,7 @@ function LeadCard({
         )}
         {lead.phone && (
           <div className="flex items-center gap-2.5">
-            <Phone
-              size={14}
-              className="text-(--text-muted) shrink-0"
-            />
+            <Phone size={14} className="text-(--text-muted) shrink-0" />
             <span className="text-xs text-(--text-secondary) truncate">
               {lead.phone}
             </span>
@@ -258,10 +252,7 @@ function LeadCard({
         )}
         {lead.title && (
           <div className="flex items-center gap-2.5">
-            <Briefcase
-              size={14}
-              className="text-(--text-muted) shrink-0"
-            />
+            <Briefcase size={14} className="text-(--text-muted) shrink-0" />
             <span className="text-xs text-(--text-secondary) truncate">
               {lead.title}
             </span>
@@ -468,7 +459,7 @@ export default function LeadsPage({
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-[1600px] mx-auto">
+    <div className="p-6 md:p-8 h-full">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1

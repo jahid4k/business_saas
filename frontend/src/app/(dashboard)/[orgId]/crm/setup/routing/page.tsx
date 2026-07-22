@@ -84,7 +84,8 @@ export default function LeadRoutingPage({
           Lead Routing
         </h1>
         <p className="text-sm text-(--text-secondary)">
-          Configure how new leads are automatically assigned to your team members.
+          Configure how new leads are automatically assigned to your team
+          members.
         </p>
       </div>
 
@@ -99,7 +100,8 @@ export default function LeadRoutingPage({
                 Round-Robin Assignment
               </h2>
               <p className="text-xs text-(--text-muted)">
-                Automatically distribute new leads equally among selected team members.
+                Automatically distribute new leads equally among selected team
+                members.
               </p>
             </div>
           </div>
@@ -166,9 +168,15 @@ export default function LeadRoutingPage({
                           </div>
                           <div>
                             <p className="text-sm font-medium text-(--text-primary)">
-                              {m ? `${m.firstName} ${m.lastName}` : "Unknown User"}
+                              {m
+                                ? `${m.firstName} ${m.lastName}`
+                                : "Unknown User"}
                             </p>
-                            {m && <p className="text-xs text-(--text-muted)">{m.email}</p>}
+                            {m && (
+                              <p className="text-xs text-(--text-muted)">
+                                {m.email}
+                              </p>
+                            )}
                           </div>
                         </div>
                         {canUpdate && (

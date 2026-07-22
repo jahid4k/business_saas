@@ -80,6 +80,43 @@ type ClientTokenPair struct {
 	ExpiresIn   int64  `json:"expires_in"`
 }
 
+// MobileTokenPair is what MOBILE clients receive in the response body.
+//
+// Unlike ClientTokenPair, it deliberately DOES include the raw refresh token:
+// mobile has no cookie jar, so the token has nowhere else to travel. This is
+// the one place in this package a raw refresh token is allowed into a JSON
+// response — used only by the /auth/mobile/* routes. The client is expected
+// to move it into expo-secure-store immediately and never persist it
+// anywhere else (Zustand, AsyncStorage, etc.) — see Section 14 of
+// docs/Project_Instruction.md.
+type MobileTokenPair struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+// ToMobileClient converts the internal TokenPair into the JSON shape sent to
+// mobile clients.
+func (t *TokenPair) ToMobileClient() *MobileTokenPair {
+	return &MobileTokenPair{
+		AccessToken:  t.AccessToken,
+		RefreshToken: t.RefreshToken,
+		ExpiresIn:    t.ExpiresIn,
+	}
+}
+
+// MobileRefreshRequest carries the refresh token in the request body.
+// Mobile has no cookie to read it from, unlike web's Refresh.
+type MobileRefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// MobileLogoutRequest carries the refresh token to revoke, in the request body.
+// Mobile has no cookie to read it from, unlike web's Logout.
+type MobileLogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 type PasswordResetRequestBody struct {
 	Email string `json:"email"`
 }

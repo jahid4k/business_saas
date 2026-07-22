@@ -29,6 +29,13 @@ interface Props {
 
 export default function OrgProvider({ orgId, children }: Props) {
   const [ready, setReady] = useState(false);
+  const [prevOrgId, setPrevOrgId] = useState(orgId);
+
+  if (orgId !== prevOrgId) {
+    setPrevOrgId(orgId);
+    setReady(false);
+  }
+
   const router = useRouter();
   const { currentOrg, setOrg } = useAuthStore();
   const { setPermissions } = usePermissionStore();
@@ -79,7 +86,6 @@ export default function OrgProvider({ orgId, children }: Props) {
       }
     };
 
-    setReady(false);
     init();
 
     return () => {
@@ -116,7 +122,9 @@ export default function OrgProvider({ orgId, children }: Props) {
         <div className="flex flex-1 flex-col min-w-0 min-h-0">
           <Topbar orgId={orgId} />
           <main className="flex-1 overflow-y-auto overflow-x-hidden">
-            {children}
+            <div className="w-full max-w-[5000px] mx-auto h-full">
+              {children}
+            </div>
           </main>
         </div>
       </div>

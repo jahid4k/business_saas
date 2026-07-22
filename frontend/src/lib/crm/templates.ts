@@ -17,27 +17,38 @@ export interface TemplateModel {
 }
 
 export async function listTemplates(orgId: string): Promise<TemplateModel[]> {
-  const res = await api.get(`/${orgId}/crm/templates`);
+  const res = await api.get(`/api/v1/organizations/${orgId}/crm/templates`);
   return res.data.templates;
 }
 
 export async function createTemplate(
   orgId: string,
-  payload: { name: string; type: string; subject?: string; body: string }
+  payload: { name: string; type: string; subject?: string; body: string },
 ): Promise<TemplateModel> {
-  const res = await api.post(`/${orgId}/crm/templates`, payload);
+  const res = await api.post(
+    `/api/v1/organizations/${orgId}/crm/templates`,
+    payload,
+  );
   return res.data.template;
 }
 
 export async function updateTemplate(
   orgId: string,
   templateId: string,
-  payload: { name?: string; subject?: string; body?: string }
+  payload: { name?: string; subject?: string; body?: string },
 ): Promise<TemplateModel> {
-  const res = await api.patch(`/${orgId}/crm/templates/${templateId}`, payload);
+  const res = await api.patch(
+    `/api/v1/organizations/${orgId}/crm/templates/${templateId}`,
+    payload,
+  );
   return res.data.template;
 }
 
-export async function deleteTemplate(orgId: string, templateId: string): Promise<void> {
-  await api.delete(`/${orgId}/crm/templates/${templateId}`);
+export async function deleteTemplate(
+  orgId: string,
+  templateId: string,
+): Promise<void> {
+  await api.delete(
+    `/api/v1/organizations/${orgId}/crm/templates/${templateId}`,
+  );
 }

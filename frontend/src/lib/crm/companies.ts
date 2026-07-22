@@ -13,9 +13,13 @@ const base = (orgId: string) => `/api/v1/organizations/${orgId}/crm/companies`;
 
 export async function listCompanies(
   orgId: string,
+  search?: string,
 ): Promise<CompanyListResponse> {
+  const url = new URL(base(orgId), window.location.origin);
+  if (search) url.searchParams.set("search", search);
+
   const res = await api.get<{ success: boolean; data: CompanyListResponse }>(
-    base(orgId),
+    url.pathname + url.search,
   );
   return res.data.data;
 }

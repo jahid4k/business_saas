@@ -82,6 +82,19 @@ func (s *serviceImpl) CreatePipeline(ctx context.Context, orgID, userID string, 
 	if err := s.repo.CreatePipeline(ctx, p); err != nil {
 		return nil, fmt.Errorf("pipeline: CreatePipeline: %w", err)
 	}
+
+	// Auto-provision default stages
+	p0, p1, p2 := 0, 1, 2
+	prob10, prob50, prob100 := 10, 50, 100
+	defaultStages := []CreateStageRequest{
+		{Name: "Prospecting", Position: &p0, Probability: &prob10},
+		{Name: "Negotiation", Position: &p1, Probability: &prob50},
+		{Name: "Closing", Position: &p2, Probability: &prob100},
+	}
+	for _, reqStage := range defaultStages {
+		_, _ = s.CreateStage(ctx, orgID, p.ID, reqStage)
+	}
+
 	return p, nil
 }
 

@@ -1,5 +1,29 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-07-22 (r14 — Mobile App promoted ⚪ NOT STARTED → 🔵 ACTIVE. Section 9's
+> entry slimmed to a pointer, same pattern as CAPTURE. Section 5 → AUTH gained a real MOBILE
+> subsection with the actual route list, and resolved the r10 draft's one open question: checked
+> against `frontend/src/app/(auth)/signup/page.tsx`, `Signup` does NOT auto-authenticate — the web
+> client calls `login()` separately right after. `MobileSignup` mirrors that instead of inventing
+> an auto-login path mobile alone would exercise. Mobile Architecture and Mobile Module Registry
+> restored from the r10 archive as new Section 14 and Section 15 — appended at the end rather than
+> reinstated at their old Section 9/10 slot, to avoid renumbering every cross-reference in Sections
+> 1–13. Revisit if the old position is wanted back; it's a rename pass, not a content change.
+> Section 13's version table gained Expo SDK 57 (57.0.7)/React Native 0.86/Expo Router/
+> expo-secure-store rows, plus a scaffolding gotcha: `create-expo-app` without
+> `--template default@sdk-57` currently still lands on SDK 54 during the transition window.
+> Zero mobile code written — this revision is the doc-level start only, implementation is next.
+> Note: a stale snapshot of an older doc draft had the mobile auth extension marked 🔵 ACTIVE with
+> code implied; the real `backend/internal/auth/routes.go` has no `/mobile/*` group at all. That
+> snapshot was planning text, not shipped state — flagging in case it resurfaces elsewhere.)
+> Last updated: 2026-07-21 (r14 — introduced the Collection View Pattern (Section 7): a
+> Notion-style grouped/collapsible list with borderless rows, full inline editing, and inline
+> quick-add, replacing the bordered-table pattern for single-entity lists. Tasks is the first
+> page rebuilt on it (Section 8). Design tokens unchanged — this is a layout/interaction
+> decision, not a token change. Candidate for Leads/Members when next revisited; not a mandate
+> to rewrite them now.)
+> Last updated: 2026-07-20 (r13 — Section 13's Tailwind v4 reminder expanded from a vague "don't use v3 patterns" into six concrete, verified syntax rules: `@import "tailwindcss"` entry point, `@theme` CSS config over `tailwind.config.js`, `bg-linear-*` gradient naming, parens vs brackets for arbitrary CSS-variable references, the gray-200 default border color, and `@utility` for custom utilities.)
+> Last updated: 2026-07-20 (r12 — reconciled against the real r11 after a conversation had drifted onto a stale, incorrect picture of HRM's status; see note at bottom of this entry. Structural changes: removed "Current Focus" from Section 2 — its content either lived in Section 5 CAPTURE already or was pure priority-ranking, so it's gone rather than moved. Folded the Phase-2 backend-modification carve-out into a new general principle in Section 1: the system is interconnected, touching a connected module to finish what you're building is normal, not an exception requiring special permission. Section 9 renamed from "Build Queue" to "Unbuilt Module Registry," `⚪ QUEUED` → `⚪ NOT STARTED` everywhere, "order is decided when the current focus ships" and the CRM→HRM priority ranking removed — nothing in it carries priority ordering. Real technical dependency notes were kept as-is throughout (Capture Fix Pass B blocking deployment, ERP needing HRM/Accounting/Projects scoped first, sales velocity needing the stage-history table) — those are facts about how the system works, not schedule decisions, and stay regardless of the no-priority-ordering rule. — Also: a prior chat session spent several turns planning HRM frontend architecture, an RBAC override UI, and a full Mobile Architecture rebuild, all based on a wrong claim that HRM's frontend hadn't been built and Contacts had an unresolved integration gap. Neither was true against this document. None of that work was carried in here.)
 > Last updated: 2026-07-15 (r11 — CRM Auto Lead-Capture backend built end-to-end and audited: new `internal/capture/` tree (apikeys, public, email, social, visitors), `RequireAPIKey` middleware, migrations 00057–00064. **Audit verdict: architecture sound, not yet functional** — 3 of 5 capture sources cannot create leads (`created_by` empty-UUID bug), social connect hits a column-name mismatch, visitors dashboard 403s on a nonexistent permission, and both webhook endpoints ship with zero signature verification. Full list in Section 5 → CAPTURE → Known open items; Fix Pass A/B is the current work item. Capture frontend not started. r11 also folds in four items shipped after r10 that never made it into the doc: CRM Templates (00054–55), CRM Settings with lead round-robin routing (00056, wired into lead creation via `GetLastAssignedLeadOwner`), HRM dynamic employee statuses (00053, `status_id` FK on `hrm_employees`), and the CRM Agenda page. Migration count 52 → 64, table count → 74. Structural change per Mridha's decision: **the "deferred" concept is removed from this document** — no more "deliberately last", "paused", or "confirmed still deferred"; everything not shipped is simply ⚪ QUEUED in one flat build queue. Mobile Architecture and Mobile Module Registry sections (old 9 & 10) deleted — zero code exists; the decided architecture is preserved in git history (r10) and gets restored when mobile work actually starts. Sections renumbered accordingly.)
 > This document is both a Claude system instruction and a personal project reference.
 > Update the STATUS blocks and MODULE REGISTRY whenever the project state changes.
@@ -17,6 +41,7 @@
 - Design matters. Enterprise Minimalist — clean, trustworthy, information-dense done well. Not flashy, not decorative. Every screen earns its place through clarity and scannability, not visual flourish.
 - Multi-tenancy is the foundation. Every feature lives inside an organization context.
 - Backend stays stable. Frontend drives feature prioritization, not the other way around.
+- The system is interconnected — CRM, HRM, RBAC, and the platform layer share models, permissions, and the engagement layer. Don't let scope discipline block necessary work: if finishing what you're building requires touching a connected module, touch it. Correct and complete beats narrowly scoped.
 
 ---
 
@@ -56,21 +81,11 @@ Shipped and verified (see Section 7 for the full frontend registry):
 - HRM UI: all 8 phases complete (verified r9), plus dynamic employee statuses setup page (post-r10)
 - Profile and settings pages, security pages
 
-### Current Focus (r11)
+Scope beyond what's shipped lives in Section 5 (backend), Section 8 (frontend), and Section 9 — status per item lives in those registries, not here, so there's one place to check, not two that can quietly disagree. The Capture module (Section 5 → CAPTURE) has the most detailed known-defect write-up in the whole doc right now — read it there rather than a restated summary here.
 
-**CRM Auto Lead-Capture — Fix Pass.** The backend for all five capture sources (web form, email parsing, social lead ads, chat-reusable public endpoint, visitor identification) was written in one pass: `internal/capture/{apikeys,public,email,social,visitors}`, `middleware/apikey.go`, migrations 00057–00064, fully wired in `main.go`. The r11 audit found it architecturally correct but not yet functional — the full defect list lives in Section 5 → CAPTURE → Known open items. Work order:
+### Unbuilt Modules
 
-1. **Fix Pass A (correctness)** — `created_by` nullable migration + `*string` model change, social `access_token_enc` → `access_token` column fix, route permissions switched to the seeded `capture.*` keys, API key expiry enforcement, scope validation + `ScopeCaptureVisitors` constant, dedup scoped to capture paths only + case-insensitive email match + `"crm"` module tag on dedup notes, leftover AI-conversation comments deleted.
-2. **Fix Pass B (security)** — inbound email HMAC verification, Facebook `X-Hub-Signature-256` + real `hub.verify_token` check (new env vars: `WEBHOOK_EMAIL_SECRET`, `FACEBOOK_APP_SECRET`, `FACEBOOK_VERIFY_TOKEN`), Redis rate limiting on all `/pub/*` routes.
-3. **Capture frontend (Steps 8–10 of Task.md)** — API key management + embed code panel, email/social settings tabs, visitors dashboard. Nothing started.
-
-After capture ships end-to-end, the CRM Advanced Functionality Pass continues from the Section 9 triage (contained tier first).
-
-Backend may be modified or extended during Phase 2 if a frontend flow reveals a missing endpoint, business logic needs to change to support a UI pattern, or a new CRM sub-feature is needed.
-
-### Build Queue
-
-Full list: **Section 9 — Build Queue**. One flat queue, nothing in it is special-cased as "later" or "last" — items get picked in whatever order makes sense when the current focus ships. Priority for what's already decided: **CRM (active: capture fix pass → capture frontend → advanced pass) → HRM functionality pass → everything else, unordered**.
+Full list: **Section 9 — Unbuilt Module Registry**. Anything in it can be picked up any time.
 
 ---
 
@@ -112,29 +127,30 @@ Full list: **Section 9 — Build Queue**. One flat queue, nothing in it is speci
 
 **Enterprise Minimalist.** Clean, scannable, information-dense done well — the opposite of decorative. If a choice doesn't help someone read data faster, it doesn't earn a place.
 
-| Concern         | Spec                                                                                                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Theme mode      | Light + Dark both. Default: **light**. Token variables structured so dark is a straight swap, not an afterthought.                                                             |
-| Light bg        | `#ffffff` surface · `#f8fafc` canvas (page background, one step off-white)                                                                                                     |
-| Dark bg         | `#0f172a` surface · `#020617` canvas (slate-900/950 — cool dark, not pure black)                                                                                               |
-| Primary/Action  | Indigo/slate-blue — `#4f46e5` primary · `#4338ca` hover/active · same hue in both modes                                                                                        |
-| Semantic states | Success `#10b981` (emerald) · Warning `#f59e0b` (amber) · Destructive `#ef4444` (crimson) — used sparingly, only for real signal                                               |
-| Borders         | Thin, low-contrast — `#e2e8f0` light · `#1e293b` dark. Dividers, not boxes.                                                                                                    |
-| Typography      | One family only — Inter or Geist Sans, no separate display font. Strict scale: large tabular numbers for metrics, bold labels for card headers, muted small text for metadata. |
-| Quality target  | Enterprise Minimalist — every screen reads clearly at a glance, nothing competes with the data                                                                                 |
-| Border radius   | Subtle (4–8px), never rounded-full on blocks                                                                                                                                   |
-| Motion          | Restrained and functional — skeleton loading, hover/focus states, smooth number transitions. No entrance choreography, nothing decorative.                                     |
-| Density         | Medium-high — dashboards reward information density over whitespace, but never cramped                                                                                         |
-| Implementation  | CSS variables per theme, consumed via Tailwind `dark:` classes                                                                                                                 |
+| Concern         | Spec                                                                                                                                                                                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Theme mode      | Light + Dark both. Default: **light**. Token variables structured so dark is a straight swap, not an afterthought.                                                                             |
+| Light bg        | `#ffffff` surface · `#f8fafc` canvas (page background, one step off-white)                                                                                                                     |
+| Dark bg         | `#0f172a` surface · `#020617` canvas (slate-900/950 — cool dark, not pure black)                                                                                                               |
+| Primary/Action  | Indigo/slate-blue — `#4f46e5` primary · `#4338ca` hover/active · same hue in both modes                                                                                                        |
+| Semantic states | Success `#10b981` (emerald) · Warning `#f59e0b` (amber) · Destructive `#ef4444` (crimson) — used sparingly, only for real signal                                                               |
+| Borders         | Thin, low-contrast — `#e2e8f0` light · `#1e293b` dark. Dividers, not boxes.                                                                                                                    |
+| Typography      | One family only — Inter or Geist Sans, no separate display font. Strict scale: large tabular numbers for metrics, bold labels for card headers, muted small text for metadata.                 |
+| Quality target  | Enterprise Minimalist — every screen reads clearly at a glance, nothing competes with the data                                                                                                 |
+| Layout patterns | Two canonical page anatomies — Dashboard Page Pattern (overview/report pages) and Collection View Pattern (entity lists, Notion-style, borderless + inline-editable) — see Section 7 for both. |
+| Border radius   | Subtle (4–8px), never rounded-full on blocks                                                                                                                                                   |
+| Motion          | Restrained and functional — skeleton loading, hover/focus states, smooth number transitions. No entrance choreography, nothing decorative.                                                     |
+| Density         | Medium-high — dashboards reward information density over whitespace, but never cramped                                                                                                         |
+| Implementation  | CSS variables per theme, consumed via Tailwind `dark:` classes                                                                                                                                 |
 
 ### Infrastructure
 
-| Concern    | Choice                                          |
-| ---------- | ----------------------------------------------- |
-| Container  | Docker + Docker Compose                         |
-| CI         | GitHub Actions                                  |
-| Deployment | VPS via Docker Compose (queued — see Section 9) |
-| Secrets    | GitHub Secrets + `.env` files (never committed) |
+| Concern    | Choice                                               |
+| ---------- | ---------------------------------------------------- |
+| Container  | Docker + Docker Compose                              |
+| CI         | GitHub Actions                                       |
+| Deployment | VPS via Docker Compose (not started — see Section 9) |
+| Secrets    | GitHub Secrets + `.env` files (never committed)      |
 
 ---
 
@@ -160,7 +176,7 @@ backend/
       visitors/               ← website visitor identify + pageview log
     platform/
       contacts/               ← shared contacts + companies (used by CRM and future modules)
-      engagement/             ← shared notes, tasks, activities, emails, timeline
+      engagement/              ← shared notes, tasks, activities, emails, timeline
     crm/
       leads/                  ← CRM lead management (now with capture fields + dedup + round-robin)
       pipeline/               ← pipeline and stages
@@ -301,7 +317,28 @@ Token contract:
 - Frontend never touches the refresh token directly
 - `/refresh` sends cookie, receives new access token in body
 
-Mobile variants (`POST /api/v1/auth/mobile/{signup,login,logout,refresh}`) are a planned contract for the queued Mobile App (Section 9): same service/repository, handler returns the refresh token in the JSON body instead of a cookie. Zero code exists. Full architecture archived in r10 (git history).
+**MOBILE [🔵 ACTIVE — contract defined, handlers not yet written]:**
+
+Routes to add in `backend/internal/auth/routes.go`, wired into both `RegisterRoutes` and
+`RegisterRoutesWithRateLimit` the same way the existing `/sign-up`, `/sign-in` aliases are —
+rate-limited on the three public ones:
+
+POST /api/v1/auth/mobile/signup
+POST /api/v1/auth/mobile/login
+POST /api/v1/auth/mobile/logout
+POST /api/v1/auth/mobile/refresh
+
+Same `Service`/`Repository` as web auth, zero new business logic — only new handler methods
+(`MobileLogin`, `MobileRefresh`, etc.) that return the refresh token in the JSON body instead of
+setting the `bsaas_refresh` httpOnly cookie, and read it back from the request body on
+`mobile/refresh` / `mobile/logout` instead of the cookie jar. `logout-all`, `password-reset/*`,
+and `me` stay shared as-is — none of them touch tokens, no mobile variant needed.
+
+Resolved (was an open assumption in the r10 draft): `Signup` does not auto-authenticate.
+`frontend/src/app/(auth)/signup/page.tsx` creates the user then calls `login()` separately to
+bootstrap the session. `MobileSignup` should do the same — create the user, return it with no
+tokens, let the client call `mobile/login` right after. Keeps both clients on identical semantics
+instead of giving mobile a second, divergent signup path.
 
 ---
 
@@ -580,7 +617,7 @@ GET/POST /api/v1/pub/social/:platform/webhook ← ⚠️ NO signature check; GET
 
 **Deliberate scope reductions (documented, not bugs):**
 
-- Social is a **webhook skeleton**, not a real Facebook integration — no Graph API `leadgen_id` fetch, no OAuth connect, no field-mapping engine; it maps flat payload fields, which real FB webhooks don't send. Real integration is a separate queue item.
+- Social is a **webhook skeleton**, not a real Facebook integration — no Graph API `leadgen_id` fetch, no OAuth connect, no field-mapping engine; it maps flat payload fields, which real FB webhooks don't send. Real integration is tracked separately (Section 9).
 - Visitors is **manual identify** (Segment-style: `traits.email/name/company` → lead), not IP→company enrichment. No IPinfo, no Redis queue, no background worker.
 - No hosted form / JS embed endpoint yet (was Step 4 second half) — capture frontend work.
 
@@ -850,6 +887,33 @@ Default anatomy for data-overview pages (CRM Reports, HRM Reports, org dashboard
 
 List views that aren't overview pages (Leads, Tasks, Members) skip the KPI/chart layers and go straight to the table.
 
+### Collection View Pattern (Notion-style)
+
+Default anatomy for single-entity collection pages where each record is a lightweight,
+frequently-edited item — first example is Tasks. Distinct from the Dashboard Page Pattern:
+no KPI strip, no charts, this is a working list, not a report.
+
+1. **Toolbar** — page title + record count top-left; view switcher (e.g. Grouped/List) +
+   primary "New" action top-right.
+2. **Grouped view (default)** — records grouped by their primary status/category field into
+   collapsible sections; each header shows a status dot, label, count, and a hairline divider —
+   no bordered card around the section.
+3. **List view (alternate)** — flat list with filter tabs above it (same status field), for
+   scanning everything in one scroll.
+4. **Row = borderless, chrome-less** — no grid lines, no card border; hover background is the
+   only structural cue between rows. Primary fields (title, status, date, done-toggle) are
+   inline-editable directly on the row — no separate edit mode. A drawer is reserved for
+   secondary fields (e.g. description) via an explicit "Edit" action.
+5. **Quick-add** — records are created inline at the bottom of a list/group ("+ New …"), not via
+   modal or drawer. Enter commits and keeps the input open for consecutive entries; Escape/blur
+   cancels.
+6. **Status representation** — solid-tint pill (background tint + matching text color, no
+   border), not an outlined badge.
+7. **Loading state** — skeleton rows matching the row's real layout, never a spinner+text.
+
+Applies to: Tasks (shipped). Candidate for CRM Leads, Members, and other simple single-entity
+lists when they're next revisited — this does not retroactively obligate rewriting those pages.
+
 ---
 
 ## 8. FRONTEND MODULE REGISTRY
@@ -866,9 +930,11 @@ List views that aren't overview pages (Leads, Tasks, Members) skip the KPI/chart
 
 Sidebar, Topbar, org switcher, drawer system (`DrawerContext` + `ui/Drawer`), org context in URL.
 
-### TASKS [✅ DONE]
+### TASKS [✅ DONE — redesigned to the Collection View Pattern]
 
-`/[orgId]/tasks` — list, filters, drawer create/edit, permission-gated actions.
+`/[orgId]/tasks` — Grouped (collapsible, by status) and List (flat, filter tabs) view modes,
+inline quick-add, full inline editing (title, status, due date, complete-toggle); drawer
+reserved for secondary-field edits, permission-gated actions.
 
 ### SETTINGS — MEMBERS [✅ DONE]
 
@@ -907,7 +973,7 @@ Sidebar, Topbar, org switcher, drawer system (`DrawerContext` + `ui/Drawer`), or
 `/[orgId]/crm/setup/routing` — lead round-robin settings (crm_settings)
 `/[orgId]/crm/setup/templates` — template CRUD (`TemplateForm`)
 
-### CRM — CAPTURE [⚪ QUEUED — backend exists, zero frontend]
+### CRM — CAPTURE [⚪ NOT STARTED — backend exists, zero frontend]
 
 Planned (Task.md Steps 8–10): `/[orgId]/crm/setup/capture` (API key list + create drawer with show-once raw key + embed code panel; email + social tabs) and `/[orgId]/crm/capture/visitors` (visitor list). New `lib/crm/capture.ts`, `types/capture.ts`. Must also add the `capture.*` group to `lib/permissionGroups.ts`.
 
@@ -917,9 +983,15 @@ All under `/[orgId]/hrm/...`: departments, positions, employees, leave, attendan
 
 ---
 
-## 9. BUILD QUEUE
+## 9. UNBUILT MODULE REGISTRY
 
-One flat queue. `⚪ QUEUED` = no code exists. When an item starts, promote it to `🔵 ACTIVE` here and give it a real entry in Section 5 and/or Section 8 with routes and permissions. When it ships, mark `✅ DONE` or remove the entry. No item in this queue carries special "later/last/paused" status — order is decided when the current focus ships.
+### MOBILE APP [🔵 ACTIVE — architecture restored, backend contract defined, zero code written]
+
+Expo + React Native. Full architecture restored from the r10 archive: Section 14 (Mobile
+Architecture) and Section 15 (Mobile Module Registry) — decided, not redesigned. Backend contract
+is a real entry now: Section 5 → AUTH → MOBILE. Suggested starting point: AUTH SCREENS
+(Section 15) paired with the AUTH — MOBILE backend routes, mirroring how every other module here
+starts with auth before anything else.
 
 ---
 
@@ -956,73 +1028,73 @@ Mridha's wish list, triaged by buildability. **In flight now:** lead auto-captur
 
 ---
 
-### MFA / 2FA [⚪ QUEUED]
+### MFA / 2FA [⚪ NOT STARTED]
 
 TOTP enrollment + verification, backup codes, per-org enforcement policy. Lives in `internal/auth/`; needs a secrets table and a frontend enroll/verify flow.
 
 ---
 
-### SOCIAL LOGIN / SSO [⚪ QUEUED]
+### SOCIAL LOGIN / SSO [⚪ NOT STARTED]
 
 Google / Microsoft / GitHub OAuth flows. `POST /api/v1/auth/oauth/sync` already exists as the backend hook; this item is the provider-specific flow wiring.
 
 ---
 
-### EMAIL SENDING [⚪ QUEUED]
+### EMAIL SENDING [⚪ NOT STARTED]
 
 Transactional provider (SES / Postmark / Resend) for verification, invites, password reset — currently token-only. Also unblocks the forgot/reset-password frontend pages. Distinct from capture's inbound email parsing, but if Postmark is chosen, one account can serve both inbound and outbound — decide together.
 
 ---
 
-### RESOURCE-LEVEL PERMISSIONS [⚪ QUEUED]
+### RESOURCE-LEVEL PERMISSIONS [⚪ NOT STARTED]
 
 Per-record access control ("only deals they own") beyond module/action RBAC. Touches every repository's query layer — needs its own ADR when it starts.
 
 ---
 
-### BILLING & SUBSCRIPTION MANAGEMENT [⚪ QUEUED]
+### BILLING & SUBSCRIPTION MANAGEMENT [⚪ NOT STARTED]
 
 Payment provider, plan tiers, usage limits, invoices, billing UI. `organization_usage` and `organizations.max_seats` already exist as head starts.
 
 ---
 
-### HRM FUNCTIONALITY PASS [⚪ QUEUED]
+### HRM FUNCTIONALITY PASS [⚪ NOT STARTED]
 
 Post-completion polish pass over the shipped HRM module, same spirit as the CRM pass. Includes the known open item: approval-instance list endpoint.
 
 ---
 
-### PROJECT MANAGEMENT MODULE [⚪ QUEUED]
+### PROJECT MANAGEMENT MODULE [⚪ NOT STARTED]
 
 Full projects module (milestones, dependencies) — broader than the generic `task` module, which stays a simple RBAC-testing CRUD.
 
 ---
 
-### E-COMMERCE ADMIN MODULE [⚪ QUEUED]
+### E-COMMERCE ADMIN MODULE [⚪ NOT STARTED]
 
 Per the original long-term vision.
 
 ---
 
-### ACCOUNTING MODULE [⚪ QUEUED]
+### ACCOUNTING MODULE [⚪ NOT STARTED]
 
 Per the original long-term vision.
 
 ---
 
-### ERP MODULE [⚪ QUEUED — scope undefined]
+### ERP MODULE [⚪ NOT STARTED — scope undefined]
 
-Umbrella term; may end up being HRM + Accounting + Projects + Inventory combined rather than a standalone build. Pin down scope before picking it up.
+Umbrella term; may end up being HRM + Accounting + Projects + Inventory combined rather than a standalone build. Real scoping needs those three to exist first, since that's what "ERP" would be built out of.
 
 ---
 
-### FULL PRODUCTION DEPLOYMENT [⚪ QUEUED]
+### FULL PRODUCTION DEPLOYMENT [⚪ NOT STARTED]
 
 Confirmed not started (r9 audit; unchanged): no Sentry SDK, no Caddyfile, `deploy.yml` is a stub. Scope when picked up: `docker-compose.prod.yml`, TLS (Caddy), production env/secrets, Sentry, backups, VPS + DNS. **Hard prerequisite:** Capture Fix Pass B must be complete before any deployment — two webhook endpoints are currently unauthenticated.
 
 ---
 
-### MOBILE APP [⚪ QUEUED]
+### MOBILE APP [⚪ NOT STARTED]
 
 Expo + React Native. Architecture was fully designed (folder structure, SecureStore token strategy, Expo Router guards, theming, EAS pipeline) and is archived in this doc's r10 revision (git history) — restore those sections when this item starts. Zero code exists. Backend contract sketch lives in Section 5 → AUTH → Mobile variants.
 
@@ -1135,26 +1207,237 @@ These apply to every line of code in this project. Never compromise on these.
 
 Before writing code that depends on any of these, check for version-specific API differences:
 
-| Package / Framework | Version in use           |
-| ------------------- | ------------------------ |
-| Go                  | 1.25                     |
-| Fiber               | v3.2.0                   |
-| pgx                 | v5.6.0                   |
-| go-redis            | v9.19.0                  |
-| golang-jwt/jwt      | v5.3.1                   |
-| expr-lang/expr      | v1.17.8                  |
-| Next.js             | 16.2.9 (check if unsure) |
-| Tailwind CSS        | v4                       |
-| React               | latest stable            |
-| Zustand             | v5                       |
-| next-themes         | latest stable            |
-| React Hook Form     | v7                       |
-| TanStack Query      | v5                       |
-| Axios               | v1                       |
+| Package / Framework | Version in use                                                 |
+| ------------------- | -------------------------------------------------------------- |
+| Go                  | 1.25                                                           |
+| Fiber               | v3.2.0                                                         |
+| pgx                 | v5.6.0                                                         |
+| go-redis            | v9.19.0                                                        |
+| golang-jwt/jwt      | v5.3.1                                                         |
+| expr-lang/expr      | v1.17.8                                                        |
+| Next.js             | 16.2.9 (check if unsure)                                       |
+| Tailwind CSS        | v4                                                             |
+| React               | latest stable                                                  |
+| Zustand             | v5                                                             |
+| next-themes         | latest stable                                                  |
+| React Hook Form     | v7                                                             |
+| TanStack Query      | v5                                                             |
+| Axios               | v1                                                             |
+| Expo SDK            | 57 (57.0.7 — confirm exact patch at scaffold time, moves fast) |
+| Expo Router         | bundled with Expo SDK 57                                       |
+| React Native        | 0.86 (bundled with SDK 57) — check package.json after scaffold |
+| expo-secure-store   | latest compatible with SDK 57                                  |
 
-Do not use Fiber v2 API patterns with Fiber v3. Do not use Tailwind v3 class patterns that don't exist in v4.
+`create-expo-app@latest` without `--template default@sdk-57` currently defaults to SDK 54 during
+the transition window — pass the flag explicitly.
+
+Do not use Fiber v2 API patterns with Fiber v3.
+
+Tailwind v4 syntax — always use these, never the v3 equivalents:
+
+- CSS entry point is `@import "tailwindcss";` — never the three `@tailwind base; @tailwind components; @tailwind utilities;` directives
+- Theme config lives in CSS via `@theme { --color-x: ...; }` (this is already how `globals.css` is set up, Section 7) — never add a `tailwind.config.js` expecting `theme.extend` to work by default; v4 doesn't require one
+- Gradients are `bg-linear-to-r`, `bg-linear-45`, etc. — not `bg-gradient-to-r`
+- Referencing a CSS variable in an arbitrary value uses parentheses — `bg-(--brand-color)`, not `bg-[--brand-color]`. Square brackets stay for literal arbitrary values like `bg-[#4f46e5]`.
+- Default border color is `gray-200`, not `currentColor` — don't assume a bare `border` inherits text color like it did in v3
+- Custom utility classes are defined with `@utility` directly in CSS, not a JS plugin's `addUtilities()` callback
 
 ---
+
+## 14. MOBILE ARCHITECTURE
+
+Restored from the r10 archive, r14 — decided, not redesigned. Expo + React Native client. Ports
+the web frontend's architecture (Section 7) wherever the platform allows; diverges only where
+native constraints force it — token storage is the main one.
+
+### Folder Structure
+
+mobile/
+app/ ← Expo Router file-based routes
+(auth)/
+login.tsx
+signup.tsx
+forgot-password.tsx
+reset-password.tsx
+(dashboard)/
+[orgId]/
+index.tsx ← dashboard home
+tasks/
+crm/
+leads/ contacts/ companies/ pipeline/ deals/ reports/
+settings/
+members/ roles/
+security/
+create-organization.tsx
+select-organization.tsx
+\_layout.tsx ← root layout: theme provider + auth gate
+components/
+ui/ layout/ crm/ tasks/ rbac/
+lib/
+api.ts auth.ts secureToken.ts constants.ts
+stores/
+authStore.ts permissionStore.ts uiStore.ts
+hooks/
+useAuth.ts usePermission.ts useOrg.ts
+theme/
+tokens.ts ThemeProvider.tsx
+types/ ← mirrors frontend/src/types/\*
+
+### Auth Flow (mobile)
+
+1. Login → `POST /api/v1/auth/mobile/login` → `{ access_token, refresh_token, expires_in }` in
+   the body, no cookie involved
+2. Store `refresh_token` via `expo-secure-store`; keep `access_token` in an in-memory module
+   variable (`lib/secureToken.ts`) — same separation principle as web, different storage mechanism
+3. Set user + org in `authStore`, permissions in `permissionStore` — identical shape to web
+4. Axios request interceptor attaches `Authorization: Bearer <token>`
+5. On 401 → read the refresh token from SecureStore → `POST mobile/refresh` → store the new
+   (possibly rotated) tokens → retry the original request
+6. Logout → read refresh token from SecureStore → `POST mobile/logout` with `{ refresh_token }` →
+   clear SecureStore + in-memory token → reset all stores
+7. Cold start → read refresh token from SecureStore → if present, call `mobile/refresh` before
+   rendering any protected route; if it fails or is absent, route into `(auth)`
+
+### Navigation & Route Protection
+
+- Expo Router — file-based, same mental model as the Next.js App Router already in use
+- `(auth)` / `(dashboard)` groups mirror the web's layout groups; `[orgId]` mirrors the web's
+  URL-based org context
+- Gate `(dashboard)` with Expo Router's Protected Routes, keyed off
+  `authStore.status === 'authenticated'`
+
+### State Management
+
+Same three Zustand stores as web, ported with identical interfaces:
+
+- `authStore`, `permissionStore` — never add `persist` middleware, ever
+- `uiStore` may persist (theme, nav state) via `@react-native-async-storage/async-storage`, since
+  `localStorage` doesn't exist in React Native
+
+### Theming
+
+- No CSS variables on native — port `globals.css` values into a plain `theme/tokens.ts` object
+  with `dark`/`light` variants
+- RN's `useColorScheme()` supplies the OS-level default; `uiStore.theme` overrides it once picked
+  — same behavior as `next-themes`, different mechanism
+- Load Inter via `expo-font` (`useFonts`) — one typeface family, matching web
+- Plain `StyleSheet.create` for a first pass rather than a Tailwind-for-RN library — revisit only
+  if styling velocity becomes a real problem
+
+### API Client Contract
+
+```ts
+// lib/secureToken.ts
+import * as SecureStore from "expo-secure-store";
+
+let accessToken: string | null = null;
+export const getAccessToken = () => accessToken;
+export const setAccessToken = (t: string | null) => {
+  accessToken = t;
+};
+
+const REFRESH_KEY = "bsaas_refresh_token";
+export const getRefreshToken = () => SecureStore.getItemAsync(REFRESH_KEY);
+export const setRefreshToken = (t: string | null) =>
+  t
+    ? SecureStore.setItemAsync(REFRESH_KEY, t)
+    : SecureStore.deleteItemAsync(REFRESH_KEY);
+
+// lib/api.ts
+const api = axios.create({ baseURL: process.env.EXPO_PUBLIC_API_URL });
+// Request interceptor  → attach Authorization: Bearer <accessToken>
+// Response interceptor → on 401: getRefreshToken() → POST /auth/mobile/refresh → store new tokens → retry
+```
+
+### Component Quality Standard (mobile)
+
+- Fully themed dark/light, same design tokens as web
+- Indigo accent on interactive elements, one typeface (Inter), same scale hierarchy as web
+- Native feel over pixel-parity — iOS vs Android navigation conventions, safe areas, haptics
+  (`expo-haptics`) on key actions
+- Designed loading/empty/error states, not default RN placeholders
+- A screen isn't done until checked on both iOS and Android
+
+### Deployment
+
+- EAS Build for iOS/Android binaries, EAS Submit for store submission, EAS Update for OTA JS
+  updates between store releases
+- Expo Go for early development only — move to development builds before anything
+  production-like; Expo Go tracks only the latest SDK
+
+### Version note (added r14)
+
+Current stable is **Expo SDK 57** (57.0.7 as of this week), riding **React Native 0.86** /
+**React 19.2** — confirms the number this doc guessed pre-r10. One scaffolding gotcha:
+`create-expo-app@latest` without a template flag is still defaulting to **SDK 54** during the
+transition window — use `--template default@sdk-57` explicitly. Re-confirm both numbers the day
+you actually scaffold; Expo SDKs move fast enough that this note itself may be stale by then.
+
+## 15. MOBILE MODULE REGISTRY
+
+Same status convention as Section 5/8/9. Nothing built yet — flips to `🔵 ACTIVE` per screen
+group as work starts on it, same promotion pattern as Section 9.
+
+Scope note (added r14): this v1 list predates several web features shipped since r10 — Agenda,
+Setup/Routing, Templates, Capture. They're intentionally not represented here; decide inclusion
+explicitly when this registry is next revisited, don't assume either way.
+
+---
+
+### AUTH SCREENS [⚪ NOT STARTED — natural starting point]
+
+Login, signup, forgot password, reset password — same fields as web (Section 8, AUTH PAGES).
+Pairs with Section 5 → AUTH → MOBILE on the backend.
+
+---
+
+### ONBOARDING [⚪ NOT STARTED]
+
+Create organization, select organization — shown after login when no org context exists.
+
+---
+
+### DASHBOARD SHELL [⚪ NOT STARTED]
+
+Tab bar or drawer navigation (mobile equivalent of the web sidebar), org switcher, profile menu.
+
+---
+
+### TASKS [⚪ NOT STARTED]
+
+List with filters, create/edit, permission-gated actions — same permission set as web (`tasks.*`).
+
+---
+
+### CRM — LEADS & PIPELINE [⚪ NOT STARTED]
+
+Lead list + detail, convert flow, pipeline board (list view first — full drag-to-reorder Kanban is
+a lot of native gesture work for v1; move-via-menu instead of drag, revisit later).
+
+---
+
+### CRM — CONTACTS [⚪ NOT STARTED]
+
+Contacts and companies list + detail.
+
+---
+
+### CRM — REPORTS [⚪ NOT STARTED — v1: summary cards only]
+
+Full charts (Section 8's bar/pie breakdowns) are a lot of screen real estate for mobile — start
+with summary numbers, add charts later if they earn their place.
+
+---
+
+### SETTINGS — MEMBERS, ROLES & PERMISSIONS [⚪ NOT STARTED — lower priority]
+
+Admin-heavy screens, arguably fine to stay web-only for v1. Revisit after the above ships.
+
+---
+
+### SECURITY [⚪ NOT STARTED — lower priority]
+
+Session list, revoke, login events. Likely fine as web-only initially too.
 
 ## HOW TO UPDATE THIS DOCUMENT
 
@@ -1171,6 +1454,12 @@ When a new frontend page is built:
 
 - Update Section 8
 
+When a new mobile screen is built:
+
+- Update Section 15 (Mobile Module Registry)
+- Note any deviation from Section 14 (Mobile Architecture) in Section 14 itself if the plan
+  changes mid-build — don't let the decided architecture silently drift from what's implemented
+
 When a Zustand store gains new fields:
 
 - Update the store interface in Section 7
@@ -1184,9 +1473,9 @@ When design tokens change:
 
 - Update Section 3 and `globals.css` together — keep them in sync
 
-When something in the build queue starts real work:
+When something in the unbuilt module registry starts real work:
 
-- Promote it in Section 9 (`⚪ QUEUED` → `🔵 ACTIVE`) and add a proper Section 5/8 entry
+- Promote it in Section 9 (`⚪ NOT STARTED` → `🔵 ACTIVE`) and add a proper Section 5/8 entry
 - Mark it `✅ DONE` in Section 9 (or remove the entry) once it ships
 - Update Section 2's phase status if it changes the active phase
 
@@ -1218,7 +1507,7 @@ When a module ships with known defects (r11):
 Periodic structural drift audit:
 
 - Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence, then reconcile. This document has been wrong about counts and statuses in every single revision audit so far (r9: HRM/deployment; r11: four whole shipped features missing). Assume drift by default.
-- Cross-check Section 5 (backend) against Section 8 (frontend) against Section 9 (build queue) for the same module.
+- Cross-check Section 5 (backend) against Section 8 (frontend) against Section 9 (unbuilt module registry) for the same module.
 - A doc pasted into a chat conversation is not guaranteed to be the committed `docs/Project_Instruction.md` — whichever copy is more recent should overwrite the other after an update.
 
 Keep this document current. A stale instruction is worse than no instruction.

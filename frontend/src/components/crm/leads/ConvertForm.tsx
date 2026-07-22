@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { listPipelines, listStages } from "@/lib/crm/pipelines";
 import type { Lead, Pipeline, Stage } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 interface ConvertFormProps {
   lead: Lead;
@@ -57,27 +58,44 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
         setPipelines(p);
         // Auto-select default pipeline
         const def = p.find((x) => x.is_default) ?? p[0];
-        if (def) setPipelineId(def.id);
+        if (def) {
+          setPipelineId(def.id);
+          setLoadingStages(true);
+        }
       })
       .finally(() => setLoadingPipes(false));
   }, [orgId]);
 
   // Fetch stages when pipeline changes
   useEffect(() => {
-    if (!pipelineId) {
-      setStages([]);
-      setStageId("");
-      return;
-    }
-    setLoadingStages(true);
-    setStageId("");
+    if (!pipelineId) return;
+
+    let active = true;
     listStages(orgId, pipelineId)
       .then((s) => {
+        if (!active) return;
         setStages(s);
         if (s.length > 0) setStageId(s[0].id);
       })
-      .finally(() => setLoadingStages(false));
+      .finally(() => {
+        if (active) setLoadingStages(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [pipelineId, orgId]);
+
+  const handlePipelineChange = (id: string) => {
+    setPipelineId(id);
+    setStages([]);
+    setStageId("");
+    if (id) {
+      setLoadingStages(true);
+    } else {
+      setLoadingStages(false);
+    }
+  };
 
   const handleSave = async () => {
     setError(null);
@@ -229,23 +247,17 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
                     No pipelines found
                   </p>
                 ) : (
-                  <select
+                  <Select
                     value={pipelineId}
-                    onChange={(e) => setPipelineId(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">No pipeline</option>
-                    {pipelines.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        style={{ background: "var(--bg-elevated)" }}
-                      >
-                        {p.name}
-                        {p.is_default ? " (default)" : ""}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={handlePipelineChange}
+                    options={[
+                      { value: "", label: "No pipeline" },
+                      ...pipelines.map((p) => ({
+                        value: p.id,
+                        label: p.name + (p.is_default ? " (default)" : ""),
+                      })),
+                    ]}
+                  />
                 )}
               </div>
 
@@ -260,22 +272,17 @@ export default function ConvertForm({ lead, orgId, onSave }: ConvertFormProps) {
                       Loading stages…
                     </p>
                   ) : (
-                    <select
+                    <Select
                       value={stageId}
-                      onChange={(e) => setStageId(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">No stage</option>
-                      {stages.map((s) => (
-                        <option
-                          key={s.id}
-                          value={s.id}
-                          style={{ background: "var(--bg-elevated)" }}
-                        >
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setStageId}
+                      options={[
+                        { value: "", label: "No stage" },
+                        ...stages.map((s) => ({
+                          value: s.id,
+                          label: s.name,
+                        })),
+                      ]}
+                    />
                   )}
                 </div>
               )}

@@ -34,7 +34,8 @@ func userID(c fiber.Ctx) string { id, _ := c.Locals("user_id").(string); return 
 func (h *Handler) ListContacts(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	p := pagination.FromCtx(c)
-	result, err := h.service.ListContacts(c.Context(), orgID(c), p)
+	search := c.Query("search")
+	result, err := h.service.ListContacts(c.Context(), orgID(c), p, search)
 	if err != nil {
 		log.Error("contacts: ListContacts", slog.Any("error", err))
 		return response.InternalServerError(c)
@@ -135,7 +136,8 @@ func (h *Handler) GetContactsByCompany(c fiber.Ctx) error {
 func (h *Handler) ListCompanies(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	p := pagination.FromCtx(c)
-	result, err := h.service.ListCompanies(c.Context(), orgID(c), p)
+	search := c.Query("search")
+	result, err := h.service.ListCompanies(c.Context(), orgID(c), p, search)
 	if err != nil {
 		log.Error("contacts: ListCompanies", slog.Any("error", err))
 		return response.InternalServerError(c)
