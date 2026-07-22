@@ -354,9 +354,12 @@ export default function ContactsPage({
                                 size={12}
                                 className="text-(--text-muted) shrink-0"
                               />
-                              <span className="text-xs text-(--text-secondary)">
+                              <a
+                                href={`mailto:${contact.email}`}
+                                className="text-xs text-(--text-secondary) hover:text-purple-500 hover:underline transition-colors"
+                              >
                                 {contact.email}
-                              </span>
+                              </a>
                             </div>
                           )}
                           {contact.phone && (
@@ -365,9 +368,12 @@ export default function ContactsPage({
                                 size={12}
                                 className="text-(--text-muted) shrink-0"
                               />
-                              <span className="text-xs text-(--text-secondary)">
+                              <a
+                                href={`tel:${contact.phone.replace(/[^0-9+]/g, "")}`}
+                                className="text-xs text-(--text-secondary) hover:text-purple-500 hover:underline transition-colors"
+                              >
                                 {contact.phone}
-                              </span>
+                              </a>
                             </div>
                           )}
                           {company && (

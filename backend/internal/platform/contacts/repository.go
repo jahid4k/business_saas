@@ -22,7 +22,7 @@ import (
 // into a single database transaction (e.g. lead conversion).
 type Repository interface {
 	// Contacts
-	FindContacts(ctx context.Context, orgID string, p pagination.Params) ([]*Contact, error)
+	FindContacts(ctx context.Context, orgID string, p pagination.Params, search string) ([]*Contact, error)
 	FindContactByID(ctx context.Context, orgID, contactID string) (*Contact, error)
 	FindContactsByCompany(ctx context.Context, orgID, companyID string) ([]*Contact, error)
 	CreateContact(ctx context.Context, c *Contact) error
@@ -31,15 +31,15 @@ type Repository interface {
 	CreateContactTx(ctx context.Context, tx pgx.Tx, c *Contact) error
 	UpdateContact(ctx context.Context, c *Contact) error
 	SoftDeleteContact(ctx context.Context, orgID, contactID string) error
-	CountContacts(ctx context.Context, orgID string) (int, error)
+	CountContacts(ctx context.Context, orgID string, search string) (int, error)
 
 	// Companies
-	FindCompanies(ctx context.Context, orgID string, p pagination.Params) ([]*Company, error)
+	FindCompanies(ctx context.Context, orgID string, p pagination.Params, search string) ([]*Company, error)
 	FindCompanyByID(ctx context.Context, orgID, companyID string) (*Company, error)
 	CreateCompany(ctx context.Context, c *Company) error
 	UpdateCompany(ctx context.Context, c *Company) error
 	SoftDeleteCompany(ctx context.Context, orgID, companyID string) error
-	CountCompanies(ctx context.Context, orgID string) (int, error)
+	CountCompanies(ctx context.Context, orgID string, search string) (int, error)
 }
 
 type repoImpl struct {
@@ -67,14 +67,23 @@ func scanContact(row interface{ Scan(...any) error }, c *Contact) error {
 	)
 }
 
-func (r *repoImpl) FindContacts(ctx context.Context, orgID string, p pagination.Params) ([]*Contact, error) {
+func (r *repoImpl) FindContacts(ctx context.Context, orgID string, p pagination.Params, search string) ([]*Contact, error) {
 	q := `SELECT ` + contactCols + `
 		FROM platform_contacts
-		WHERE org_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []interface{}{orgID}
 
-	rows, err := r.db.Query(ctx, q, orgID, p.Limit, p.Offset)
+	if search != "" {
+		q += ` AND (first_name ILIKE $2 OR last_name ILIKE $2 OR email ILIKE $2)`
+		args = append(args, "%"+search+"%")
+		q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, len(args)+1, len(args)+2)
+		args = append(args, p.Limit, p.Offset)
+	} else {
+		q += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+		args = append(args, p.Limit, p.Offset)
+	}
+
+	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: FindContacts: %w", err)
 	}
@@ -186,12 +195,17 @@ func (r *repoImpl) SoftDeleteContact(ctx context.Context, orgID, contactID strin
 	return nil
 }
 
-func (r *repoImpl) CountContacts(ctx context.Context, orgID string) (int, error) {
+func (r *repoImpl) CountContacts(ctx context.Context, orgID string, search string) (int, error) {
+	q := `SELECT COUNT(*) FROM platform_contacts WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []interface{}{orgID}
+	
+	if search != "" {
+		q += ` AND (first_name ILIKE $2 OR last_name ILIKE $2 OR email ILIKE $2)`
+		args = append(args, "%"+search+"%")
+	}
+
 	var n int
-	err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM platform_contacts WHERE org_id = $1 AND deleted_at IS NULL`,
-		orgID,
-	).Scan(&n)
+	err := r.db.QueryRow(ctx, q, args...).Scan(&n)
 	return n, err
 }
 
@@ -211,14 +225,23 @@ func scanCompany(row interface{ Scan(...any) error }, c *Company) error {
 	)
 }
 
-func (r *repoImpl) FindCompanies(ctx context.Context, orgID string, p pagination.Params) ([]*Company, error) {
+func (r *repoImpl) FindCompanies(ctx context.Context, orgID string, p pagination.Params, search string) ([]*Company, error) {
 	q := `SELECT ` + companyCols + `
 		FROM platform_companies
-		WHERE org_id = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3`
+		WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []interface{}{orgID}
 
-	rows, err := r.db.Query(ctx, q, orgID, p.Limit, p.Offset)
+	if search != "" {
+		q += ` AND name ILIKE $2`
+		args = append(args, "%"+search+"%")
+		q += fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, len(args)+1, len(args)+2)
+		args = append(args, p.Limit, p.Offset)
+	} else {
+		q += ` ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+		args = append(args, p.Limit, p.Offset)
+	}
+
+	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("contacts: FindCompanies: %w", err)
 	}
@@ -297,11 +320,16 @@ func (r *repoImpl) SoftDeleteCompany(ctx context.Context, orgID, companyID strin
 	return nil
 }
 
-func (r *repoImpl) CountCompanies(ctx context.Context, orgID string) (int, error) {
+func (r *repoImpl) CountCompanies(ctx context.Context, orgID string, search string) (int, error) {
+	q := `SELECT COUNT(*) FROM platform_companies WHERE org_id = $1 AND deleted_at IS NULL`
+	args := []interface{}{orgID}
+	
+	if search != "" {
+		q += ` AND name ILIKE $2`
+		args = append(args, "%"+search+"%")
+	}
+
 	var n int
-	err := r.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM platform_companies WHERE org_id = $1 AND deleted_at IS NULL`,
-		orgID,
-	).Scan(&n)
+	err := r.db.QueryRow(ctx, q, args...).Scan(&n)
 	return n, err
 }

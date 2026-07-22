@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
 import type { Company } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 const INDUSTRIES = [
   "Technology",
@@ -53,6 +54,8 @@ export default function CompanyForm({ company, onSave }: CompanyFormProps) {
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<CompanyFormValues>({
     resolver: zodResolver(schema),
@@ -126,18 +129,15 @@ export default function CompanyForm({ company, onSave }: CompanyFormProps) {
             <label className="block text-sm font-medium text-(--text-secondary)">
               Industry
             </label>
-            <select {...register("industry")} className={inputCls}>
-              <option value="">Select industry</option>
-              {INDUSTRIES.map((i) => (
-                <option
-                  key={i}
-                  value={i}
-                  style={{ background: "var(--bg-elevated)" }}
-                >
-                  {i}
-                </option>
-              ))}
-            </select>
+            <input type="hidden" {...register("industry")} />
+            <Select
+              value={watch("industry") || ""}
+              onChange={(v) => setValue("industry", v)}
+              options={[
+                { value: "", label: "Select industry" },
+                ...INDUSTRIES.map((i) => ({ value: i, label: i })),
+              ]}
+            />
           </div>
         </div>
 

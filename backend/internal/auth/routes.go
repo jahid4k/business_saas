@@ -24,6 +24,14 @@ func RegisterRoutes(router fiber.Router, handler *Handler, requireAuth fiber.Han
 	auth.Post("/sign-out", handler.Logout)
 	auth.Post("/logout-all", requireAuth, handler.LogoutAll)
 	auth.Post("/sign-out-all", requireAuth, handler.LogoutAll)
+
+	// Mobile — same Service/Repository as web, only the token transport differs
+	// (JSON body instead of the bsaas_refresh cookie). See handler.go.
+	mobile := auth.Group("/mobile")
+	mobile.Post("/signup", handler.MobileSignup)
+	mobile.Post("/login", handler.MobileLogin)
+	mobile.Post("/logout", handler.MobileLogout)
+	mobile.Post("/refresh", handler.MobileRefresh)
 }
 
 // RegisterRoutesWithRateLimit mounts auth routes with Redis-backed rate limiting
@@ -54,4 +62,13 @@ func RegisterRoutesWithRateLimit(
 	auth.Post("/sign-out", handler.Logout)
 	auth.Post("/logout-all", requireAuth, handler.LogoutAll)
 	auth.Post("/sign-out-all", requireAuth, handler.LogoutAll)
+
+	// Mobile — same reasoning as above. Rate limited on signup/login/refresh, matching
+	// their web counterparts. Logout stays un-rate-limited, matching /logout above —
+	// same reason: a holder of an expired access token must still be able to revoke it.
+	mobile := auth.Group("/mobile")
+	mobile.Post("/signup", rateLimit, handler.MobileSignup)
+	mobile.Post("/login", rateLimit, handler.MobileLogin)
+	mobile.Post("/logout", handler.MobileLogout)
+	mobile.Post("/refresh", rateLimit, handler.MobileRefresh)
 }

@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { X } from "lucide-react";
+import { Select } from "@/components/ui/Select";
 import gsap from "gsap";
 import type { Task, TaskStatus } from "@/types/task";
 
@@ -43,13 +44,15 @@ export default function TaskDrawer({
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const initRef = useRef(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const isEdit = !!task;
 
   const {
     register,
     handleSubmit,
     reset,
+    setError,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(schema),
@@ -90,7 +93,6 @@ export default function TaskDrawer({
 
   // Reset form values when switching between create / edit
   useEffect(() => {
-    setSaveError(null);
     reset({
       title: task?.title ?? "",
       description: task?.description ?? "",
@@ -109,11 +111,10 @@ export default function TaskDrawer({
   }, [open, onClose]);
 
   const onSubmit = async (values: TaskFormValues) => {
-    setSaveError(null);
     try {
       await onSave(values);
     } catch {
-      setSaveError("Failed to save. Please try again.");
+      setError("root", { message: "Failed to save. Please try again." });
     }
   };
 
@@ -157,9 +158,9 @@ export default function TaskDrawer({
             className="space-y-5"
           >
             {/* Save error */}
-            {saveError && (
+            {errors.root && (
               <div className="px-4 py-3 rounded-lg text-sm text-red-400 bg-red-500/10 border border-red-500/20">
-                {saveError}
+                {errors.root.message}
               </div>
             )}
 
@@ -201,23 +202,12 @@ export default function TaskDrawer({
               <label className="block text-sm font-medium text-(--text-secondary)">
                 Status
               </label>
-              <select
-                {...register("status")}
-                className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-(--bg-elevated) border border-(--border) text-(--text-primary) outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15 transition-all"
-              >
-                {STATUS_OPTIONS.map((o) => (
-                  <option
-                    key={o.value}
-                    value={o.value}
-                    style={{
-                      background: "var(--bg-elevated)",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+              <input type="hidden" {...register("status")} />
+              <Select
+                value={watch("status")}
+                onChange={(v) => setValue("status", v as TaskStatus)}
+                options={STATUS_OPTIONS}
+              />
             </div>
 
             {/* Due date */}

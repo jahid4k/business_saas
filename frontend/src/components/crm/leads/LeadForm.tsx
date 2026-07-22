@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
 import type { Lead } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 // ── Sources ───────────────────────────────────────────
 const SOURCES = [
@@ -62,6 +63,8 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LeadFormValues>({
     resolver: zodResolver(schema),
@@ -194,18 +197,12 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
           <label className="block text-sm font-medium text-(--text-secondary)">
             Source
           </label>
-          <select {...register("source")} className={inputCls}>
-            <option value="">Select source</option>
-            {SOURCES.map((s) => (
-              <option
-                key={s.value}
-                value={s.value}
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("source")} />
+          <Select
+            value={watch("source") || ""}
+            onChange={(v) => setValue("source", v)}
+            options={[{ value: "", label: "Select source" }, ...SOURCES]}
+          />
         </div>
 
         {/* Status — only in edit mode */}
@@ -214,17 +211,12 @@ export default function LeadForm({ lead, onSave }: LeadFormProps) {
             <label className="block text-sm font-medium text-(--text-secondary)">
               Status
             </label>
-            <select {...register("status")} className={inputCls}>
-              {STATUSES.map((s) => (
-                <option
-                  key={s.value}
-                  value={s.value}
-                  style={{ background: "var(--bg-elevated)" }}
-                >
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <input type="hidden" {...register("status")} />
+            <Select
+              value={watch("status") || ""}
+              onChange={(v) => setValue("status", v)}
+              options={STATUSES}
+            />
           </div>
         )}
       </form>

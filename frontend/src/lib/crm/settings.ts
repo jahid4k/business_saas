@@ -1,7 +1,7 @@
 import api from "@/lib/api";
 
 function base(orgId: string) {
-  return `/organizations/${orgId}/crm/settings`;
+  return `/api/v1/organizations/${orgId}/crm/settings`;
 }
 
 export interface CRMSettings {
@@ -18,11 +18,19 @@ export interface UpdateCRMSettingsPayload {
 }
 
 export async function getCRMSettings(orgId: string): Promise<CRMSettings> {
-  const res = await api.get<{ success: boolean; data: CRMSettings }>(base(orgId));
+  const res = await api.get<{ success: boolean; data: CRMSettings }>(
+    base(orgId),
+  );
   return res.data.data;
 }
 
-export async function updateCRMSettings(orgId: string, payload: UpdateCRMSettingsPayload): Promise<CRMSettings> {
-  const res = await api.patch<{ success: boolean; data: CRMSettings }>(base(orgId), payload);
+export async function updateCRMSettings(
+  orgId: string,
+  payload: UpdateCRMSettingsPayload,
+): Promise<CRMSettings> {
+  const res = await api.patch<{ success: boolean; data: CRMSettings }>(
+    base(orgId),
+    payload,
+  );
   return res.data.data;
 }

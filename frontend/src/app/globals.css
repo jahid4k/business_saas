@@ -12,8 +12,11 @@
   --text-primary: #0a0a0a;
   --text-secondary: #555555;
   --text-muted: #999999;
-  --accent: #7c3aed;
-  --accent-hover: #a855f7;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --destructive: #ef4444;
 }
 
 /* ── Design tokens — dark ──────────────────────── */
@@ -25,8 +28,11 @@
   --text-primary: #ffffff;
   --text-secondary: #aaaaaa;
   --text-muted: #555555;
-  --accent: #7c3aed;
-  --accent-hover: #a855f7;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --destructive: #ef4444;
 }
 
 /* ── Base ──────────────────────────────────────── */

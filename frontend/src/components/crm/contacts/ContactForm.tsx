@@ -8,6 +8,7 @@ import { z } from "zod";
 import { useDrawer } from "@/contexts/DrawerContext";
 import { listCompanies } from "@/lib/crm/companies";
 import type { Contact, Company } from "@/types/crm";
+import { Select } from "@/components/ui/Select";
 
 const SOURCES = [
   { value: "linkedin", label: "LinkedIn" },
@@ -68,6 +69,8 @@ export default function ContactForm({
   const {
     register,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<ContactFormValues>({
     resolver: zodResolver(schema),
@@ -185,18 +188,15 @@ export default function ContactForm({
           <label className="block text-sm font-medium text-(--text-secondary)">
             Company
           </label>
-          <select {...register("company_id")} className={inputCls}>
-            <option value="">No company</option>
-            {companies.map((c) => (
-              <option
-                key={c.id}
-                value={c.id}
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("company_id")} />
+          <Select
+            value={watch("company_id") || ""}
+            onChange={(v) => setValue("company_id", v)}
+            options={[
+              { value: "", label: "No company" },
+              ...companies.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
         </div>
 
         {/* Source */}
@@ -204,18 +204,12 @@ export default function ContactForm({
           <label className="block text-sm font-medium text-(--text-secondary)">
             Source
           </label>
-          <select {...register("source")} className={inputCls}>
-            <option value="">Select source</option>
-            {SOURCES.map((s) => (
-              <option
-                key={s.value}
-                value={s.value}
-                style={{ background: "var(--bg-elevated)" }}
-              >
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <input type="hidden" {...register("source")} />
+          <Select
+            value={watch("source") || ""}
+            onChange={(v) => setValue("source", v)}
+            options={[{ value: "", label: "Select source" }, ...SOURCES]}
+          />
         </div>
       </form>
 
