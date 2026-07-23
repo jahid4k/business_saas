@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Route, Save, Users, Plus, X } from "lucide-react";
 import { getCRMSettings, updateCRMSettings } from "@/lib/crm/settings";
@@ -31,12 +31,14 @@ export default function LeadRoutingPage({
     queryFn: () => listMembers(orgId),
   });
 
-  useEffect(() => {
+  const [prevData, setPrevData] = useState(settingsQuery.data);
+  if (settingsQuery.data !== prevData) {
+    setPrevData(settingsQuery.data);
     if (settingsQuery.data) {
       setEnabled(settingsQuery.data.lead_routing_enabled);
       setAssignees(settingsQuery.data.round_robin_assignees || []);
     }
-  }, [settingsQuery.data]);
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>
