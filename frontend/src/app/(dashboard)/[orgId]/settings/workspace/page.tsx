@@ -2,7 +2,9 @@
 
 import { use, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
+import { Combobox } from "@/components/ui/Combobox";
+import { Select } from "@/components/ui/Select";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -102,6 +104,7 @@ export default function WorkspaceSettingsPage({
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors, isSubmitting, isDirty },
@@ -266,7 +269,7 @@ export default function WorkspaceSettingsPage({
           </div>
 
           {/* ── Organization information form ──────────── */}
-          <div className="rounded-xl border border-(--border) bg-(--bg-surface) overflow-hidden">
+          <div className="rounded-xl border border-(--border) bg-(--bg-surface)">
             <div className="px-6 py-4 border-b border-(--border)">
               <p
                 className="text-sm font-semibold text-(--text-primary)"
@@ -374,33 +377,40 @@ export default function WorkspaceSettingsPage({
                   <label className="block text-sm font-medium text-(--text-secondary)">
                     Timezone
                   </label>
-                  <select {...register("timezone")} className={cls}>
-                    {TIMEZONES.map((tz) => (
-                      <option
-                        key={tz}
-                        value={tz}
-                        style={{ background: "var(--bg-elevated)" }}
-                      >
-                        {tz}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="timezone"
+                    render={({ field }) => (
+                      <Combobox
+                        value={field.value || "UTC"}
+                        onChange={field.onChange}
+                        options={TIMEZONES.map((tz) => ({
+                          label: tz,
+                          value: tz,
+                        }))}
+                        placeholder="Select timezone"
+                      />
+                    )}
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-sm font-medium text-(--text-secondary)">
                     Currency
                   </label>
-                  <select {...register("currency")} className={cls}>
-                    {CURRENCIES.map((c) => (
-                      <option
-                        key={c}
-                        value={c}
-                        style={{ background: "var(--bg-elevated)" }}
-                      >
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                  <Controller
+                    control={control}
+                    name="currency"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value || "USD"}
+                        onChange={field.onChange}
+                        options={CURRENCIES.map((c) => ({
+                          label: c,
+                          value: c,
+                        }))}
+                      />
+                    )}
+                  />
                 </div>
               </div>
 
