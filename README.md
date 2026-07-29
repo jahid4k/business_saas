@@ -1,114 +1,49 @@
 # BusinessSAAS
 
-A modular SaaS platform with a secure, production-minded authentication and authorization system. Built on Go/Fiber for the backend and Next.js for the frontend test interface.
+A modular, multi-tenant B2B SaaS platform built as a unified business operating system. One auth
+layer, one RBAC system, one engagement layer — every business module sits on the same foundation
+rather than reimplementing it.
+
+Three clients against one Go backend: a Next.js web dashboard, an Expo mobile app, and a public
+capture API.
+
+> **Documentation:** the [project wiki](../../wiki) holds guides and architecture. Code-coupled
+> reference — modules, database, ADRs — lives in [`docs/`](docs/).
 
 ---
 
-## What this is
+## Status
 
-BusinessSAAS is a greenfield SaaS foundation being built in phases. The goal is a multi-tenant platform that can grow into CRM, ERP, HRM, project management, and other business modules — all sharing a single, solid auth and permission layer.
+| Component             | State                                    |
+| --------------------- | ---------------------------------------- |
+| Backend               | 🔵 Active — 391 routes across 12 domains |
+| Web frontend          | 🔵 Active                                |
+| Mobile                | 🔵 Active — auth, dashboard, tasks, CRM  |
+| Production deployment | ⚪ Not started                           |
 
-**Phase 1 (current):** Auth foundation, RBAC, multi-tenant workspaces, and a permission-gated task module for testing. A test frontend validates everything in a real browser before the production Fuse React dashboard is integrated.
+**Shipped:** auth, organizations, RBAC, security, tasks, platform layer (contacts and engagement),
+CRM, HRM.
+
+**In progress:** lead capture, mobile.
+
+Capture is written end-to-end but **not functional** — three of its five sources cannot create a
+lead, and both webhook endpoints ship without signature verification. It must not be exposed to
+the public internet in its current state. See [Known Issues](../../wiki/Known-Issues).
 
 ---
 
 ## Tech stack
 
-### Backend
+**Backend** — Go, Fiber v3, PostgreSQL, Redis, Goose migrations
+**Frontend** — Next.js App Router, TypeScript, Tailwind CSS v4, TanStack Query, Zustand
+**Mobile** — Expo, React Native, Expo Router, expo-secure-store
+**Infrastructure** — Docker Compose, GitHub Actions
 
-|                       |                                                    |
-| --------------------- | -------------------------------------------------- |
-| Language              | Go 1.23                                            |
-| Framework             | Fiber v3                                           |
-| Database              | PostgreSQL 16                                      |
-| Cache / Rate limiting | Redis 7                                            |
-| Migrations            | Goose                                              |
-| Auth                  | JWT access tokens + opaque httpOnly refresh tokens |
-| Authorization         | RBAC — roles, permissions, memberships             |
-
-### Frontend (test interface)
-
-|             |                                                               |
-| ----------- | ------------------------------------------------------------- |
-| Framework   | Next.js 15.1 (App Router)                                     |
-| Language    | TypeScript 5.6                                                |
-| Styling     | Tailwind CSS v4                                               |
-| HTTP client | Axios                                                         |
-| Mock layer  | axios-mock-adapter (auto-detects backend, falls back to mock) |
-
-### Infrastructure
-
-|            |                                |
-| ---------- | ------------------------------ |
-| Local dev  | Docker Compose                 |
-| CI         | GitHub Actions                 |
-| Deployment | VPS + Docker Compose (planned) |
-
----
-
-## Project structure
-
-```
-BusinessSAAS/
-├── docker-compose.yml
-├── .env.example
-├── .gitignore
-│
-├── .github/
-│   └── workflows/
-│       ├── ci.yml              # Runs on every push — build, test, lint
-│       └── deploy.yml          # Manual VPS deployment (placeholder)
-│
-├── backend/
-│   ├── Dockerfile
-│   ├── .air.toml               # Live reload config for development
-│   ├── Makefile
-│   ├── go.mod
-│   │
-│   ├── cmd/server/
-│   │   └── main.go             # Entry point — wires everything together
-│   │
-│   ├── internal/
-│   │   ├── config/             # Environment loading
-│   │   ├── database/           # PostgreSQL pool + Redis client
-│   │   ├── middleware/         # Auth, permission, rate limit, logger, recover
-│   │   ├── auth/               # Signup, login, refresh, logout
-│   │   ├── user/               # User profile
-│   │   ├── business/           # Workspace management
-│   │   ├── authz/              # RBAC — roles, permissions, memberships
-│   │   ├── task/               # Test CRUD module (permission validation)
-│   │   └── audit/              # Append-only security event log
-│   │
-│   ├── pkg/
-│   │   ├── jwt/                # Token issue + parse
-│   │   ├── password/           # bcrypt hash + verify
-│   │   ├── token/              # Opaque token generation + SHA-256 hash
-│   │   └── response/           # Standard JSON response envelope
-│   │
-│   ├── migrations/             # Goose SQL migrations
-│   └── tests/                  # Unit + integration tests
-│
-└── frontend/
-    ├── Dockerfile
-    │
-    ├── app/                    # Next.js App Router pages
-    │   ├── page.tsx            # Root — Hello World + connection status
-    │   ├── (auth)/             # Login + signup (no layout wrapper)
-    │   └── dashboard/          # Protected pages — overview, tasks, members, profile
-    │
-    ├── components/
-    │   ├── ui/                 # Button, Input, Badge, Card, StatusDot
-    │   ├── auth/               # LoginForm, SignupForm
-    │   ├── layout/             # DashboardLayout (sidebar + nav)
-    │   ├── tasks/              # TaskList (full CRUD with permission gating)
-    │   ├── members/            # MemberList (role assignment + API preview)
-    │   └── dev/                # MockToolbar + BackendProbe (dev only)
-    │
-    ├── hooks/                  # useAuth, usePermission, useBusiness
-    ├── lib/                    # api.ts, auth.ts, permissions.ts, server-api.ts
-    ├── lib/mock/               # Mock data, handlers, store (auto-detection)
-    └── types/                  # TypeScript types for all domain entities
-```
+Exact versions live in [`backend/go.mod`](backend/go.mod),
+[`frontend/package.json`](frontend/package.json), and
+[`mobile/package.json`](mobile/package.json). Those files are the source of truth — this README
+deliberately does not restate version numbers, because copied numbers drift. (An earlier revision
+of this file claimed Go 1.23 and Next.js 15.1 long after both had moved on.)
 
 ---
 
@@ -116,404 +51,235 @@ BusinessSAAS/
 
 ### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker + Docker Compose)
-- [Go 1.23+](https://go.dev/dl/) (for local backend development without Docker)
-- [Node.js 20+](https://nodejs.org/) (for local frontend development without Docker)
+- Docker Desktop, or Docker with Compose
+- Go — for backend work outside Docker; version in `backend/go.mod`
+- Bun — for frontend work outside Docker
 
-### 1. Clone and configure
+### Run it
 
 ```bash
-git clone https://github.com/yourusername/BusinessSAAS.git
+git clone <repository-url>
 cd BusinessSAAS
 
-# Copy the environment template
-cp .env .env
+cp .env.example .env
 ```
 
-Open `.env` and set your own values for `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `JWT_SECRET`. The defaults work for local development but should never be used in production.
-
-### 2. Start everything with Docker
+Open `.env` and set `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, and `JWT_SECRET`. The template values
+are fine locally and must never reach production — `JWT_SECRET` in particular should be at least
+64 random characters.
 
 ```bash
 docker compose up --build
 ```
 
-This starts four services in the correct order:
+Four services start in dependency order:
 
-| Service    | URL                   | Purpose                |
-| ---------- | --------------------- | ---------------------- |
-| Frontend   | http://localhost:3000 | Next.js test interface |
-| Backend    | http://localhost:8080 | Go/Fiber API           |
-| PostgreSQL | localhost:5432        | Primary database       |
-| Redis      | localhost:6379        | Cache + rate limiting  |
+| Service    | URL                   | Purpose                                |
+| ---------- | --------------------- | -------------------------------------- |
+| Frontend   | http://localhost:3000 | Next.js dashboard                      |
+| Backend    | http://localhost:8080 | Go / Fiber API                         |
+| PostgreSQL | localhost:5432        | Primary database                       |
+| Redis      | localhost:6379        | Cache, rate limiting, permission cache |
 
-### 3. Verify the connection
+### Verify
 
-Open http://localhost:3000. The page fetches `GET /api/v1/hello` from the backend via the Docker network and displays the connection status. A green "Backend connected" indicator means everything is working.
+```bash
+curl http://localhost:8080/api/v1/health
+```
 
-Open http://localhost:8080/api/v1/health directly to verify the backend and its dependencies.
+Checks both PostgreSQL and Redis. In development, `GET /api/v1/routes` lists every registered
+route — useful for confirming what actually mounted.
 
 ---
 
-## Development workflow
+## Working on it
 
-### Docker (recommended)
+### Docker
 
 ```bash
-# Start all services with live reload
-docker compose up --build
-
-# Tail logs for a specific service
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# Restart one service without stopping others
-docker compose restart backend
-
-# Stop everything (keeps database data)
-docker compose down
-
-# Stop and wipe all data
-docker compose down -v
+docker compose up --build          # start everything, live reload
+docker compose logs -f backend     # tail one service
+docker compose restart backend     # restart one service
+docker compose down                # stop, keep data
+docker compose down -v             # stop and wipe data
 ```
 
-### Backend (local, without Docker)
+### Backend
+
+The [`Makefile`](backend/Makefile) is self-documenting — `make help` lists every target with a
+description. The ones used most:
 
 ```bash
 cd backend
 
-# Install dependencies
-go mod tidy
+make dev               # run with Air live reload
+make test              # all tests
+make test-unit         # unit only
+make test-integration  # integration only — needs Postgres and Redis
+make vet               # go vet
+make lint              # golangci-lint
 
-# Run with live reload (requires Air)
-make dev
+make migrate-up        # apply pending migrations
+make migrate-status    # what's applied
+make migrate-down      # roll back one
+make migrate-create NAME=add_widget_table
 
-# Or run directly
-go run ./cmd/server
-
-# Run tests
-make test
-
-# Run database migrations
-make migrate-up
-
-# Open a psql shell (requires Docker Compose running)
-make db-shell
+make db-shell          # psql
+make redis-shell       # redis-cli
+make docs              # regenerate Swagger from handler annotations
 ```
 
-### Frontend (local, without Docker)
+**Every schema change goes through a migration.** Never alter the database by hand — the
+integration job in CI runs migrations against a real Postgres on every PR, so a hand-made change
+that isn't in a migration will pass locally and fail there.
+
+### Frontend
 
 ```bash
 cd frontend
-
-# Install dependencies
-npm install
-
-# Start dev server
-npm run dev
-
-# Type check
-npm run type-check
-
-# Lint
-npm run lint
+bun install
+bun run dev
+bun run lint
+bun run build
 ```
 
----
-
-## Testing the frontend without a backend
-
-The frontend includes an automatic mock layer. When the backend is unreachable, it intercepts all API calls and returns realistic mock data — no manual configuration needed.
-
-**How it works:**
-
-On every page load, the frontend probes `GET /api/v1/health`. If the backend does not respond within 3 seconds, the mock adapter activates automatically. When the backend starts, the next page load switches back to real API calls.
-
-**Dev toolbar:**
-
-A floating toolbar appears in the bottom-right corner in development mode. It shows:
-
-- Whether mock or real mode is active
-- A user switcher to test different roles
-- The active user's permission set
-
-**Mock users:**
-
-| User  | Email                  | Role   | Permissions                  |
-| ----- | ---------------------- | ------ | ---------------------------- |
-| Alice | alice@businesssaas.dev | Owner  | Everything                   |
-| Bob   | bob@businesssaas.dev   | Admin  | Tasks + manage members       |
-| Carol | carol@businesssaas.dev | Member | Tasks read / create / update |
-| Dave  | dave@businesssaas.dev  | Viewer | Tasks read only              |
-
-Use any password when logging in during mock mode.
-
-**Testing permission boundaries:**
-
-1. Log in as Dave — the Tasks page shows no Create or Delete buttons
-2. Switch to Alice via the toolbar — all buttons appear
-3. Go to Members — change Carol from `member` to `viewer`
-4. The change persists across page refreshes (saved to localStorage)
-5. Click "Reset member roles" in the toolbar to restore defaults
-
----
-
-## API overview
-
-All responses follow a consistent envelope:
-
-```json
-// Success
-{
-  "success": true,
-  "data": {},
-  "message": "OK",
-  "request_id": "uuid"
-}
-
-// Error
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_CREDENTIALS",
-    "message": "Invalid email or password"
-  },
-  "request_id": "uuid"
-}
-```
-
-### Public endpoints
-
-```
-GET  /api/v1/health
-GET  /api/v1/hello
-POST /api/v1/auth/signup
-POST /api/v1/auth/login
-POST /api/v1/auth/refresh
-POST /api/v1/auth/password-reset/request
-POST /api/v1/auth/password-reset/confirm
-```
-
-### Authenticated endpoints (JWT required)
-
-```
-POST  /api/v1/auth/logout
-POST  /api/v1/auth/logout-all
-GET   /api/v1/users/me
-PATCH /api/v1/users/me
-```
-
-### Business-scoped endpoints (JWT + business context required)
-
-```
-POST /api/v1/businesses
-GET  /api/v1/businesses
-GET  /api/v1/businesses/:id
-POST /api/v1/businesses/:id/switch
-
-GET  /api/v1/members
-POST /api/v1/members/:userId/role
-
-GET  /api/v1/roles
-GET  /api/v1/permissions
-
-GET    /api/v1/tasks          (requires tasks.read)
-POST   /api/v1/tasks          (requires tasks.create)
-GET    /api/v1/tasks/:id      (requires tasks.read)
-PATCH  /api/v1/tasks/:id      (requires tasks.update)
-DELETE /api/v1/tasks/:id      (requires tasks.delete)
-```
-
----
-
-## Permission model
-
-Users belong to businesses through memberships. Each membership has a role. Roles have permissions.
-
-```
-User ──── Membership ────▶ Role ──── RolePermission ────▶ Permission
-            (per business)
-```
-
-**System roles:**
-
-| Role   | tasks.read | tasks.create | tasks.update | tasks.delete | members.manage | business.manage |
-| ------ | :--------: | :----------: | :----------: | :----------: | :------------: | :-------------: |
-| Owner  |     ✓      |      ✓       |      ✓       |      ✓       |       ✓        |        ✓        |
-| Admin  |     ✓      |      ✓       |      ✓       |      ✓       |       ✓        |        ✗        |
-| Member |     ✓      |      ✓       |      ✓       |      ✗       |       ✗        |        ✗        |
-| Viewer |     ✓      |      ✗       |      ✗       |      ✗       |       ✗        |        ✗        |
-
-The backend enforces permissions on every request. The frontend hides or disables UI elements based on the same rules, but this is for user experience only — the backend is always the authority.
-
----
-
-## Token architecture
-
-```
-Login response:
-  Body:    { access_token: "..." }      ← stored in memory (lost on refresh)
-  Cookie:  bsaas_refresh=<token>        ← httpOnly, never readable by JS
-
-On page load:
-  POST /auth/refresh                    ← browser sends cookie automatically
-  Body:    { access_token: "..." }      ← new access token stored in memory
-
-Logout:
-  POST /auth/logout                     ← backend clears cookie via Set-Cookie
-  Memory:  access token cleared
-```
-
-The access token is never written to localStorage or any persistent storage. The refresh token is never readable by JavaScript.
-
----
-
-## Database migrations
-
-Migrations are managed with [Goose](https://github.com/pressly/goose) and live in `backend/migrations/`.
+### Mobile
 
 ```bash
-# Run all pending migrations
-make migrate-up
-
-# Roll back the last migration
-make migrate-down
-
-# Check migration status
-make migrate-status
-
-# Create a new migration
-make migrate-create NAME=add_email_verification
+cd mobile
+bun install
+bun run start        # Expo dev server
+bun run ios
+bun run android
 ```
 
-Migration files follow the naming convention `NNNNN_description.sql` where `NNNNN` is a zero-padded sequence number.
+Expo Go is fine for early work, but move to a development build before anything production-like —
+Expo Go tracks only the latest SDK and cannot load custom native modules.
 
 ---
 
-## CI / CD
+## Architecture
 
-### CI (runs on every push and pull request)
+### Layering
 
-GitHub Actions validates the project on every push to `main` or `develop`:
+The backend is strictly layered, enforced by convention:
 
-- **Backend:** `go vet`, `go test`, `go build`
-- **Frontend:** ESLint, TypeScript type check, Next.js build
-- **Docker:** builds both images to confirm they compile
+- **Handler** — HTTP only. Reads the request, calls a service, writes a response. No SQL, no
+  business logic.
+- **Service** — business logic only. No HTTP types, no SQL.
+- **Repository** — SQL only, always parameterized. No business logic.
+- **Middleware** — cross-cutting concerns: auth, tenancy, permissions, rate limiting.
+- **pkg/** — stateless utilities with zero domain knowledge.
 
-See `.github/workflows/ci.yml`.
+The payoff is concrete rather than aesthetic: because services know nothing about HTTP, the mobile
+client reuses every service unchanged and adds only four handlers that move the refresh token from
+a cookie into a JSON body.
 
-### Deployment (manual, VPS)
+### Multi-tenancy
 
-The deploy workflow at `.github/workflows/deploy.yml` is a placeholder with the full SSH + Docker Compose deployment steps defined and commented out. Connect it by:
+Every record belongs to an organization, and isolation is enforced in middleware.
+`RequireOrganizationParam` compares the `:orgId` in the URL against the `bid` claim in the JWT
+before any handler runs — so a repository bug alone cannot leak data across tenants.
 
-1. Adding your VPS SSH key and credentials to GitHub Secrets
-2. Uncommenting the deploy steps in `deploy.yml`
-3. Triggering manually via GitHub Actions → Deploy → Run workflow
+Capture endpoints are the exception: they resolve the organization from an API key, an inbound
+address, or a page ID instead of a JWT. Every capture query is still organization-scoped.
 
----
+### Auth
 
-## Environment variables
+A short-lived JWT access token plus an opaque refresh token. Only hashes of refresh tokens are
+stored; the raw value is never logged or returned in a body.
 
-### Root `.env`
+Web keeps the refresh token in an httpOnly cookie. Mobile keeps it in the OS keychain via
+`expo-secure-store`, because native has no cookie jar. **Both keep the access token in a plain
+module variable, never in a store** — Zustand's `persist` middleware would write it to
+localStorage or AsyncStorage.
 
-| Variable                | Default                 | Description                                 |
-| ----------------------- | ----------------------- | ------------------------------------------- |
-| `POSTGRES_USER`         | `saas_user`             | PostgreSQL username                         |
-| `POSTGRES_PASSWORD`     | —                       | PostgreSQL password (required)              |
-| `POSTGRES_DB`           | `businesssaas`          | Database name                               |
-| `REDIS_PASSWORD`        | —                       | Redis password (required)                   |
-| `JWT_SECRET`            | —                       | JWT signing secret, min 32 chars (required) |
-| `JWT_ACCESS_TOKEN_TTL`  | `15m`                   | Access token expiry                         |
-| `JWT_REFRESH_TOKEN_TTL` | `7d`                    | Refresh token expiry                        |
-| `CORS_ALLOWED_ORIGINS`  | `http://localhost:3000` | Comma-separated allowed origins             |
-| `NEXT_PUBLIC_API_URL`   | `http://localhost:8080` | Backend URL for browser-side requests       |
+### Authorization
 
-### Backend `.env`
+Permission-based, not role-name-based. Roles bundle permission keys; individual members can carry
+per-member overrides on top of their role.
 
-See `backend/.env.example` for the full list including database connection pool settings.
-
-### Frontend `.env`
-
-| Variable               | Description                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `BACKEND_INTERNAL_URL` | Backend URL for server-side Next.js requests (inside Docker: `http://backend:8080`) |
-| `NEXT_PUBLIC_API_URL`  | Backend URL for browser-side requests                                               |
+**A new permission must also be added to `frontend/src/lib/permissionGroups.ts`.** A permission
+enforced on a route but absent from that file is invisible in the role editor and cannot be
+granted through the UI. This has shipped twice; see [KI-009](../../wiki/Known-Issues).
 
 ---
 
-## Makefile reference
+## Repository layout
 
-Run these from the `backend/` directory:
+```
+BusinessSAAS/
+├── .github/workflows/     ci.yml · mobile-ci.yml · deploy.yml (placeholder)
+├── backend/
+│   ├── cmd/server/        entry point and dependency wiring
+│   ├── internal/
+│   │   ├── auth/ user/ organizations/ authz/ security/ audit/
+│   │   ├── platform/      contacts, engagement — shared across modules
+│   │   ├── crm/           leads, pipeline, deals, reports, templates, settings
+│   │   ├── hrm/           25 sub-modules
+│   │   ├── capture/       apikeys, public, email, social, visitors
+│   │   ├── task/ dashboard/ middleware/ database/ config/
+│   │   └── migrations/    Goose SQL
+│   ├── pkg/               jwt · password · token · response · logger · pagination
+│   └── docs/              generated Swagger
+├── frontend/src/
+│   ├── app/               App Router — (auth), (onboarding), (dashboard)/[orgId]
+│   ├── components/ lib/ stores/ hooks/ types/
+├── mobile/src/
+│   ├── app/               Expo Router — (auth), (dashboard)/[orgId]
+│   ├── components/ lib/ stores/ hooks/ theme/ types/
+├── docs/                  modules · database · decisions
+└── docker-compose.yml
+```
+
+---
+
+## Testing
 
 ```bash
-make help           # List all available commands
-make dev            # Run with Air live reload
-make build          # Compile production binary
-make test           # Run all tests
-make test-unit      # Run unit tests only
-make lint           # Run golangci-lint
-make migrate-up     # Apply pending migrations
-make migrate-down   # Roll back last migration
-make migrate-status # Show migration status
-make db-shell       # Open psql (Docker must be running)
-make redis-shell    # Open redis-cli (Docker must be running)
-make clean          # Remove build artifacts
+make test-unit           # services, no external dependencies
+make test-integration    # real Postgres + Redis, INTEGRATION=1
 ```
+
+Integration tests cover auth flows and tenant isolation. CI runs both on every PR, with the
+integration job applying migrations to a live database first.
 
 ---
 
-## Roadmap
+## Documentation
 
-### Phase 1 — Auth foundation (current)
+| What                                   | Where                                                    |
+| -------------------------------------- | -------------------------------------------------------- |
+| Guides, architecture, conventions      | [Wiki](../../wiki)                                       |
+| Module reference — routes, permissions | [`docs/modules/`](docs/modules/)                         |
+| Database — tables, ERD, dictionary     | [`docs/database/`](docs/database/)                       |
+| Architecture Decision Records          | [`docs/decisions/`](docs/decisions/)                     |
+| Generated API reference                | [`backend/docs/swagger.json`](backend/docs/swagger.json) |
 
-- [x] Project structure and Docker Compose
-- [x] Backend skeleton — all modules, handlers, services, repositories
-- [x] Database connection — PostgreSQL pool + Redis client
-- [x] Middleware — JWT auth, permission enforcement, rate limiting, logging
-- [x] pkg layer — JWT, bcrypt password, opaque token, response helpers
-- [x] Frontend test interface — all pages, components, hooks
-- [x] Mock layer — auto-detects backend, falls back to realistic mock data
-- [x] CI pipeline — GitHub Actions
-- [ ] Auth implementation — signup, login, refresh, logout (Phase 1-B)
-- [ ] Business/workspace CRUD (Phase 1-C)
-- [ ] RBAC implementation — roles, permissions, membership (Phase 1-D)
-- [ ] Task CRUD with permission enforcement (Phase 1-E)
-- [ ] Rate limiting — Redis sliding window
-- [ ] Audit logging
-- [ ] Integration tests
-
-### Phase 2 — Hardening
-
-- [ ] Password reset flow
-- [ ] Email verification
-- [ ] Account lockout after failed attempts
-- [ ] Full integration test suite
-- [ ] VPS deployment pipeline
-
-### Phase 3+ — Business modules
-
-- [ ] Fuse React production dashboard
-- [ ] CRM module
-- [ ] HRM module
-- [ ] Project management module
-- [ ] Billing integration
+Before writing or editing documentation, read
+[Documentation Conventions](../../wiki/Documentation-Conventions). It defines which file owns which
+fact — the rule that keeps these from drifting apart.
 
 ---
 
 ## Contributing
 
-This is a private project in active development. The architecture is intentionally strict — please follow the existing patterns for adding new modules:
+Feature branches off `main`, [Conventional Commits](https://www.conventionalcommits.org), PR with
+green CI before merge. Details in the [Git Guide](../../wiki/Git-Guide).
 
-1. Every module gets its own folder under `internal/`
-2. Handler layer: HTTP request/response only
-3. Service layer: business logic only
-4. Repository layer: SQL queries only
-5. No circular dependencies
-6. No SQL string concatenation — parameterized queries only
-7. All schema changes go through Goose migrations
+Non-negotiable, each for a reason:
+
+- **Never store a raw secret.** Passwords bcrypt-hashed; refresh, reset, and verification tokens
+  stored as hashes; API keys SHA-256 with a display prefix, raw value returned exactly once.
+- **Parameterized SQL only.** No concatenation, anywhere.
+- **Transactions for multi-step writes** — organization creation, lead conversion, approval
+  decisions.
+- **Never put the access token in a store.** `persist` would leak it to disk.
+- **Review AI-assisted output before committing.** An unreviewed thinking-out-loud comment was
+  once committed into the capture module and concealed a feature-breaking bug.
 
 ---
 
 ## License
 
-Private — all rights reserved.
+Private and proprietary. Not licensed for distribution.
