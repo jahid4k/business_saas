@@ -46,7 +46,7 @@ FROM base AS development
 
 # Install Air for live reload
 # https://github.com/air-verse/air
-RUN go install github.com/air-verse/air@latest
+RUN GOTOOLCHAIN=auto go install github.com/air-verse/air@latest
 
 # Install Goose for running migrations from inside the container
 # https://github.com/pressly/goose
