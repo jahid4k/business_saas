@@ -1,5 +1,30 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-07-29 (r15 — HRM extension surface scoped and recorded, plus two shared-
+> infrastructure entries that came out of that scoping. New in Section 9: **PLATFORM PRIMITIVES**
+> (five buildable shared pieces — notification, scheduler, resource-level permissions, checklist
+> engine, form/question engine), **PREP MIGRATIONS** (three cheap-now/expensive-later schema
+> hooks), and **HRM EXTENDED MODULES** (the full enterprise-HRM surface: recruitment, onboarding,
+> performance, learning, compensation depth, benefits, assets, travel & expense, helpdesk, exit
+> management, org chart, succession, analytics, multi-country). All three are scoping only — no
+> build decision, no priority ordering, no effort estimates. Section 4 gained an **effective-dated
+> (temporal) records** key pattern; Section 10 gained a **decimal money** rule. Section 5 → HRM
+> gained a one-line pointer to the extension entry. Section 9 → CRM ADVANCED's
+> notification/scheduler bullet was reduced to a pointer — those two now belong to PLATFORM
+> PRIMITIVES (one fact, one owner).
+> ⚠️ Merge note: the copy this revision was applied to predated the 2026-07-22 mobile r14 entry.
+> That content has been restored — Section 5 → AUTH → MOBILE, Section 9 → MOBILE APP promoted to
+> 🔵 ACTIVE, Section 13's Expo/RN/Expo Router/expo-secure-store rows, and Sections 14–15 (Mobile
+> Architecture, Mobile Module Registry). If mobile was deliberately rolled back, delete those four
+> places; nothing else in r15 depends on them.
+> ⚠️ Open, unresolved: memory of recent sessions refers to this project as **Havelio**
+> (domain `havelio.app`) rather than BusinessSAAS, and describes a mobile Expo scaffold with
+> working auth/token handling — both go further than anything in this document. Neither was
+> applied here, because a rename touches every section plus `go.mod`'s module path, and because
+> this doc's own rule is that pasted docs and conversation memory are not authoritative against
+> source. Verify against the repo, then either apply the rename in one deliberate pass or delete
+> this note.
+
 > Last updated: 2026-07-22 (r14 — Mobile App promoted ⚪ NOT STARTED → 🔵 ACTIVE. Section 9's
 > entry slimmed to a pointer, same pattern as CAPTURE. Section 5 → AUTH gained a real MOBILE
 > subsection with the actual route list, and resolved the r10 draft's one open question: checked
@@ -8,14 +33,11 @@
 > an auto-login path mobile alone would exercise. Mobile Architecture and Mobile Module Registry
 > restored from the r10 archive as new Section 14 and Section 15 — appended at the end rather than
 > reinstated at their old Section 9/10 slot, to avoid renumbering every cross-reference in Sections
-> 1–13. Revisit if the old position is wanted back; it's a rename pass, not a content change.
-> Section 13's version table gained Expo SDK 57 (57.0.7)/React Native 0.86/Expo Router/
+> 1–13. Section 13's version table gained Expo SDK 57 (57.0.7)/React Native 0.86/Expo Router/
 > expo-secure-store rows, plus a scaffolding gotcha: `create-expo-app` without
 > `--template default@sdk-57` currently still lands on SDK 54 during the transition window.
-> Zero mobile code written — this revision is the doc-level start only, implementation is next.
-> Note: a stale snapshot of an older doc draft had the mobile auth extension marked 🔵 ACTIVE with
-> code implied; the real `backend/internal/auth/routes.go` has no `/mobile/*` group at all. That
-> snapshot was planning text, not shipped state — flagging in case it resurfaces elsewhere.)
+> Zero mobile code written — this revision is the doc-level start only, implementation is next.)
+
 > Last updated: 2026-07-21 (r14 — introduced the Collection View Pattern (Section 7): a
 > Notion-style grouped/collapsible list with borderless rows, full inline editing, and inline
 > quick-add, replacing the bordered-table pattern for single-entity lists. Tasks is the first
@@ -68,7 +90,7 @@ Done:
 - Tests: unit (auth, authz, user, orgs, CRM, HRM, pkg) + integration (auth flows, tenant isolation)
 - CI workflow (GitHub Actions)
 
-### Phase 2 — Frontend + CRM buildout: 🔵 ACTIVE
+### Phase 2 — Frontend + CRM + HRM buildout: 🔵 ACTIVE
 
 Building the full admin dashboard frontend plus the CRM Advanced Functionality Pass. This is not a test interface — it is the real product UI, Enterprise Minimalist quality.
 
@@ -176,7 +198,7 @@ backend/
       visitors/               ← website visitor identify + pageview log
     platform/
       contacts/               ← shared contacts + companies (used by CRM and future modules)
-      engagement/              ← shared notes, tasks, activities, emails, timeline
+      engagement/             ← shared notes, tasks, activities, emails, timeline
     crm/
       leads/                  ← CRM lead management (now with capture fields + dedup + round-robin)
       pipeline/               ← pipeline and stages
@@ -244,6 +266,8 @@ permFn := func(perm string) fiber.Handler {
 **Raw API keys** — same show-once discipline: `GenerateKey` returns the raw `bs_live_…` value exactly once in `CreateKeyResponse`; only the SHA-256 hash and a 16-char display prefix are persisted. `KeyHash` carries `json:"-"`.
 
 **Webhook processing pattern (r11)** — inbound webhooks log every payload to a `*_logs` table (`raw_payload` JSONB, `processed` flag, `error_message`), and return 200 even on business failures so providers don't retry-storm. Failures are diagnosed from the log table, not from webhook response codes.
+
+**Effective-dated (temporal) records (r15)** — for anything where "what was true on date X" is a real question, store `effective_from` / `effective_to` rows rather than overwriting a current value. Applies to: salary records, statutory slabs, compensation bands, reporting relationships, asset assignments, benefit enrollments, and rate tables. Overwriting makes historical recompute, retro/arrears, and any point-in-time analytics impossible after the fact. Corollary: transfers and reassignments are two rows (close one, open one), never an edit.
 
 **JWT claims** include: `user_id`, `business_id` (org context), `email`, `role`. Business context is set when user selects/switches org.
 
@@ -317,16 +341,18 @@ Token contract:
 - Frontend never touches the refresh token directly
 - `/refresh` sends cookie, receives new access token in body
 
-**MOBILE [🔵 ACTIVE — contract defined, handlers not yet written]:**
+**MOBILE [🔵 ACTIVE — contract defined, <span style="color: red;">handlers not yet written</span>]:**
 
 Routes to add in `backend/internal/auth/routes.go`, wired into both `RegisterRoutes` and
 `RegisterRoutesWithRateLimit` the same way the existing `/sign-up`, `/sign-in` aliases are —
 rate-limited on the three public ones:
 
+```
 POST /api/v1/auth/mobile/signup
 POST /api/v1/auth/mobile/login
 POST /api/v1/auth/mobile/logout
 POST /api/v1/auth/mobile/refresh
+```
 
 Same `Service`/`Repository` as web auth, zero new business logic — only new handler methods
 (`MobileLogin`, `MobileRefresh`, etc.) that return the refresh token in the JSON body instead of
@@ -643,7 +669,7 @@ All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (
 
 **Database:** 41 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053).
 
-**Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 71 routes. Salary formula engine via `expr-lang/expr`. Approvals still missing an approval-instance list endpoint (open since r9).
+**Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 71 routes. Salary formula engine via `expr-lang/expr`. <span style="color: red;">Approvals still missing an approval-instance list endpoint (open since r9).</span>
 
 **Group B — Lifecycle** (`employees, promotions, transfers, resignations, terminations`): 37 routes + 4 new:
 
@@ -665,6 +691,8 @@ Dynamic statuses (00053): per-org status list with category (`active/inactive/on
 **Approval chain wiring:** callback registry on the approvals service; promotions, transfers, terminations, warnings, awards each register `HandleApprovalDecision` in `main.go`.
 
 **Known open item:** missing approval-instance list endpoint (carried from r9).
+
+**Extension surface (r15):** scoped but unbuilt — see Section 9 → HRM EXTENDED MODULES. This entry covers what is shipped only.
 
 ---
 
@@ -985,13 +1013,50 @@ All under `/[orgId]/hrm/...`: departments, positions, employees, leave, attendan
 
 ## 9. UNBUILT MODULE REGISTRY
 
-### MOBILE APP [🔵 ACTIVE — architecture restored, backend contract defined, zero code written]
+`⚪ NOT STARTED` = no code exists. When an item starts, promote it to `🔵 ACTIVE` here and give it a real entry in Section 5 and/or Section 8 with routes and permissions. When it ships, mark `✅ DONE` or remove the entry. Nothing here carries priority ordering — pick up whatever's needed, including because it connects to what you're currently building (Section 1).
 
-Expo + React Native. Full architecture restored from the r10 archive: Section 14 (Mobile
-Architecture) and Section 15 (Mobile Module Registry) — decided, not redesigned. Backend contract
-is a real entry now: Section 5 → AUTH → MOBILE. Suggested starting point: AUTH SCREENS
-(Section 15) paired with the AUTH — MOBILE backend routes, mirroring how every other module here
-starts with auth before anything else.
+PLATFORM PRIMITIVES and PREP MIGRATIONS sit first because most entries below reference them, not because they rank first. Position in this list still carries no priority.
+
+---
+
+### PLATFORM PRIMITIVES [⚪ NOT STARTED — shared prerequisites, not a module]
+
+Five buildable pieces of shared infrastructure that multiple modules need. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
+
+Two of these (notification, scheduler) were previously named only inside the CRM Advanced Functionality Pass entry below, as a parenthetical dependency. That mention is now superseded by this entry — one fact, one owner. The CRM entry keeps the dependency note but not the description.
+
+**1. Notification system**
+Delivery-path abstraction: in-app, email, (later) push. Per-user preference matrix, per-event-type opt-out, digest batching, read state. Consumers today: CRM reminders/SLA alerts. Consumers if HRM extends: every single module in the HRM Extended Modules entry below — onboarding reminders, appraisal cycle deadlines, certification expiry, benefit enrollment windows, helpdesk SLA breach, exit clearance nudges.
+Hard dependency: EMAIL SENDING (below) for anything outside in-app.
+
+**2. Scheduler registry**
+Named recurring jobs with Redis distributed locking (multi-instance safe), run history, failure alerting, manual trigger. HRM already runs two ad-hoc crons (milestones, absences) — those get migrated onto this rather than staying bespoke.
+Consumers: analytics snapshot runs, certification expiry sweeps, enrollment window open/close, ticket auto-close, system access revocation on last working date, cycle phase transitions.
+
+**3. Resource-level permissions**
+Already listed separately below; consolidating the rationale here. Beyond module/action RBAC — per-record filtering, and a `view_own / view_team / view_all` tier applied consistently. `view_team` requires a reporting-manager chain to resolve against (see PREP MIGRATIONS).
+This is the primitive with the highest severity of failure: appraisal draft leakage, salary visibility, anonymous 360 de-anonymization, and succession/flight-risk exposure are trust and legal issues, not UX polish. Touches every repository's query layer — needs its own ADR.
+
+**4. Checklist engine**
+Template + typed items + `owner_type` → assignee resolution at instantiation + offset-based due dates + blocking vs non-blocking + instance completion tracking.
+One engine with a `checklist_type` discriminator, not one per consumer.
+Known consumers (all unbuilt): HRM onboarding, exit clearance, probation confirmation, transfer handover.
+
+**5. Form / question engine**
+Configurable sections → typed questions → typed responses → scoring → aggregate, with definition snapshotting so historical records render as they were authored.
+Known consumers (all unbuilt): interview scorecards, appraisal forms, LMS assessments, exit interviews, potential-criteria assessment, employee surveys.
+
+⚠️ Build order note: #1–#3 have real consumers in already-shipped or already-planned work and are genuinely blocking. #4 and #5 have **zero current consumers** — every module that would use them is unbuilt. They are documented here because the pattern was identified across five independent designs, not because they should be built speculatively. Build them when the first real consumer arrives, and only if the second one is already visible.
+
+---
+
+### PREP MIGRATIONS [⚪ NOT STARTED — cheap now, expensive later]
+
+Schema hooks that cost one migration today and a system-wide rewrite if deferred:
+
+- `hrm_employees.reporting_manager_id` — verify whether this exists at all (source, not doc). Appraisal routing, expense approval, clearance ownership, `view_team` scoping, and org chart all resolve against it. If absent, this is the single highest-leverage migration in the doc.
+- `legal_entity_id` on org-scoped tables, auto-populated with one default entity, zero logic written. Adding the column later means touching every query, permission check, and report.
+- `currency` alongside every money column, even single-currency today.
 
 ---
 
@@ -1008,7 +1073,7 @@ Mridha's wish list, triaged by buildability. **In flight now:** lead auto-captur
 
 **Needs new infrastructure first, or a real ongoing vendor cost:**
 
-- Reminders / SLA alerts — needs a background job scheduler and a notification delivery path; neither exists
+- Reminders / SLA alerts — blocked on notification + scheduler; see PLATFORM PRIMITIVES above
 - Real Facebook/LinkedIn lead-ad integration (Graph API fetch, OAuth connect, field-mapping UI) — upgrades the current webhook skeleton
 - Visitor IP→company enrichment (IPinfo/Clearbit + Redis queue + worker) — upgrades current manual identify
 - Meeting scheduling via Calendly — mostly a webhook integration
@@ -1048,7 +1113,7 @@ Transactional provider (SES / Postmark / Resend) for verification, invites, pass
 
 ### RESOURCE-LEVEL PERMISSIONS [⚪ NOT STARTED]
 
-Per-record access control ("only deals they own") beyond module/action RBAC. Touches every repository's query layer — needs its own ADR when it starts.
+Per-record access control ("only deals they own") beyond module/action RBAC. Touches every repository's query layer — needs its own ADR when it starts. Full rationale and consumer list: PLATFORM PRIMITIVES #3 above.
 
 ---
 
@@ -1061,6 +1126,79 @@ Payment provider, plan tiers, usage limits, invoices, billing UI. `organization_
 ### HRM FUNCTIONALITY PASS [⚪ NOT STARTED]
 
 Post-completion polish pass over the shipped HRM module, same spirit as the CRM pass. Includes the known open item: approval-instance list endpoint.
+
+---
+
+### HRM EXTENDED MODULES [⚪ NOT STARTED — scoping only, no build decision implied]
+
+The shipped HRM module (Section 5) covers setup, lifecycle, disciplinary, time & compensation, recognition, and leave. That is a complete core. This entry records the extension surface an enterprise-grade HRM would additionally cover — scoped in a five-part design discussion, not committed to. Nothing here is a plan; it is a map, so that a future decision to build any part of it starts from a design rather than a blank page.
+
+Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are stated once per module and not restated — see that entry for what each primitive is.
+
+**Talent acquisition & entry**
+
+- **Recruitment / ATS** — requisitions (approval-gated), postings, candidates, applications, configurable pipeline stages, interviews + scorecards, offers (approval-gated), referrals. Two hard structural rules: candidate ≠ application (stage lives on the application), and stage history from day one — `crm_deals` skipped this and that is exactly why sales velocity is blocked above. Reuses the approval engine and `hrm_document_templates`. Resume parsing is a vendor bolt-on, not in scope.
+  Depends on: EMAIL SENDING (not optional — an ATS without candidate email is half a product), resource-level permissions (scorecard bias-blocking), scheduler (candidate data purge / GDPR).
+
+- **Onboarding** — checklist-driven, multi-owner, offset-based due dates relative to joining date. Not a table of its own: this is checklist engine consumer #1.
+  Depends on: checklist engine, notification.
+
+**Growth & development**
+
+- **Performance Management** — four sub-systems: goals/OKR with cascading parent-child and check-in history; appraisal cycles (configurable rating scales, template + scale snapshotted onto each instance, publish-immutable, phase state machine, `manager_id_snapshot` frozen at instantiation); 360 feedback (formal cycle-bound + continuous) with anonymity enforced at the repository layer plus a minimum-response threshold; PIP feeding into existing terminations. `final_rating` must be structured and queryable — compensation and succession both read it.
+  Depends on: form engine, resource-level permissions (draft leakage is the failure mode), notification, scheduler, `reporting_manager_id`.
+
+- **Learning & Development** — courses with mandatory version pinning on enrollment, modules/lessons, assessments, instructor-led sessions, certifications with expiry, skills taxonomy, training requests + budgets. No SCORM player, no video hosting — external links, PDFs via the Files module, mark-complete, quiz. Certification expiry sweep is the highest-value feature and is entirely scheduler-dependent. `hrm_skills` is consumed by recruitment, performance, and succession — treat it as shared taxonomy, not an LMS-internal table.
+  Depends on: scheduler, form engine, reuses `hrm_acknowledgements` for compliance evidence.
+
+**Compensation & benefits**
+
+- **Compensation depth** — salary revision cycles (effective-dated, batch-approved, merit matrix from rating × compa-ratio), bonus/incentive engine (reuses `expr-lang/expr` with a widened shared evaluation context, `calculation_snapshot` JSONB mandatory), loans/advances with amortization schedules generated once at approval, reimbursement payout, statutory compliance (country-pluggable schema, per-country Go implementation behind an interface — no universal statutory formula engine).
+  Payroll engine additions this requires: `run_type` on payslip runs (off-cycle, F&F, arrears), `line_type` enum, `is_employer_contribution`, deterministic calculation order, negative-net guard, mandatory dry-run preview.
+  ⚠️ This cluster is internally coupled — loans → statutory (perquisite), benefits → statutory, revisions → payroll (arrears), bonus → performance. Design it whole, not in pieces.
+  Depends on: decimal money discipline (Section 10), temporal modeling (Section 4), resource-level permissions (salary visibility is the sharpest case in the system).
+
+- **Benefits Administration** — plans, coverage tiers, cost splits, enrollment windows (open / new-hire / qualifying-event), dependents with manual verification, enrollment → payroll deduction. Claims tracking deliberately out of scope; it lives with the insurance provider.
+  Depends on: scheduler (window open/close, dependent aging), notification, effective-dated enrollments.
+
+**Operations**
+
+- **Asset Management** — categories with a `requires_return` flag, asset instances, assignment history (current holder is a derived query, never a stored column), maintenance log, requests, software license seats as a separate shape. Depreciation stays a stub here — book value only; real fixed-asset accounting belongs to the ACCOUNTING MODULE.
+  Reuses `hrm_acknowledgements` for handover sign-off. Feeds exit clearance and payroll recovery.
+
+- **Travel & Expense** — travel requests, itineraries, advances, expense claims with **line-level** approval (`amount` vs `approved_amount` per line), policy violations recorded as warnings not hard blocks, per-diem and effective-dated mileage rates. Multi-currency is unavoidable here regardless of when multi-country lands. OCR is a vendor bolt-on; leave a nullable column and do manual entry first.
+  Boundary: claim lifecycle here, payout via payroll in compensation.
+
+- **HR Helpdesk** — employee-facing tickets with SLA (clock pausable), internal-only comments, sensitive categories with a restricted assignee pool, knowledge base.
+  ⚠️ Two boundaries: distinct from `hrm_complaints` (formal disciplinary complaints, legal weight) with a one-way convert path; and distinct from the customer-facing Ticketing/Helpdesk noted in the CRM entry above. Same data shape as that one, which is an argument for building it generic in `internal/platform/` rather than inside HRM — an open architectural fork, not a decision.
+  Reuses the capture inbound-email pipeline for email-to-ticket.
+
+- **Exit Management** — upgrade over the existing resignations/terminations decision records: an umbrella exit record, notice period tracking, exit interviews (confidential, aggregate-only, often sent post-departure), clearance checklists, F&F settlement, document issuance, rehire eligibility. Access revocation on last working date is scheduler-driven, not manual.
+  F&F is an off-cycle payroll run (`run_type = 'fnf'`), not a separate calculator — same line types, same statutory engine, same immutability. It pulls from seven modules; negative net is a valid outcome and must be handled. Clearance blocking items gate finalization.
+  Depends on: checklist engine (consumer #2), form engine, scheduler.
+
+**Insight**
+
+- **Org Chart & reporting structure** — effective-dated reporting relationships in their own table (not a column on employees), supporting matrix reporting via `relationship_type`. Cycle detection required. Recursive CTE first; optimize only on proven need. Position/seat modeling left nullable so vacant-seat → requisition can be retrofitted.
+  Frontend is a genuine visualization (d3-hierarchy / react-flow) with lazy expand — the Collection View Pattern does not apply.
+
+- **Succession / Talent Management** — 9-box (potential assessed separately from performance, never derived from it), critical positions, succession plans with readiness levels, signal-based flight risk (explainable indicators, not an ML score), individual development plans.
+  ⚠️ Confidentiality here exceeds salary: 9-box position, flight risk, and successor nomination are never visible to the subject, while their development plan is — field-level filtering within a single record, not module-level RBAC.
+
+- **People Analytics** — not a module, a consumer. Its ceiling is set entirely by whether the twelve above store structured, temporal, enum-typed data. Nightly snapshot + fact tables in the same Postgres, never live aggregation over OLTP. `hrm_metric_definitions` is the entry that looks skippable and is not: two dashboards disagreeing on "attrition rate" ends trust in the whole module permanently. Compensation analytics, DEI (aggregate-only, threshold-gated, country-configurable), and export are separately permissioned. Predictive attrition scoring is deliberately excluded.
+  Depends on: scheduler (this is where it becomes non-negotiable), EMAIL SENDING (scheduled report delivery is what makes analytics actually get read).
+
+**Cross-cutting**
+
+- **Multi-country / Multi-currency** — not a module: a legal-entity layer between organization and employee, which re-scopes payroll runs, statutory resolution, approval chains, and every analytics view. Plus country-configurable working week, leave minimums, notice/termination law, name format, address schema, and ID types. Timezone-correct attendance attribution is a policy decision, not a storage one.
+  Data residency (separate DB instance or region per jurisdiction) is explicitly out of scope and conflicts with the current single-Postgres deployment model — that, not schema, is where "multi-country SaaS" actually hits a wall.
+  See PREP MIGRATIONS above: `legal_entity_id` and per-column currency are cheap today.
+
+**Answers the original question this scoping started from:** the shipped HRM is entirely internal-facing (authenticated JWT entry only), which is why it needs no CRM-Capture equivalent. Recruitment/ATS is the one entry above that changes that — a public career page and application endpoint (`/pub/careers/*`) is the same shape as CRM capture: public routes, rate limiting, file validation, `LOWER(email)` dedup, and job-board webhooks if those are ever added. Whatever Capture Fix Pass A/B teaches transfers directly. Nothing else in HRM has an anonymous entry point. Attendance hardware push and payroll bank disbursement are integrations, but neither is inbound-webhook shaped.
+
+**Vendor boundaries decided during scoping (consistent across all of the above):** resume parsing, receipt OCR, SCORM/video hosting, external certification verification, statutory filing submission, and predictive scoring are all either vendor bolt-ons or out of scope. The pattern: store the raw artifact, leave a nullable column for extracted data, add the vendor later. Do not build the extraction engine.
+
+**If any part of this is picked up:** promote it here (⚪ → 🔵), add a real Section 5 entry with routes and permissions, and a Section 8 entry when frontend starts. Do not let this entry grow into the module documentation — it is a map, and a map that tries to be the territory goes stale first.
 
 ---
 
@@ -1094,9 +1232,9 @@ Confirmed not started (r9 audit; unchanged): no Sentry SDK, no Caddyfile, `deplo
 
 ---
 
-### MOBILE APP [⚪ NOT STARTED]
+### MOBILE APP [🔵 ACTIVE — architecture restored, backend contract defined, zero code written]
 
-Expo + React Native. Architecture was fully designed (folder structure, SecureStore token strategy, Expo Router guards, theming, EAS pipeline) and is archived in this doc's r10 revision (git history) — restore those sections when this item starts. Zero code exists. Backend contract sketch lives in Section 5 → AUTH → Mobile variants.
+Expo + React Native. Full architecture restored from the r10 archive: Section 14 (Mobile Architecture) and Section 15 (Mobile Module Registry) — decided, not redesigned. Backend contract is a real entry now: Section 5 → AUTH → MOBILE. Suggested starting point: AUTH SCREENS (Section 15) paired with the AUTH — MOBILE backend routes, mirroring how every other module here starts with auth before anything else.
 
 ---
 
@@ -1123,6 +1261,7 @@ These apply to every line of code in this project. Never compromise on these.
 - Every public (`/pub/*`) endpoint gets Redis-backed rate limiting — per API key where one exists, per IP otherwise
 - Public endpoints never leak internal state: no validation detail in error responses, no internal IDs beyond `public_id`
 - Third-party access tokens (social integrations) are encrypted at rest once real OAuth lands — never serialized in JSON responses
+- **Money is `NUMERIC(18,4)` in Postgres and `shopspring/decimal` in Go — never `float64`** (r15). Every money column carries a currency alongside it from day one. Rounding policy (level and mode) is an explicit org setting, not an implicit language default. Verify the existing salary formula engine's evaluation type before extending it — `expr` defaults to float.
 
 **Frontend:**
 
@@ -1252,36 +1391,38 @@ native constraints force it — token storage is the main one.
 
 ### Folder Structure
 
+```
 mobile/
-app/ ← Expo Router file-based routes
-(auth)/
-login.tsx
-signup.tsx
-forgot-password.tsx
-reset-password.tsx
-(dashboard)/
-[orgId]/
-index.tsx ← dashboard home
-tasks/
-crm/
-leads/ contacts/ companies/ pipeline/ deals/ reports/
-settings/
-members/ roles/
-security/
-create-organization.tsx
-select-organization.tsx
-\_layout.tsx ← root layout: theme provider + auth gate
-components/
-ui/ layout/ crm/ tasks/ rbac/
-lib/
-api.ts auth.ts secureToken.ts constants.ts
-stores/
-authStore.ts permissionStore.ts uiStore.ts
-hooks/
-useAuth.ts usePermission.ts useOrg.ts
-theme/
-tokens.ts ThemeProvider.tsx
-types/ ← mirrors frontend/src/types/\*
+  app/                        ← Expo Router file-based routes
+    (auth)/
+      login.tsx
+      signup.tsx
+      forgot-password.tsx
+      reset-password.tsx
+    (dashboard)/
+      [orgId]/
+        index.tsx             ← dashboard home
+        tasks/
+        crm/
+          leads/  contacts/  companies/  pipeline/  deals/  reports/
+        settings/
+          members/  roles/
+        security/
+    create-organization.tsx
+    select-organization.tsx
+    _layout.tsx               ← root layout: theme provider + auth gate
+  components/
+    ui/  layout/  crm/  tasks/  rbac/
+  lib/
+    api.ts  auth.ts  secureToken.ts  constants.ts
+  stores/
+    authStore.ts  permissionStore.ts  uiStore.ts
+  hooks/
+    useAuth.ts  usePermission.ts  useOrg.ts
+  theme/
+    tokens.ts  ThemeProvider.tsx
+  types/                      ← mirrors frontend/src/types/*
+```
 
 ### Auth Flow (mobile)
 
@@ -1373,6 +1514,8 @@ Current stable is **Expo SDK 57** (57.0.7 as of this week), riding **React Nativ
 transition window — use `--template default@sdk-57` explicitly. Re-confirm both numbers the day
 you actually scaffold; Expo SDKs move fast enough that this note itself may be stale by then.
 
+---
+
 ## 15. MOBILE MODULE REGISTRY
 
 Same status convention as Section 5/8/9. Nothing built yet — flips to `🔵 ACTIVE` per screen
@@ -1439,6 +1582,8 @@ Admin-heavy screens, arguably fine to stay web-only for v1. Revisit after the ab
 
 Session list, revoke, login events. Likely fine as web-only initially too.
 
+---
+
 ## HOW TO UPDATE THIS DOCUMENT
 
 When phase status changes:
@@ -1504,9 +1649,14 @@ When a module ships with known defects (r11):
 
 - Ship status stays `🔵 ACTIVE`, never `✅ DONE`, until the known-open-items list is empty — a module that compiles but can't perform its core function is not done. Embed the defect list in the module's Section 5 entry so it can't be forgotten (see CAPTURE for the pattern).
 
+When a scoping entry is written for unbuilt work (r15):
+
+- It goes in Section 9 as `⚪ NOT STARTED`, carries no priority ordering and no effort estimate, and stays a map — the moment work starts, the real detail moves to a Section 5/8 entry rather than growing inside Section 9.
+- If the same shared pattern is identified across three or more independent scoping passes, record it in PLATFORM PRIMITIVES instead of repeating it per module — but do not build it until a real consumer exists.
+
 Periodic structural drift audit:
 
-- Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence, then reconcile. This document has been wrong about counts and statuses in every single revision audit so far (r9: HRM/deployment; r11: four whole shipped features missing). Assume drift by default.
+- Before any major "update the docs" pass, don't trust the document's own status flags as ground truth — grep the actual source for route counts, migration counts, and file existence, then reconcile. This document has been wrong about counts and statuses in every single revision audit so far (r9: HRM/deployment; r11: four whole shipped features missing; r15: the copy being edited was a full revision behind on mobile). Assume drift by default.
 - Cross-check Section 5 (backend) against Section 8 (frontend) against Section 9 (unbuilt module registry) for the same module.
 - A doc pasted into a chat conversation is not guaranteed to be the committed `docs/Project_Instruction.md` — whichever copy is more recent should overwrite the other after an update.
 
