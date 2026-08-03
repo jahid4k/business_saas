@@ -19,6 +19,7 @@ import (
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
@@ -94,11 +95,13 @@ func newTestEnv(t *testing.T) *testEnv {
 	authzRepo := authz.NewRepository(db)
 	orgRepo := organizations.NewRepository(db)
 	taskRepo := task.NewRepository(db)
+	notifRepo := notifications.NewRepository(db)
+	notifSvc := notifications.NewService(config.NotificationsConfig{}, notifRepo)
 
 	return &testEnv{
 		db:       db,
 		redis:    rdb,
-		authSvc:  auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc),
+		authSvc:  auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
 		userSvc:  user.NewService(userRepo),
 		authzSvc: authz.NewService(authzRepo, rdb, auditSvc, authRepo),
 		orgSvc:   organizations.NewService(orgRepo, authzRepo, jwtMgr),

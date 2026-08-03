@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/user"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/password"
 	"github.com/mridha/businesssaas/pkg/token"
@@ -35,13 +37,14 @@ type serviceImpl struct {
 	jwtManager *jwtpkg.Manager
 	jwtCfg     config.JWTConfig
 	audit      audit.Service
+	notif      notifications.Service
 }
 
 // NewService creates the auth service.
 // FIX: now accepts audit.Service so security events (login, signup, logout) are written
 // to audit_logs rather than being silently discarded.
-func NewService(repo Repository, userRepo user.Repository, jwtManager *jwtpkg.Manager, jwtCfg config.JWTConfig, auditSvc audit.Service) Service {
-	return &serviceImpl{repo: repo, userRepo: userRepo, jwtManager: jwtManager, jwtCfg: jwtCfg, audit: auditSvc}
+func NewService(repo Repository, userRepo user.Repository, jwtManager *jwtpkg.Manager, jwtCfg config.JWTConfig, auditSvc audit.Service, notifSvc notifications.Service) Service {
+	return &serviceImpl{repo: repo, userRepo: userRepo, jwtManager: jwtManager, jwtCfg: jwtCfg, audit: auditSvc, notif: notifSvc}
 }
 
 func (s *serviceImpl) Signup(ctx context.Context, req SignupRequest) (*user.SafeUser, error) {
@@ -315,12 +318,102 @@ func (s *serviceImpl) Me(ctx context.Context, userID string) (*user.SafeUser, er
 	return u.ToSafe(), nil
 }
 
-func (s *serviceImpl) RequestPasswordReset(_ context.Context, _ string) error { return nil }
+func (s *serviceImpl) RequestPasswordReset(ctx context.Context, email string) error {
+	reqEmail := normaliseEmail(email)
+	u, err := s.userRepo.FindByEmail(ctx, reqEmail)
+	if err != nil {
+		return fmt.Errorf("auth: RequestPasswordReset: %w", err)
+	}
+	if u == nil {
+		// Do not leak user existence, just return nil.
+		return nil
+	}
 
-var ErrNotImplemented = errors.New("auth: feature not yet implemented")
+	rawToken, tokenHash, err := token.Generate()
+	if err != nil {
+		return fmt.Errorf("auth: generate reset token: %w", err)
+	}
 
-func (s *serviceImpl) ConfirmPasswordReset(_ context.Context, _, _ string) error {
-	return ErrNotImplemented
+	vt := &VerificationToken{
+		UserID:    &u.ID,
+		Email:     &u.Email,
+		TokenHash: tokenHash,
+		Type:      "password_reset",
+		ExpiresAt: time.Now().Add(2 * time.Hour),
+	}
+
+	if err := s.repo.CreateVerificationToken(ctx, vt); err != nil {
+		return fmt.Errorf("auth: create reset token: %w", err)
+	}
+
+	// Send notification
+	// We pass rawToken to the template. The URL format assumes the frontend runs at some base URL.
+	// Since this is an API, the frontend URL should be configured or we can just send the token.
+	// We'll pass a default ActionURL.
+	actionURL := fmt.Sprintf("http://localhost:3000/reset-password?token=%s", rawToken)
+	
+	uid, err := uuid.Parse(u.ID)
+	if err != nil {
+		slog.Error("auth: failed to parse user uuid", "err", err, "user_id", u.ID)
+		return nil // don't leak user existence
+	}
+
+	req := notifications.DispatchRequest{
+		UserID:       uid,
+		UserEmail:    u.Email,
+		EventType:    notifications.EventPasswordReset,
+		Channels:     []string{notifications.ChannelEmail},
+		Title:        "Reset Your Password",
+		TemplateName: "password_reset.html",
+		TemplateData: map[string]interface{}{
+			"ActionURL": actionURL,
+		},
+	}
+
+	if err := s.notif.Dispatch(ctx, req); err != nil {
+		slog.Error("auth: failed to dispatch password reset email", "err", err, "user_id", u.ID)
+		// We still return nil to not leak existence/cause errors for the user, 
+		// but log the delivery failure.
+	}
+
+	return nil
+}
+
+var ErrInvalidToken = errors.New("auth: invalid or expired token")
+
+func (s *serviceImpl) ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error {
+	tokenHash := token.Hash(rawToken)
+	vt, err := s.repo.GetVerificationTokenByHash(ctx, tokenHash, "password_reset")
+	if err != nil {
+		return fmt.Errorf("auth: ConfirmPasswordReset: %w", err)
+	}
+	if vt == nil || vt.UsedAt != nil || time.Now().After(vt.ExpiresAt) {
+		return ErrInvalidToken
+	}
+
+	// Hash new password
+	pwdHash, err := password.Hash(newPassword)
+	if err != nil {
+		return fmt.Errorf("auth: ConfirmPasswordReset: hash password: %w", err)
+	}
+
+	// Update user
+	if err := s.userRepo.UpdatePassword(ctx, *vt.UserID, pwdHash); err != nil {
+		return fmt.Errorf("auth: ConfirmPasswordReset: update user: %w", err)
+	}
+
+	// Mark token used
+	if err := s.repo.MarkVerificationTokenUsed(ctx, vt.ID); err != nil {
+		// Log but don't fail the request since password was already updated
+		slog.Error("auth: failed to mark reset token used", "err", err, "token_id", vt.ID)
+	}
+
+	// Revoke all existing sessions for security
+	if err := s.repo.RevokeAllUserSessions(ctx, *vt.UserID); err != nil {
+		slog.Error("auth: failed to revoke sessions after reset", "err", err, "user_id", *vt.UserID)
+	}
+
+	return nil
 }
 
 func (s *serviceImpl) issueTokenPair(ctx context.Context, userID, email, ip, userAgent string, orgID *string) (*TokenPair, error) {

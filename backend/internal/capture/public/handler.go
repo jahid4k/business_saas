@@ -76,21 +76,10 @@ func (h *Handler) CaptureLead(c fiber.Ctx) error {
 		req.FirstName = "Unknown"
 	}
 
-	// Create the lead (SYSTEM as creator since it's via public API key)
-	// We can use a special user ID or just empty if the DB allows.
-	// `created_by` in `crm_leads` is a UUID of a user. But for public forms, we don't have a user.
-	// Wait, `created_by` is linked to `users.id`!
-	// Is it? Let's check `backend/internal/migrations/00004_create_crm_leads.sql`.
-	// Wait, we don't have it open. Let me run a query to check if it's a foreign key.
-	// Actually, we can just pass an empty string and if it fails, we will see. Wait, we should use a system user or allow null.
-	// Wait! `org_api_keys` actually has a `created_by` which is the user who made the key. Maybe we can pass the key's creator?
-	// The middleware `apikey.go` injects `org_id`. It could also inject `user_id`. Let's update `apikey.go`!
-
+	// crm_leads.created_by is a NOT NULL FK to users.id. For public-form captures there's
+	// no logged-in user, so RequireAPIKey (see middleware/apikey.go) sets "user_id" to the
+	// API key's creator — the org member who generated the key stands in as the actor.
 	userID, _ := c.Locals("user_id").(string)
-	if userID == "" {
-		// If middleware doesn't set it, default to a system UUID, but we need the key creator.
-		// Let's assume apikey middleware will set "user_id".
-	}
 
 	// Capture Metadata (IP, User-Agent)
 	req.CaptureMetadata = map[string]any{

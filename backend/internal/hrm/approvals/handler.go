@@ -4,6 +4,7 @@ package approvals
 import (
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -166,6 +167,49 @@ func (h *Handler) DeleteTemplate(c fiber.Ctx) error {
 		return h.tmplError(c, err)
 	}
 	return response.NoContent(c)
+}
+
+// ListInstances godoc
+//
+//	@Summary		List approval instances
+//	@Description	Returns a list of approval instances.
+//	@Description	Filter by status (pending|approved|rejected|cancelled) to narrow results.
+//	@Description
+//	@Description	**Required permission:** `hrm.approvals.view`
+//	@Tags			HRM / Approvals
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orgId		path		string	true	"Organization ID"
+//	@Param			status		query		string	false	"Filter by status"
+//	@Param			requester_id query		string	false	"Filter by requester ID"
+//	@Param			limit		query		int		false	"Limit (default 50)"
+//	@Param			offset		query		int		false	"Offset (default 0)"
+//	@Success		200			{object}	response.OK{data=InstanceListResponse}
+//	@Failure		401			{object}	response.Error
+//	@Failure		403			{object}	response.Error
+//	@Failure		500			{object}	response.Error
+//	@Router			/organizations/{orgId}/hrm/setup/approvals/instances [get]
+func (h *Handler) ListInstances(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	
+	limitStr := c.Query("limit", "50")
+	offsetStr := c.Query("offset", "0")
+	
+	limit, _ := strconv.Atoi(limitStr)
+	offset, _ := strconv.Atoi(offsetStr)
+	if limit == 0 { limit = 50 }
+	
+	status := c.Query("status")
+	requesterID := c.Query("requester_id")
+	
+	result, err := h.service.ListInstances(c.Context(), orgID, limit, offset, status, requesterID)
+	if err != nil {
+		log.Error("approvals: ListInstances", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	return response.OK(c, result, "OK")
 }
 
 // GetInstance godoc

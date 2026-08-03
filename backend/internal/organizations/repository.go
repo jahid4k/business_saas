@@ -15,6 +15,7 @@ type Repository interface {
 	FindByID(ctx context.Context, businessID string) (*Business, error)
 	FindBySlug(ctx context.Context, slug string) (*Business, error)
 	FindByUserID(ctx context.Context, userID string) ([]*MembershipWithRole, error)
+	FindAllIDs(ctx context.Context) ([]string, error)
 	Update(ctx context.Context, b *Business) error
 	BeginTx(ctx context.Context) (pgx.Tx, error)
 }
@@ -58,11 +59,11 @@ func (r *repoImpl) Update(ctx context.Context, b *Business) error {
 	return nil
 }
 
-const orgSelect = `id, public_id, name, slug, COALESCE(legal_name, ''), COALESCE(type, ''), COALESCE(industry, ''), COALESCE(website, ''), COALESCE(logo_url, ''), COALESCE(country, ''), timezone, currency, status, created_at, updated_at, deleted_at`
+const orgSelect = `id, public_id, name, slug, COALESCE(legal_name, ''), COALESCE(type, ''), COALESCE(industry, ''), COALESCE(website, ''), COALESCE(logo_url, ''), COALESCE(country, ''), timezone, currency, money_rounding_scale, money_rounding_mode, status, created_at, updated_at, deleted_at`
 
 func scanOrg(row pgx.Row) (*Business, error) {
 	b := &Business{}
-	err := row.Scan(&b.ID, &b.PublicID, &b.Name, &b.Slug, &b.LegalName, &b.Type, &b.Industry, &b.Website, &b.LogoURL, &b.Country, &b.Timezone, &b.Currency, &b.Status, &b.CreatedAt, &b.UpdatedAt, &b.DeletedAt)
+	err := row.Scan(&b.ID, &b.PublicID, &b.Name, &b.Slug, &b.LegalName, &b.Type, &b.Industry, &b.Website, &b.LogoURL, &b.Country, &b.Timezone, &b.Currency, &b.MoneyRoundingScale, &b.MoneyRoundingMode, &b.Status, &b.CreatedAt, &b.UpdatedAt, &b.DeletedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -93,7 +94,7 @@ func (r *repoImpl) FindBySlug(ctx context.Context, slug string) (*Business, erro
 func (r *repoImpl) FindByUserID(ctx context.Context, userID string) ([]*MembershipWithRole, error) {
 	const q = `
 		SELECT
-			o.id, o.public_id, o.name, o.slug, COALESCE(o.legal_name, ''), COALESCE(o.type, ''), COALESCE(o.industry, ''), COALESCE(o.website, ''), COALESCE(o.logo_url, ''), COALESCE(o.country, ''), o.timezone, o.currency, o.status, o.created_at, o.updated_at, o.deleted_at,
+			o.id, o.public_id, o.name, o.slug, COALESCE(o.legal_name, ''), COALESCE(o.type, ''), COALESCE(o.industry, ''), COALESCE(o.website, ''), COALESCE(o.logo_url, ''), COALESCE(o.country, ''), o.timezone, o.currency, o.money_rounding_scale, o.money_rounding_mode, o.status, o.created_at, o.updated_at, o.deleted_at,
 			om.role_key, om.id
 		FROM organization_members om
 		JOIN organizations o ON o.id = om.org_id
@@ -112,10 +113,29 @@ func (r *repoImpl) FindByUserID(ctx context.Context, userID string) ([]*Membersh
 	for rows.Next() {
 		b := &Business{}
 		mwr := &MembershipWithRole{Business: b}
-		if err := rows.Scan(&b.ID, &b.PublicID, &b.Name, &b.Slug, &b.LegalName, &b.Type, &b.Industry, &b.Website, &b.LogoURL, &b.Country, &b.Timezone, &b.Currency, &b.Status, &b.CreatedAt, &b.UpdatedAt, &b.DeletedAt, &mwr.Role, &mwr.MemberID); err != nil {
+		if err := rows.Scan(&b.ID, &b.PublicID, &b.Name, &b.Slug, &b.LegalName, &b.Type, &b.Industry, &b.Website, &b.LogoURL, &b.Country, &b.Timezone, &b.Currency, &b.MoneyRoundingScale, &b.MoneyRoundingMode, &b.Status, &b.CreatedAt, &b.UpdatedAt, &b.DeletedAt, &mwr.Role, &mwr.MemberID); err != nil {
 			return nil, fmt.Errorf("organization: FindByUserID: scan: %w", err)
 		}
 		results = append(results, mwr)
 	}
 	return results, rows.Err()
+}
+
+func (r *repoImpl) FindAllIDs(ctx context.Context) ([]string, error) {
+	q := `SELECT id FROM organizations WHERE status = 'active' AND deleted_at IS NULL`
+	rows, err := r.db.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("organization: FindAllIDs: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("organization: FindAllIDs scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

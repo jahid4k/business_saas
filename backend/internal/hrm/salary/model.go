@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 // ─────────────────────────────────────────────────────────────
@@ -83,8 +85,8 @@ type SlabConfig struct {
 }
 
 type Slab struct {
-	UpTo *float64 `json:"up_to"` // null = no upper limit (last slab)
-	Rate float64  `json:"rate"`  // fractional: 0.05 = 5%
+	UpTo *decimal.Decimal `json:"up_to"` // null = no upper limit (last slab)
+	Rate decimal.Decimal  `json:"rate"`  // fractional: 0.05 = 5%
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ type SalaryComponent struct {
 	Description        *string        `db:"description"        json:"description,omitempty"`
 	ComponentType      ComponentType  `db:"component_type"     json:"component_type"`
 	CalcMethod         CalcMethod     `db:"calc_method"        json:"calc_method"`
-	FixedValue         float64        `db:"fixed_value"        json:"fixed_value"`
+	FixedValue         decimal.Decimal        `db:"fixed_value"        json:"fixed_value"`
 	FormulaExpression  *string        `db:"formula_expression" json:"formula_expression,omitempty"`
 	FormulaVariables   []string       `db:"formula_variables"  json:"formula_variables,omitempty"`
 	SlabConfig         *SlabConfig    `db:"-"                  json:"slab_config,omitempty"` // scanned from JSONB
@@ -143,7 +145,7 @@ type SalaryStructure struct {
 type StructureComponent struct {
 	ComponentID   string         `json:"component_id"`
 	Component     *SalaryComponent `json:"component,omitempty"`
-	OverrideValue *float64       `json:"override_value,omitempty"`
+	OverrideValue *decimal.Decimal       `json:"override_value,omitempty"`
 	DisplayOrder  int            `json:"display_order"`
 }
 
@@ -157,7 +159,7 @@ type EmployeeSalaryRecord struct {
 	OrgID         string       `db:"org_id"         json:"org_id"`
 	EmployeeID    string       `db:"employee_id"    json:"employee_id"`
 	StructureID   *string      `db:"structure_id"   json:"structure_id,omitempty"`
-	BasicPay      float64      `db:"basic_pay"      json:"basic_pay"`
+	BasicPay      decimal.Decimal      `db:"basic_pay"      json:"basic_pay"`
 	EffectiveDate string       `db:"effective_date" json:"effective_date"` // YYYY-MM-DD
 	ChangeReason  ChangeReason `db:"change_reason"  json:"change_reason"`
 	ChangeNotes   *string      `db:"change_notes"   json:"change_notes,omitempty"`
@@ -177,7 +179,7 @@ type CreateComponentRequest struct {
 	Description        *string        `json:"description"`
 	ComponentType      ComponentType  `json:"component_type"`
 	CalcMethod         CalcMethod     `json:"calc_method"`
-	FixedValue         *float64       `json:"fixed_value"`
+	FixedValue         *decimal.Decimal       `json:"fixed_value"`
 	FormulaExpression  *string        `json:"formula_expression"`
 	FormulaVariables   []string       `json:"formula_variables"`
 	SlabConfig         *SlabConfig    `json:"slab_config"`
@@ -190,7 +192,7 @@ type UpdateComponentRequest struct {
 	Description        *string        `json:"description"`
 	ComponentType      *ComponentType `json:"component_type"`
 	CalcMethod         *CalcMethod    `json:"calc_method"`
-	FixedValue         *float64       `json:"fixed_value"`
+	FixedValue         *decimal.Decimal       `json:"fixed_value"`
 	FormulaExpression  *string        `json:"formula_expression"`
 	FormulaVariables   []string       `json:"formula_variables"`
 	SlabConfig         *SlabConfig    `json:"slab_config"`
@@ -214,13 +216,13 @@ type UpdateStructureRequest struct {
 
 type AddComponentToStructureRequest struct {
 	ComponentID   string   `json:"component_id"`
-	OverrideValue *float64 `json:"override_value"`
+	OverrideValue *decimal.Decimal `json:"override_value"`
 	DisplayOrder  *int     `json:"display_order"`
 }
 
 type AssignSalaryRequest struct {
 	StructureID   *string      `json:"structure_id"`
-	BasicPay      float64      `json:"basic_pay"`
+	BasicPay      decimal.Decimal      `json:"basic_pay"`
 	EffectiveDate string       `json:"effective_date"` // YYYY-MM-DD
 	ChangeReason  ChangeReason `json:"change_reason"`
 	ChangeNotes   *string      `json:"change_notes"`

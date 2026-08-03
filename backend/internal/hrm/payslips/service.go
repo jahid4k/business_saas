@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/expr-lang/expr"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -136,13 +138,18 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		return nil, fmt.Errorf("payslips: ComputeRun: mark computing: %w", err)
 	}
 
+	// Fetch rounding policy
+	var roundingScale int32 = 2
+	var roundingMode string = "half_up"
+	_ = s.db.QueryRow(ctx, `SELECT money_rounding_scale, money_rounding_mode FROM organizations WHERE id=$1::uuid`, orgID).Scan(&roundingScale, &roundingMode)
+
 	// Load active employees
 	type empRow struct {
 		ID            string
 		HireDate      string
 		StructureID   *string
 		StructureName *string
-		BasicPay      float64
+		BasicPay      decimal.Decimal
 	}
 	rows, err := s.db.Query(ctx,
 		`SELECT e.id::text, COALESCE(to_char(e.hire_date,'YYYY-MM-DD'),''),
@@ -172,7 +179,7 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		employees = append(employees, e)
 	}
 
-	var totalGross, totalDeductions, totalNet float64
+	var totalGross, totalDeductions, totalNet decimal.Decimal
 
 	for _, emp := range employees {
 		// Compute tenure
@@ -209,8 +216,8 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 			CompName      string
 			CompType      string
 			CalcMethod    string
-			FixedValue    float64
-			OverrideValue *float64
+			FixedValue    decimal.Decimal
+			OverrideValue *decimal.Decimal
 			Formula       *string
 			SlabConfigRaw []byte
 			DisplayOrder  int
@@ -237,7 +244,7 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 
 		// Formula evaluation environment (matches A1 formula_variables documentation)
 		env := map[string]interface{}{
-			"BASIC":        emp.BasicPay,
+			"BASIC":        emp.BasicPay.InexactFloat64(),
 			"GROSS":        0.0, // updated after each earning
 			"PRESENT_DAYS": float64(presentDays),
 			"WORK_DAYS":    float64(workDays),
@@ -245,10 +252,10 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		}
 
 		var lines []*PayslipLine
-		gross, deductions := 0.0, 0.0
+		gross, deductions := decimal.Zero, decimal.Zero
 
 		for _, comp := range components {
-			var amount float64
+			var amount decimal.Decimal
 			effectiveFixed := comp.FixedValue
 			if comp.OverrideValue != nil {
 				effectiveFixed = *comp.OverrideValue
@@ -258,32 +265,34 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 			case "fixed":
 				amount = effectiveFixed
 			case "pct_of_basic":
-				amount = emp.BasicPay * effectiveFixed / 100
+				amount = emp.BasicPay.Mul(effectiveFixed).Div(decimal.NewFromInt(100))
 			case "pct_of_gross":
-				amount = gross * effectiveFixed / 100
+				amount = gross.Mul(effectiveFixed).Div(decimal.NewFromInt(100))
 			case "formula":
 				if comp.Formula != nil {
-					env["GROSS"] = gross
+					env["GROSS"] = gross.InexactFloat64()
 					if result, err := s.evalFormula(*comp.Formula, env); err == nil {
-						amount = result
+						amount = decimal.NewFromFloat(result)
 					}
 				}
 			case "slab":
 				if comp.SlabConfigRaw != nil {
-					env["GROSS"] = gross
+					env["GROSS"] = gross.InexactFloat64()
 					var cfg hrmsalary.SlabConfig
 					if err := json.Unmarshal(comp.SlabConfigRaw, &cfg); err == nil {
 						if base, ok := env[cfg.BaseVariable].(float64); ok {
-							amount = ComputeSlab(base, &cfg)
+							amount = decimal.NewFromFloat(ComputeSlab(base, &cfg))
 						}
 					}
 				}
 			default: // manual — default 0; HR enters manually
-				amount = 0
+				amount = decimal.Zero
 			}
 
-			if amount < 0 {
-				amount = 0
+			amount = roundDecimal(amount, roundingScale, roundingMode)
+
+			if amount.IsNegative() {
+				amount = decimal.Zero
 			} // safety: no negative line items
 
 			var compIDStr *string
@@ -308,15 +317,15 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 
 			switch comp.CompType {
 			case "earning":
-				gross += amount
+				gross = gross.Add(amount)
 			case "deduction":
-				deductions += amount
+				deductions = deductions.Add(amount)
 			}
 		}
 
-		netPay := gross - deductions
-		if netPay < 0 {
-			netPay = 0
+		netPay := gross.Sub(deductions)
+		if netPay.IsNegative() {
+			netPay = decimal.Zero
 		}
 
 		// Create payslip
@@ -344,9 +353,9 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 			_ = s.repo.CreatePayslipLines(ctx, lines)
 		}
 
-		totalGross += gross
-		totalDeductions += deductions
-		totalNet += netPay
+		totalGross = totalGross.Add(gross)
+		totalDeductions = totalDeductions.Add(deductions)
+		totalNet = totalNet.Add(netPay)
 	}
 
 	now := time.Now()
@@ -388,20 +397,20 @@ func ComputeSlab(base float64, cfg *hrmsalary.SlabConfig) float64 {
 	sort.Slice(slabs, func(i, j int) bool {
 		if slabs[i].UpTo == nil { return false } // no-upper-bound slab always sorts last
 		if slabs[j].UpTo == nil { return true }
-		return *slabs[i].UpTo < *slabs[j].UpTo
+		return slabs[i].UpTo.LessThan(*slabs[j].UpTo)
 	})
 
 	total, lower := 0.0, 0.0
 	for _, sl := range slabs {
 		upper := base // uncapped (UpTo == nil) slab absorbs whatever remains
 		if sl.UpTo != nil {
-			upper = *sl.UpTo
+			upper = sl.UpTo.InexactFloat64()
 		}
 		if upper > base {
 			upper = base
 		}
 		if upper > lower {
-			total += (upper - lower) * sl.Rate
+			total += (upper - lower) * sl.Rate.InexactFloat64()
 		}
 		if sl.UpTo == nil || upper >= base {
 			break
@@ -425,6 +434,25 @@ func (s *serviceImpl) evalFormula(expression string, env map[string]interface{})
 		return v, nil
 	}
 	return 0, fmt.Errorf("formula did not return a number")
+}
+
+func roundDecimal(d decimal.Decimal, scale int32, mode string) decimal.Decimal {
+	switch mode {
+	case "half_up":
+		return d.Round(scale)
+	case "half_even":
+		return d.RoundBank(scale)
+	case "down":
+		return d.RoundDown(scale)
+	case "up":
+		return d.RoundUp(scale)
+	case "ceiling":
+		return d.RoundCeil(scale)
+	case "floor":
+		return d.RoundFloor(scale)
+	default:
+		return d.Round(scale)
+	}
 }
 
 func (s *serviceImpl) ApproveRun(ctx context.Context, orgID, ref, approvedBy string) (*PayslipRun, error) {

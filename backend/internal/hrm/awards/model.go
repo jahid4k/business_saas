@@ -2,6 +2,7 @@
 package awards
 
 import (
+	"github.com/shopspring/decimal"
 	"errors"
 	"time"
 )
@@ -40,7 +41,7 @@ type Award struct {
 	Title                  string      `db:"title"                    json:"title"`
 	Description            string      `db:"description"              json:"description"`
 	Points                 int         `db:"points"                   json:"points"`
-	MonetaryValue          *float64    `db:"monetary_value"           json:"monetary_value,omitempty"`
+	MonetaryValue          *decimal.Decimal    `db:"monetary_value"           json:"monetary_value,omitempty"`
 	Currency               string      `db:"currency"                 json:"currency"`
 	AwardDate              string      `db:"award_date"               json:"award_date"`
 	IssuedBy               string      `db:"issued_by"                json:"issued_by"`
@@ -60,7 +61,7 @@ type CreateAwardRequest struct {
 	Title         string    `json:"title"`
 	Description   string    `json:"description"`
 	Points        *int      `json:"points"`
-	MonetaryValue *float64  `json:"monetary_value"`
+	MonetaryValue *decimal.Decimal  `json:"monetary_value"`
 	Currency      *string   `json:"currency"`
 	AwardDate     *string   `json:"award_date"`
 }
@@ -69,7 +70,7 @@ type UpdateAwardRequest struct {
 	Title                 *string  `json:"title"`
 	Description           *string  `json:"description"`
 	Points                *int     `json:"points"`
-	MonetaryValue         *float64 `json:"monetary_value"`
+	MonetaryValue         *decimal.Decimal `json:"monetary_value"`
 	AwardDate             *string  `json:"award_date"`
 	CertificateDocumentID *string  `json:"certificate_document_id"`
 }

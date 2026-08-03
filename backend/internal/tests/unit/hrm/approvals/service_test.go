@@ -127,6 +127,10 @@ func (m *mockApprovalsRepo) FindDecisions(ctx context.Context, instanceID string
 	return m.decisions[instanceID], nil
 }
 
+func (m *mockApprovalsRepo) FindAllInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) ([]*approvals.ApprovalInstance, int, error) {
+	return nil, 0, nil
+}
+
 
 func TestApprovalsService(t *testing.T) {
 	repo := newMockApprovalsRepo()

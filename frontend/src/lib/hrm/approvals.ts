@@ -27,6 +27,22 @@ export async function listApprovalTemplates(
   return res.data.data;
 }
 
+export async function listApprovalInstances(
+  orgId: string,
+  params?: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    requester_id?: string;
+  },
+): Promise<{ instances: ApprovalInstance[]; total: number }> {
+  const res = await api.get<{
+    success: boolean;
+    data: { instances: ApprovalInstance[]; total: number };
+  }>(instancesUrl(orgId), { params });
+  return res.data.data;
+}
+
 export async function createApprovalTemplate(
   orgId: string,
   body: CreateTemplatePayload,

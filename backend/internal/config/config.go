@@ -31,6 +31,13 @@ type Config struct {
 	CORS     CORSConfig
 	Cookie   CookieConfig // NEW: controls httpOnly refresh token cookie behaviour
 	Social   SocialConfig // OAuth & Webhook credentials
+	Notifications NotificationsConfig
+}
+
+// NotificationsConfig holds settings for the notification engine.
+type NotificationsConfig struct {
+	ResendAPIKey string
+	FromEmail    string
 }
 
 // SocialConfig holds third-party integration credentials.
@@ -265,6 +272,13 @@ func Load() (*Config, error) {
 		Secure:   cookieSecure,
 		HTTPOnly: true, // non-configurable — must always be true
 		SameSite: cookieSameSite,
+	}
+	// ----------------------------------------------------------
+	// Notifications
+	// ----------------------------------------------------------
+	cfg.Notifications = NotificationsConfig{
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		FromEmail:    getEnv("NOTIFICATIONS_FROM_EMAIL", "noreply@havelio.app"),
 	}
 
 	return cfg, nil

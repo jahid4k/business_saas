@@ -367,10 +367,10 @@ func (h *Handler) PasswordResetConfirm(c fiber.Ctx) error {
 		return response.BadRequest(c, "MISSING_FIELDS", "Token and new password are required")
 	}
 	if err := h.service.ConfirmPasswordReset(c.Context(), req.Token, req.NewPassword); err != nil {
-		if errors.Is(err, ErrNotImplemented) {
-			return response.NotImplemented(c)
+		if errors.Is(err, ErrInvalidToken) {
+			return response.BadRequest(c, "INVALID_TOKEN", "Invalid or expired reset token")
 		}
-		return response.BadRequest(c, "RESET_FAILED", "Invalid or expired reset token")
+		return response.InternalServerError(c)
 	}
 	return response.OK(c, nil, "Password reset successful")
 }

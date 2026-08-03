@@ -20,6 +20,7 @@ type Service interface {
 	Create(ctx context.Context, ownerID string, req CreateBusinessRequest) (*Business, error)
 	GetByID(ctx context.Context, businessID, requestingUserID string) (*Business, error)
 	ListForUser(ctx context.Context, userID string) ([]*MembershipWithRole, error)
+	FindAllIDs(ctx context.Context) ([]string, error)
 	Switch(ctx context.Context, businessID, userID string) (accessToken string, role string, err error)
 	Update(ctx context.Context, orgID, userID string, req UpdateBusinessRequest) (*Business, error)
 }
@@ -181,6 +182,10 @@ func (s *serviceImpl) ListForUser(ctx context.Context, userID string) ([]*Member
 		results = []*MembershipWithRole{}
 	}
 	return results, nil
+}
+
+func (s *serviceImpl) FindAllIDs(ctx context.Context) ([]string, error) {
+	return s.repo.FindAllIDs(ctx)
 }
 
 func (s *serviceImpl) Switch(ctx context.Context, businessID, userID string) (string, string, error) {

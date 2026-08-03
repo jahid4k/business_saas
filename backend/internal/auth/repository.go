@@ -20,6 +20,9 @@ type Repository interface {
 	FindAuthAccount(ctx context.Context, provider, providerAccountID string) (*AuthAccount, error)
 	CreateAuthAccount(ctx context.Context, account *AuthAccount, accessToken, refreshToken, idToken string) error
 	UpdateAuthAccount(ctx context.Context, account *AuthAccount, accessToken, refreshToken, idToken string) error
+	CreateVerificationToken(ctx context.Context, vt *VerificationToken) error
+	GetVerificationTokenByHash(ctx context.Context, tokenHash, tokenType string) (*VerificationToken, error)
+	MarkVerificationTokenUsed(ctx context.Context, id string) error
 	CreateLoginEvent(ctx context.Context, event LoginEvent) error
 }
 
@@ -231,3 +234,41 @@ var (
 	ErrOAuthAccountIDRequired = errors.New("oauth provider account id is required")
 	ErrOAuthEmailRequired    = errors.New("oauth email is required")
 )
+
+func (r *repoImpl) CreateVerificationToken(ctx context.Context, vt *VerificationToken) error {
+	q := `
+		INSERT INTO verification_tokens (user_id, email, token_hash, type, expires_at)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, public_id, created_at
+	`
+	err := r.db.QueryRow(ctx, q, vt.UserID, vt.Email, vt.TokenHash, vt.Type, vt.ExpiresAt).
+		Scan(&vt.ID, &vt.PublicID, &vt.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("auth: CreateVerificationToken: %w", err)
+	}
+	return nil
+}
+
+func (r *repoImpl) GetVerificationTokenByHash(ctx context.Context, tokenHash, tokenType string) (*VerificationToken, error) {
+	q := `
+		SELECT id, public_id, user_id, email, token_hash, type, verified_at, used_at, expires_at, created_at
+		FROM verification_tokens
+		WHERE token_hash = $1 AND type = $2
+	`
+	var vt VerificationToken
+	err := r.db.QueryRow(ctx, q, tokenHash, tokenType).
+		Scan(&vt.ID, &vt.PublicID, &vt.UserID, &vt.Email, &vt.TokenHash, &vt.Type, &vt.VerifiedAt, &vt.UsedAt, &vt.ExpiresAt, &vt.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("auth: GetVerificationTokenByHash: %w", err)
+	}
+	return &vt, nil
+}
+
+func (r *repoImpl) MarkVerificationTokenUsed(ctx context.Context, id string) error {
+	q := `UPDATE verification_tokens SET used_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id)
+	return err
+}

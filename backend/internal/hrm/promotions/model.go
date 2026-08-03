@@ -2,6 +2,7 @@
 package promotions
 
 import (
+	"github.com/shopspring/decimal"
 	"errors"
 	"time"
 )
@@ -28,11 +29,11 @@ type Promotion struct {
 	FromPositionID        *string         `db:"from_position_id"         json:"from_position_id,omitempty"`
 	FromDepartmentID      *string         `db:"from_department_id"       json:"from_department_id,omitempty"`
 	FromSalaryStructureID *string         `db:"from_salary_structure_id" json:"from_salary_structure_id,omitempty"`
-	FromBasicPay          *float64        `db:"from_basic_pay"           json:"from_basic_pay,omitempty"`
+	FromBasicPay          *decimal.Decimal        `db:"from_basic_pay"           json:"from_basic_pay,omitempty"`
 	ToPositionID          string          `db:"to_position_id"           json:"to_position_id"`
 	ToDepartmentID        *string         `db:"to_department_id"         json:"to_department_id,omitempty"`
 	ToSalaryStructureID   *string         `db:"to_salary_structure_id"   json:"to_salary_structure_id,omitempty"`
-	NewBasicPay           *float64        `db:"new_basic_pay"            json:"new_basic_pay,omitempty"`
+	NewBasicPay           *decimal.Decimal        `db:"new_basic_pay"            json:"new_basic_pay,omitempty"`
 	EffectiveDate         string          `db:"effective_date"           json:"effective_date"`
 	Reason                *string         `db:"reason"                   json:"reason,omitempty"`
 	Notes                 *string         `db:"notes"                    json:"notes,omitempty"`
@@ -50,7 +51,7 @@ type CreatePromotionRequest struct {
 	ToPositionID        string   `json:"to_position_id"`
 	ToDepartmentID      *string  `json:"to_department_id"`
 	ToSalaryStructureID *string  `json:"to_salary_structure_id"`
-	NewBasicPay         *float64 `json:"new_basic_pay"`
+	NewBasicPay         *decimal.Decimal `json:"new_basic_pay"`
 	EffectiveDate       string   `json:"effective_date"`
 	Reason              *string  `json:"reason"`
 	Notes               *string  `json:"notes"`
@@ -60,7 +61,7 @@ type UpdatePromotionRequest struct {
 	ToPositionID        *string  `json:"to_position_id"`
 	ToDepartmentID      *string  `json:"to_department_id"`
 	ToSalaryStructureID *string  `json:"to_salary_structure_id"`
-	NewBasicPay         *float64 `json:"new_basic_pay"`
+	NewBasicPay         *decimal.Decimal `json:"new_basic_pay"`
 	EffectiveDate       *string  `json:"effective_date"`
 	Reason              *string  `json:"reason"`
 	Notes               *string  `json:"notes"`

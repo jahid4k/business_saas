@@ -119,11 +119,12 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 	if req.IncludeAnniversaries {
 		// Find employees whose hire_date anniversary falls in year+month
 		rows, err := s.db.Query(ctx,
-			`SELECT id::text, hire_date, EXTRACT(YEAR FROM AGE(make_date($2,$3,1), hire_date))::int
-			FROM hrm_employees
-			WHERE org_id=$1 AND status='active' AND hire_date IS NOT NULL
-			AND EXTRACT(MONTH FROM hire_date)=$3
-			AND EXTRACT(DAY FROM hire_date) IS NOT NULL`,
+			`SELECT e.id::text, e.hire_date, EXTRACT(YEAR FROM AGE(make_date($2,$3,1), e.hire_date))::int
+			FROM hrm_employees e
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE e.org_id=$1 AND st.category='active' AND e.hire_date IS NOT NULL
+			AND EXTRACT(MONTH FROM e.hire_date)=$3
+			AND EXTRACT(DAY FROM e.hire_date) IS NOT NULL`,
 			orgID, req.Year, req.Month)
 		if err == nil {
 			defer rows.Close()
@@ -160,7 +161,8 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			`SELECT c.employee_id::text, to_char(c.probation_end_date,'YYYY-MM-DD')
 			FROM hrm_employee_contracts c
 			JOIN hrm_employees e ON e.id=c.employee_id
-			WHERE c.org_id=$1 AND e.status='active' AND c.is_active=TRUE
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE c.org_id=$1 AND st.category='active' AND c.is_active=TRUE
 			AND c.probation_end_date IS NOT NULL
 			AND EXTRACT(YEAR FROM c.probation_end_date)=$2
 			AND EXTRACT(MONTH FROM c.probation_end_date)=$3`,
@@ -187,7 +189,8 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			`SELECT c.employee_id::text, to_char(c.end_date,'YYYY-MM-DD')
 			FROM hrm_employee_contracts c
 			JOIN hrm_employees e ON e.id=c.employee_id
-			WHERE c.org_id=$1 AND e.status='active' AND c.is_active=TRUE
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE c.org_id=$1 AND st.category='active' AND c.is_active=TRUE
 			AND c.end_date IS NOT NULL AND c.contract_type='fixed_term'
 			AND EXTRACT(YEAR FROM c.end_date)=$2 AND EXTRACT(MONTH FROM c.end_date)=$3`,
 			orgID, req.Year, req.Month)

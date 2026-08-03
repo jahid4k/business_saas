@@ -1,5 +1,74 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-08-03 (r17 — full-document drift audit, prompted by r16 having only touched
+> Section 5. Read the whole doc against the whole source tree (three parallel audits: frontend,
+> backend/database, mobile) rather than trusting any section's own status flags. Found drift in
+> nearly every section:
+> **Section 3** — frontend default theme is actually dark, not light (`app/layout.tsx`); GSAP is
+> used across ~21 files, not "sparingly"; a 4th Zustand store (`commandStore`) was unlisted.
+> **Section 4** — backend folder tree was missing `internal/hrm/` (the single largest module),
+> `internal/platform/scheduler/` and `.../notifications/` (both shipped in r16), and all of
+> `internal/dashboard/` — a real, wired, previously undocumented module.
+> **Section 5** — added a DASHBOARD entry (flagged its `/orgs/:orgId/` route prefix breaking the
+> app-wide `/organizations/:orgId/` convention); AUTH's route table was missing its alias routes
+> and wrongly claimed mobile handlers weren't written (they are — see below); PLATFORM — CONTACTS
+> was missing a `companies/enrich` route; CRM — DEALS documented the wrong param name for its board
+> route (code and the code's own comment disagreed with each other); CRM — REPORTS was missing two
+> routes (`rep-performance`, `forecast`).
+> **Section 7** — folder tree was missing every file added in r16 (notifications) plus several
+> that just predated this audit (`apikeys.ts`, `integrations.ts`, `visitors.ts`, `dashboard.ts`,
+> a `crm/visitors` route, a `coming-soon` route). The Zustand store definitions had drifted hard:
+> `permissionStore`'s real method is `hasPermission`, not the documented `can`/`canAny`; `authStore`
+> has no `status` field and calls its membership field `currentMembership`, not `membership`; the
+> "Permission Pattern" code sample called a `usePermission()` hook that doesn't exist anywhere in
+> the codebase.
+> **Section 8** — no entry existed for notifications (added one); CRM — CAPTURE said "zero
+> frontend" but three of four planned pieces are actually built (`settings/apikeys`,
+> `settings/integrations`, `crm/visitors`) — just under different paths than planned. The
+> `capture.*` permission-group gap in `permissionGroups.ts` is real and still the one thing
+> actually missing there.
+> **Sections 9/14/15 — the big one.** MOBILE APP said "zero code written" / "nothing built yet."
+> False: `mobile/` was committed 2026-07-23 (`a350092`, 93 files, +5799/-144) — one day after r14's
+> own dated entry, never folded back in since. Real, working Expo app: auth screens, onboarding,
+> dashboard shell, tasks, a single tabbed CRM screen (not split into per-entity routes as planned),
+> flat settings. Real gaps that *are* still open: `forgotPassword`/`resetPassword` in `useAuth.ts`
+> are stubs despite the pages and backend routes both being real; `components/{crm,tasks,rbac}/`
+> are empty; no `security/` route; CRM — CONTACTS never got folded into the tabbed screen and is
+> genuinely still unbuilt. Rewrote all three sections against source instead of the old plan.
+> **Section 13** — `shopspring/decimal`, `robfig/cron/v3`, `resend/resend-go/v2` (all added in r16)
+> were missing entirely; Expo/RN/expo-secure-store rows were still guesses (`57.0.7`, "latest
+> compatible") — replaced with the confirmed versions from `mobile/package.json` now that it's
+> known to exist.
+> Nothing in Section 6, Section 10, or the CAPTURE/HRM entries already fixed in r16 needed further
+> changes — re-verified, not re-assumed.)
+
+> Last updated: 2026-08-03 (r16 — HRM Extended Phase 0 completed. Phase 0 had been reported
+> substantially done, but a source audit found the branch didn't compile (three packages —
+> `hrm/payslips`, `hrm/salary`, `platform/scheduler`, `platform/notifications` — imported
+> `shopspring/decimal`, `robfig/cron/v3`, `resend-go/v2` that were never added to `go.mod`), and
+> several stale test doubles no longer matched the interfaces they were meant to satisfy. Fixed
+> both, then closed every remaining gap: **PLATFORM — SCHEDULER** and **PLATFORM —
+> NOTIFICATIONS** promoted from scoping entries to real Section 5 modules (new migrations
+> `00067`/`00068`); the two HRM crons already wired to the scheduler were both silently broken
+> (milestones queried a column dropped in `00053`; attendance's `resolveShift` queried columns
+> that don't exist, `wsa.scope`/`wsa.entity_id` instead of `assignee_type`/`assignee_id`) — both
+> fixed, plus a real `attendance.absence_sweep` written to replace the previous stub; sentinel
+> system user added (`00069`) so scheduler-triggered writes have a valid actor; PREP MIGRATIONS
+> closed out (`00070` legal entity scaffold, `00071` currency columns) confirming
+> `hrm_employees.manager_id` already existed under a different name than the doc assumed;
+> notifications given a real API surface (list/mark-read/mark-all-read/preferences) and a
+> frontend bell + drawer, replacing the placeholder icon. Guard tests extended: hygiene test now
+> also catches AI-conversation comment artifacts (found and removed two real instances); the
+> permissions test's bidirectional check — used-string-exists-in-a-seed-migration — is now
+> codebase-wide instead of HRM-only, and immediately caught a real production bug on the first
+> run: `capture/visitors` required `crm.view`, a permission that was never seeded, so the
+> route 403'd for every user including owners. Migration count 64 → 71, table count 74 → 79.
+> One thing checked and explicitly *not* changed: the original HRM Extended plan called for a
+> `routing_test.go` check on `.Get("/")` under `StrictRouting: true`, reasoning it could 404
+> requests without a trailing slash. Reading Fiber v3's router source suggested that risk was
+> real; a throwaway reproduction against the pinned `v3.2.0` showed both `/x` and `/x/` match
+> regardless of `StrictRouting` — not an actual bug in this version, so no test was added for it.)
+
 > Last updated: 2026-07-29 (r15 — HRM extension surface scoped and recorded, plus two shared-
 > infrastructure entries that came out of that scoping. New in Section 9: **PLATFORM PRIMITIVES**
 > (five buildable shared pieces — notification, scheduler, resource-level permissions, checklist
@@ -139,10 +208,10 @@ Full list: **Section 9 — Unbuilt Module Registry**. Anything in it can be pick
 | Language      | TypeScript (strict mode)                                                                               |
 | CSS + styling | Tailwind CSS v4                                                                                        |
 | HTTP client   | Axios (single API client with interceptors)                                                            |
-| State         | Zustand (three stores — see Section 6)                                                                 |
-| Theme         | `next-themes` (light/dark, default light)                                                              |
+| State         | Zustand (four stores — see Section 7: `authStore`, `permissionStore`, `uiStore`, `commandStore`)       |
+| Theme         | `next-themes` (light/dark, default **dark** — `app/layout.tsx` sets `defaultTheme="dark"`)             |
 | Forms         | React Hook Form + Zod validation                                                                       |
-| Animation     | GSAP — used sparingly (skeleton shimmer, number count-ups, subtle transitions), not as a design pillar |
+| Animation     | GSAP — used across most major pages (auth, onboarding, CRM, HRM, settings, drawers), not just the sparse skeleton/count-up usage this row previously described |
 | Icons         | Lucide React                                                                                           |
 
 ### Design System
@@ -190,6 +259,9 @@ backend/
     authz/                    ← RBAC (roles, permissions, memberships, invitations)
     security/                 ← session and login event management
     task/                     ← task CRUD (permission-gated test module)
+    dashboard/                ← org-home metrics widget (undocumented until 2026-08-03 audit — see
+                                 Section 5 → DASHBOARD; route is /api/v1/orgs/:orgId/dashboard,
+                                 breaking the app-wide /organizations/:orgId/ convention)
     capture/                  ← lead auto-capture (r11)
       apikeys/                ← org API keys (generate, validate, revoke)
       public/                 ← /pub/leads public web-form capture endpoint
@@ -199,6 +271,8 @@ backend/
     platform/
       contacts/               ← shared contacts + companies (used by CRM and future modules)
       engagement/             ← shared notes, tasks, activities, emails, timeline
+      scheduler/              ← named-job registry, Redis-locked, run history (built 2026-08-03)
+      notifications/          ← unified in-app/email dispatch (built 2026-08-03)
     crm/
       leads/                  ← CRM lead management (now with capture fields + dedup + round-robin)
       pipeline/               ← pipeline and stages
@@ -206,13 +280,18 @@ backend/
       reports/                ← CRM analytics endpoints (incl. agenda)
       templates/              ← email/note snippet templates (post-r10)
       settings/               ← per-org CRM settings: lead routing round-robin (post-r10)
+    hrm/                      ← 26 sub-packages (departments, positions, employees, salary,
+                                 attendance, payslips, leave, approvals, ...) — see Section 5 →
+                                 HRM MODULE for the full breakdown; omitted here to keep this tree
+                                 scannable, not because it's small
     middleware/               ← auth, business context, logger, rate limit, permission, recover, apikey
     database/                 ← postgres pool + redis client
     config/                   ← env loading and validation
     audit/                    ← append-only audit log
     migrations/               ← Goose SQL migration files
     tests/
-      unit/                   ← service-level unit tests
+      unit/                   ← service-level unit tests (incl. architecture/ guard tests — see
+                                 Section 5 note under HRM Extended Phase 0)
       integration/            ← API + DB integration tests
   pkg/
     jwt/                      ← JWT manager
@@ -323,16 +402,21 @@ Notes: Health checks PostgreSQL + Redis. `/routes` lists all registered routes i
 Routes:
 
 ```
-POST /api/v1/auth/signup
-POST /api/v1/auth/login
-POST /api/v1/auth/logout
-POST /api/v1/auth/logout-all
-POST /api/v1/auth/refresh
+POST /api/v1/auth/signup           (alias: /sign-up)
+POST /api/v1/auth/login            (alias: /sign-in)
+POST /api/v1/auth/logout           (alias: /sign-out)
+POST /api/v1/auth/logout-all       (alias: /sign-out-all)
+POST /api/v1/auth/refresh          (alias: /refresh-token)
 POST /api/v1/auth/password-reset/request
 POST /api/v1/auth/password-reset/confirm
 POST /api/v1/auth/oauth/sync
 GET  /api/v1/auth/me
 ```
+
+Every public endpoint above is rate-limited (`internal/auth/routes.go`'s
+`RegisterRoutesWithRateLimit`, the variant actually wired in `main.go`); `logout`/`logout-all` are
+not, matching `/mobile/logout` below — a holder of an expired access token must still be able to
+revoke it.
 
 Token contract:
 
@@ -341,24 +425,24 @@ Token contract:
 - Frontend never touches the refresh token directly
 - `/refresh` sends cookie, receives new access token in body
 
-**MOBILE [🔵 ACTIVE — contract defined, <span style="color: red;">handlers not yet written</span>]:**
+**MOBILE [✅ DONE — confirmed built 2026-08-03, doc previously said "not yet written"]:**
 
-Routes to add in `backend/internal/auth/routes.go`, wired into both `RegisterRoutes` and
-`RegisterRoutesWithRateLimit` the same way the existing `/sign-up`, `/sign-in` aliases are —
-rate-limited on the three public ones:
+Live in `backend/internal/auth/routes.go`, wired into `RegisterRoutesWithRateLimit`:
 
 ```
-POST /api/v1/auth/mobile/signup
-POST /api/v1/auth/mobile/login
-POST /api/v1/auth/mobile/logout
-POST /api/v1/auth/mobile/refresh
+POST /api/v1/auth/mobile/signup   (rate-limited)
+POST /api/v1/auth/mobile/login    (rate-limited)
+POST /api/v1/auth/mobile/logout   (not rate-limited, matching web /logout)
+POST /api/v1/auth/mobile/refresh  (rate-limited)
 ```
 
-Same `Service`/`Repository` as web auth, zero new business logic — only new handler methods
-(`MobileLogin`, `MobileRefresh`, etc.) that return the refresh token in the JSON body instead of
-setting the `bsaas_refresh` httpOnly cookie, and read it back from the request body on
-`mobile/refresh` / `mobile/logout` instead of the cookie jar. `logout-all`, `password-reset/*`,
-and `me` stay shared as-is — none of them touch tokens, no mobile variant needed.
+Same `Service`/`Repository` as web auth, zero new business logic — handler methods
+`MobileSignup`/`MobileLogin`/`MobileLogout`/`MobileRefresh` (`internal/auth/handler.go`) return the
+refresh token in the JSON body instead of setting the `bsaas_refresh` httpOnly cookie, and read it
+back from the request body on `mobile/refresh` / `mobile/logout` instead of the cookie jar.
+`logout-all`, `password-reset/*`, and `me` stay shared as-is — none of them touch tokens, no mobile
+variant needed. This was never actually a gap — see Section 9 → MOBILE APP for the fuller
+correction: the `mobile/` client itself is also far more built than this doc previously claimed.
 
 Resolved (was an open assumption in the r10 draft): `Signup` does not auto-authenticate.
 `frontend/src/app/(auth)/signup/page.tsx` creates the user then calls `login()` separately to
@@ -373,12 +457,17 @@ instead of giving mobile a second, divergent signup path.
 Routes:
 
 ```
-GET   /api/v1/me
-PATCH /api/v1/me
-PATCH /api/v1/me/settings
-PATCH /api/v1/me/preferences
-POST  /api/v1/me/avatar
+GET    /api/v1/me
+PATCH  /api/v1/me
+PATCH  /api/v1/me/settings
+PATCH  /api/v1/me/preferences
+POST   /api/v1/me/avatar
+GET    /api/v1/me/avatars
+POST   /api/v1/me/avatars/:avatarId/activate
+DELETE /api/v1/me/avatars/:avatarId
 ```
+
+`/users/me` (GET/PATCH) is a backward-compatible alias, same handlers as `/me`.
 
 Key type: `SafeUser` (never expose `User` directly — it contains `password_hash`)
 
@@ -427,6 +516,7 @@ GET    /api/v1/organizations/:orgId/rbac/permissions
 GET    /api/v1/organizations/:orgId/rbac/permissions/grouped
 GET    /api/v1/organizations/:orgId/rbac/permissions/matrix
 POST   /api/v1/organizations/:orgId/rbac/check
+POST   /api/v1/organizations/:orgId/rbac/check-member   ← alias of /check, same handler
 
 GET    /api/v1/organizations/:orgId/rbac/roles
 POST   /api/v1/organizations/:orgId/rbac/roles
@@ -473,8 +563,30 @@ PATCH  /api/v1/organizations/:orgId/tasks/:taskId
 DELETE /api/v1/organizations/:orgId/tasks/:taskId
 ```
 
-Permissions: `tasks.view` · `tasks.create` · `tasks.update` · `tasks.delete`
+Permissions: `tasks.view` · `tasks.create` · `tasks.update` · `tasks.delete` · `tasks.view_all`
 Statuses: `todo` · `in_progress` · `done` · `cancelled`
+
+`tasks.view_all` (migration 00065) isn't route-gated via `permFn` — `handler.List` checks it
+inline (`authzSvc.Can(ctx, userID, orgID, "tasks", "view_all")`) to decide between "see everyone's
+tasks" and "see only your own." This is the one working precedent for the `view_own`/`view_team`/
+`view_all` scoping pattern Phase 1 (resource-level permissions) is about to formalize across HRM —
+worth reading before designing that ADR.
+
+---
+
+### DASHBOARD [✅ DONE — found undocumented in the 2026-08-03 audit]
+
+Org-home metrics widget. One route, no permission gate beyond org membership:
+
+```
+GET /api/v1/orgs/:orgId/dashboard   ← requireAuth + requireOrgMatch only, no permFn
+```
+
+⚠️ Route prefix is `/orgs/:orgId/` — every other module in this registry uses
+`/organizations/:orgId/`. Not fixed as part of this audit pass (would be a breaking API change for
+whatever frontend already calls it — `frontend/src/lib/dashboard.ts` — needs to move in the same
+commit as the backend route if this is ever corrected). Flagging so it doesn't get silently copied
+as the pattern for the next new module.
 
 ---
 
@@ -487,6 +599,7 @@ GET/POST         /api/v1/organizations/:orgId/crm/contacts
 GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/contacts/:contactId
 
 GET/POST         /api/v1/organizations/:orgId/crm/companies
+GET              /api/v1/organizations/:orgId/crm/companies/enrich       ← crm.companies.view (registered before :companyId)
 GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/companies/:companyId
 GET              /api/v1/organizations/:orgId/crm/companies/:companyId/contacts
 ```
@@ -509,6 +622,68 @@ Timeline:   GET /timeline?related_type=&related_id=
 
 Permissions: `crm.notes.*` · `crm.tasks.*` · `crm.activities.*` · `crm.emails.*`
 Notes are tagged with module `"crm"` — every writer must use that exact tag or the record is invisible to the timeline (the capture dedup path currently violates this; Fix Pass A).
+
+---
+
+### PLATFORM — SCHEDULER [✅ DONE — built 2026-08-03]
+
+Generic named-job registry in `internal/platform/scheduler/`: in-process ticker (30s), Redis
+`SETNX` distributed lock per job (multi-instance safe), run history, manual trigger. Migration
+`00067`. Supersedes the PLATFORM PRIMITIVES §2 scoping entry in Section 9 — built, not just scoped.
+
+Routes:
+
+```
+GET  /api/v1/platform/scheduler/jobs              ← platform.scheduler.view
+GET  /api/v1/platform/scheduler/jobs/:name/runs   ← platform.scheduler.view
+POST /api/v1/platform/scheduler/jobs/:name/run    ← platform.scheduler.manage
+```
+
+Permissions: `platform.scheduler.view` / `.manage` — granted to owner/admin.
+
+Two jobs registered in `main.go`. Both were already wired to the scheduler before this revision,
+but neither actually worked — one was a stub, the other silently errored on every run:
+
+- `milestones.generate_upcoming` (daily 01:00) — was querying `hrm_employees.status`, a column
+  migration `00053` dropped in favor of `status_id`; the query errored every time, the error was
+  swallowed, and the cron always no-op'd. Fixed to join `hrm_employee_statuses` on
+  `category='active'`.
+- `attendance.absence_sweep` (daily 02:00) — was a literal stub (`slog.Info(...stub executed...)`
+  and nothing else). Now marks employees absent for the prior day when no attendance record
+  exists, it's a working day per their resolved shift, it isn't a holiday (employee → department
+  → org calendar cascade), and they have no approved leave. Fixing this required also fixing a
+  pre-existing bug in `attendance.resolveShift`: it queried columns `wsa.scope`/`wsa.entity_id`,
+  but `hrm_work_schedule_assignments` (migration `00027`) actually names them
+  `assignee_type`/`assignee_id` — shift resolution always silently failed and every attendance
+  record fell back to a flat 8h default instead of the employee's real shift.
+
+Both jobs need a valid `created_by`/actor UUID for system-generated rows; migration `00069` seeds
+a sentinel system user (`scheduler.SystemUserID`, never a real login) for exactly this.
+
+---
+
+### PLATFORM — NOTIFICATIONS [🔵 ACTIVE — infra + API built 2026-08-03, digest/push not built]
+
+Unified dispatch in `internal/platform/notifications/`: per-user, per-event-type, per-channel
+preference matrix; in-app (DB row) and email (Resend — real, not a stub) channels. Migration
+`00068`. Supersedes the PLATFORM PRIMITIVES §1 scoping entry in Section 9.
+
+Routes (self-scoped to the requesting user, like `/me` — `requireAuth` only, no RBAC permission
+check, since a user always owns their own notifications):
+
+```
+GET   /api/v1/notifications                ← list (paginated) + unread_count
+POST  /api/v1/notifications/:id/read
+POST  /api/v1/notifications/read-all
+GET   /api/v1/notifications/preferences
+PATCH /api/v1/notifications/preferences
+```
+
+Frontend: Topbar bell wired to a drawer (`NotificationDrawer`) with unread badge, mark-read,
+mark-all-read (previously a decorative placeholder icon with no handler). Only consumer today is
+`auth` (password reset / invite emails) — no HRM module calls `Dispatch()` yet, correctly, since
+none is queued (Section 9's build-order note applies: build the primitive when the first real
+consumer arrives). Digest batching and push channel are not built.
 
 ---
 
@@ -559,8 +734,13 @@ GET/PATCH/DELETE /api/v1/organizations/:orgId/crm/deals/:dealId
 POST             /api/v1/organizations/:orgId/crm/deals/:dealId/move
 POST             /api/v1/organizations/:orgId/crm/deals/:dealId/won
 POST             /api/v1/organizations/:orgId/crm/deals/:dealId/lost
-GET              /api/v1/organizations/:orgId/crm/deals/:dealId/board
+GET              /api/v1/organizations/:orgId/crm/deals/:pipelineId/board
 ```
+
+The board route's param is `:pipelineId` (board = all deals in one pipeline, not one deal) —
+`internal/crm/deals/routes.go:37`. Its own doc-comment (same file, line 19) still says `:dealId`;
+code and comment disagree with each other, not just with this doc. Corrected here to match the
+actual registered route; the source comment itself is still wrong.
 
 Permissions: `crm.deals.*` · `crm.deals.move_stage`
 
@@ -606,6 +786,8 @@ GET /api/v1/organizations/:orgId/crm/reports/leads/by-source
 GET /api/v1/organizations/:orgId/crm/reports/tasks/overdue
 GET /api/v1/organizations/:orgId/crm/reports/activities/stats
 GET /api/v1/organizations/:orgId/crm/reports/agenda          ← post-r10, backs /crm/agenda page
+GET /api/v1/organizations/:orgId/crm/reports/rep-performance
+GET /api/v1/organizations/:orgId/crm/reports/forecast
 ```
 
 Permissions: `crm.reports.view`
@@ -625,7 +807,7 @@ GET/POST /api/v1/organizations/:orgId/capture/email             ← ⚠️ uses 
 DELETE   /api/v1/organizations/:orgId/capture/email/:id
 GET/POST /api/v1/organizations/:orgId/capture/social            ← ⚠️ uses settings.view; switch to capture.social.manage (Fix A)
 DELETE   /api/v1/organizations/:orgId/capture/social/:id
-GET      /api/v1/organizations/:orgId/capture/visitors          ← ⚠️ uses nonexistent crm.view → 403s for everyone; switch to capture.visitors.view (Fix A)
+GET      /api/v1/organizations/:orgId/capture/visitors          ← capture.visitors.view (was nonexistent crm.view, 403'd for everyone; fixed 2026-08-03)
 ```
 
 **Public routes:**
@@ -639,7 +821,7 @@ GET/POST /api/v1/pub/social/:platform/webhook ← ⚠️ NO signature check; GET
 
 **API key contract:** raw key `bs_live_<64 hex>`, shown exactly once at creation; SHA-256 hash + 16-char prefix stored; scopes `capture:leads` (+ `capture:visitors`, constant pending); optional per-key `allowed_origins` and `expires_at`.
 
-**Permissions seeded (00062):** `capture.apikeys.view/create/delete` · `capture.email.manage` · `capture.social.manage` · `capture.visitors.view` — granted to owner/admin. Only the apikeys three are actually referenced by routes today (see warnings above).
+**Permissions seeded (00062):** `capture.apikeys.view/create/delete` · `capture.email.manage` · `capture.social.manage` · `capture.visitors.view` — granted to owner/admin. Apikeys and visitors are referenced correctly; email/social routes still use `settings.view` instead of their seeded keys (Fix A item 3, partially open — see below).
 
 **Deliberate scope reductions (documented, not bugs):**
 
@@ -653,23 +835,31 @@ _Fix Pass A — feature-breaking + correctness:_
 
 1. `CreateLead(ctx, orgID, "", …)` in email/social/visitors → `created_by` gets empty string → invalid-UUID error on every system-generated lead. Fix: migration 00065 drops NOT NULL on `crm_leads.created_by`; model `CreatedBy *string`; pass nil for system captures; UI renders null as "System".
 2. `social/repository.go` INSERTs into `access_token_enc`; column is `access_token` (00060) → connect always fails. Fix repo SQL.
-3. Route permissions → seeded `capture.*` keys (see warnings above); adds `capture:visitors` scope constant + scope/name validation in `GenerateKey`.
+3. ~~Visitors route used nonexistent `crm.view`, 403'd for everyone~~ — fixed 2026-08-03, now
+   `capture.visitors.view` (caught by a new guard test, `TestPermissions_UsedStringsExistInMigrations`,
+   that checks every `permFn(...)` string against seeded migration keys, codebase-wide). Still
+   open: email/social routes use `settings.view` instead of their seeded `capture.email.manage` /
+   `capture.social.manage` keys; `capture:visitors` scope constant + scope/name validation in
+   `GenerateKey` not added.
 4. `ValidateKey` never checks `expires_at` (`ErrKeyExpired` sentinel unused). Add the check.
 5. Dedup: scope to `req.CaptureSource != nil` only; `LOWER(email)` match; note module `"crm"`; skip note when `userID == ""`; don't swallow the note error silently.
-6. Delete leftover AI-conversation comments in `public/handler.go` and `leads/service.go`.
+6. ~~Delete leftover AI-conversation comments in `public/handler.go`~~ — fixed 2026-08-03 (a
+   five-line internal monologue about `created_by`/UUID handling). `leads/service.go` checked
+   clean — no artifacts found there. A new hygiene test (`TestHygiene_NoAIConversationArtifacts`)
+   now catches this class going forward.
 7. Minor: `social` model `AccessToken` json tag → `"-"`; `org_api_keys.created_by` ON DELETE CASCADE → RESTRICT; UNIQUE `(org_id, session_id)` on `website_visitors`; UNIQUE on `org_api_keys.key_hash`.
 
 _Fix Pass B — security, required before any public exposure:_ 8. Inbound email webhook HMAC verification (`WEBHOOK_EMAIL_SECRET`). 9. Facebook `X-Hub-Signature-256` verification (`FACEBOOK_APP_SECRET`) + real `hub.verify_token` comparison (`FACEBOOK_VERIFY_TOKEN`). 10. Redis rate limiting on every `/pub/*` route (new `NewPublicCaptureRateLimit` constructor; per-key where a key exists, per-IP on webhooks).
 
 ---
 
-### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10]
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), 25 sub-modules, 201 routes (r9 count) **plus 4 employee-status routes added post-r10** (205 total). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **26 sub-modules, 206 routes** (recounted directly from source 2026-08-03 — the prior "205" total didn't even match the sum of its own group breakdown below, and the Leave group was missing from that breakdown entirely). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 41 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053).
 
-**Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 71 routes. Salary formula engine via `expr-lang/expr`. <span style="color: red;">Approvals still missing an approval-instance list endpoint (open since r9).</span>
+**Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 72 routes. Salary formula engine via `expr-lang/expr`. Approvals' instance-list endpoint (`GET /hrm/setup/approvals/instances`) exists — a prior "missing since r9" note here was stale; confirmed against `internal/hrm/approvals/routes.go` 2026-08-03.
 
 **Group B — Lifecycle** (`employees, promotions, transfers, resignations, terminations`): 37 routes + 4 new:
 
@@ -682,15 +872,15 @@ Dynamic statuses (00053): per-org status list with category (`active/inactive/on
 
 **Group C — Disciplinary** (`warnings, complaints, employeedocs, acknowledgements`): 34 routes. Cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles.
 
-**Group D — Time & Compensation** (`attendance, payslips`): 19 routes. Multi-punch attendance, `ComputeSlab` progressive tax, immutable finalized payslips.
+**Group D — Time & Compensation** (`attendance, payslips`): 19 routes. Multi-punch attendance, `ComputeSlab` progressive tax, immutable finalized payslips. Attendance's `resolveShift` had a column-name bug (`wsa.scope`/`wsa.entity_id` vs the real `assignee_type`/`assignee_id`) that silently no-op'd shift resolution on every call — fixed 2026-08-03 (see Section 5 → PLATFORM — SCHEDULER for the `attendance.absence_sweep` job this also unblocked).
 
-**Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences.
+**Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences now genuinely run (see Section 5 → PLATFORM — SCHEDULER) — `milestones.generate_upcoming` previously errored on every run against a column `00053` had already dropped, silently, so it never generated anything despite being "wired."
+
+**Leave** (`leave` — types + requests): 12 routes, `hrm.leave.*` permissions. Existed in code and in the Section 6 table list (`hrm_leave_types`, `hrm_leave_requests`) but was never added to this module's route breakdown until now.
 
 **Reports:** 3 routes.
 
 **Approval chain wiring:** callback registry on the approvals service; promotions, transfers, terminations, warnings, awards each register `HandleApprovalDecision` in `main.go`.
-
-**Known open item:** missing approval-instance list endpoint (carried from r9).
 
 **Extension surface (r15):** scoped but unbuilt — see Section 9 → HRM EXTENDED MODULES. This entry covers what is shipped only.
 
@@ -713,18 +903,25 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 64
+### Migration Count: 71
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
-r10 ended at 52. Post-r10: `00053` dynamic employee statuses · `00054/00055` CRM templates + permissions · `00056` CRM settings · `00057`–`00064` capture (api keys, lead capture fields, inbound emails, social integrations, website visitors + pageviews, capture permissions, inbound email logs, social lead logs). Next: `00065` (created_by nullable — Fix Pass A).
+r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
+permission (not the `crm_leads.created_by` fix Fix Pass A originally expected — that's still
+open) · `00066` HRM money `float64`→`decimal.Decimal` + `organizations.money_rounding_scale/mode`
++ payslip totals widened to `NUMERIC(18,4)` · `00067` scheduler tables
+(`platform_scheduled_jobs`, `platform_job_runs`) · `00068` notification tables
+(`platform_notifications`, `platform_notification_preferences`) · `00069` sentinel system user
+for scheduler-triggered writes · `00070` `hrm_legal_entities` + `legal_entity_id` backfilled onto
+36 HRM tables · `00071` `currency CHAR(3)` prep (new columns + standardized existing ones).
 
-### Key Tables (74 total)
+### Key Tables (79 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
 
-**Platform (6):**
-`platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs`
+**Platform (10):**
+`platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs` · `platform_scheduled_jobs` · `platform_job_runs` · `platform_notifications` · `platform_notification_preferences`
 
 **CRM (6):**
 `crm_leads` (+ `custom_fields`, `capture_source`, `capture_metadata` since 00058) · `crm_pipelines` · `crm_pipeline_stages` · `crm_deals` · `crm_templates` · `crm_settings`
@@ -732,7 +929,8 @@ r10 ended at 52. Post-r10: `00053` dynamic employee statuses · `00054/00055` CR
 **Capture (7):**
 `org_api_keys` · `org_inbound_emails` · `social_integrations` · `website_visitors` · `visitor_pageviews` · `inbound_email_logs` · `social_lead_logs`
 
-**HRM (41):**
+**HRM (42):**
+`hrm_legal_entities` (prep migration `00070`, zero business logic yet — see PREP MIGRATIONS in Section 9) ·
 Group A (19): `hrm_departments` · `hrm_positions` · `hrm_salary_components` · `hrm_salary_structures` · `hrm_salary_structure_components` · `hrm_approval_templates` · `hrm_approval_template_levels` · `hrm_approval_instances` · `hrm_approval_decisions` · `hrm_warning_types` · `hrm_warning_escalation_rules` · `hrm_document_templates` · `hrm_document_bulk_sends` · `hrm_shifts` · `hrm_work_schedule_assignments` · `hrm_holiday_calendars` · `hrm_holidays` · `hrm_calendar_assignments` · `hrm_employee_contracts`
 Group B (6): `hrm_employees` · `hrm_promotions` · `hrm_transfers` · `hrm_resignations` · `hrm_terminations` · `hrm_employee_statuses`
 Group C (4): `hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_documents` · `hrm_acknowledgements`
@@ -755,24 +953,28 @@ frontend/
       (dashboard)/
         [orgId]/
           crm/
-            leads/  pipeline/  reports/  agenda/
+            leads/  pipeline/  reports/  agenda/  visitors/    ← visitors added, undocumented until 2026-08-03
             setup/routing/  setup/templates/
           contacts/  companies/  companies/[companyId]/
           tasks/
           hrm/                ← all HRM pages incl. setup/statuses
-          settings/ (members, roles, profile)
+          settings/ (members, roles, profile, apikeys, integrations)  ← apikeys/integrations added, undocumented until 2026-08-03
           security/sessions/
+          coming-soon/        ← generic placeholder route, undocumented until 2026-08-03
+      api/lead-capture/       ← Next.js route handler proxying to /pub/leads, undocumented until 2026-08-03
     components/
       ui/  layout/  crm/  tasks/  members/  roles/  settings/  hrm/  providers/
+      notifications/NotificationDrawer.tsx   ← added 2026-08-03, see Section 8
     contexts/DrawerContext.tsx
     lib/
       api.ts  auth.ts  constants.ts  token.ts  jwt.ts  queryKeys.ts
       crm/ (leads, contacts, companies, deals, pipelines, reports, settings, templates)
       hrm/ (…)
       members.ts  roles.ts  org.ts  profile.ts  security.ts  tasks.ts  permissionGroups.ts
-    stores/ (authStore, permissionStore, uiStore)
+      apikeys.ts  integrations.ts  visitors.ts  dashboard.ts  notifications.ts   ← all added, undocumented until 2026-08-03
+    stores/ (authStore, permissionStore, uiStore, commandStore)   ← commandStore was missing from this list
     hooks/ (useIsMobile, …)
-    types/ (api, auth, crm, hrm, org, rbac, task)
+    types/ (api, auth, crm, hrm, org, rbac, task, notification)   ← notification type added 2026-08-03
 ```
 
 ### Auth Flow (frontend)
@@ -787,16 +989,20 @@ frontend/
 
 ### Zustand Store Definitions
 
+**Four stores, not three** — `commandStore` was missing from this section entirely until the
+2026-08-03 audit. Interfaces below are copied from the real source
+(`frontend/src/stores/*.ts`), not the previous doc's assumed shape, which had drifted on both
+`authStore` and `permissionStore`.
+
 **`authStore`** — who the user is and which org they're in:
 
 ```ts
-interface AuthStore {
+interface AuthState {
   user: SafeUser | null;
   currentOrg: Business | null;
-  membership: MyMembershipResponse | null;
-  status: "idle" | "loading" | "authenticated" | "unauthenticated";
-  setUser: (user: SafeUser) => void;
-  setOrg: (org: Business, membership: MyMembershipResponse) => void;
+  currentMembership: MembershipWithRole | null; // was documented as `membership`; there is no `status` field at all
+  setUser: (user: SafeUser | null) => void;
+  setOrg: (org: Business | null, membership: any) => void;
   reset: () => void;
 }
 ```
@@ -804,21 +1010,44 @@ interface AuthStore {
 **`permissionStore`** — what the user can do in the current org:
 
 ```ts
-interface PermissionStore {
+interface PermissionState {
   permissions: string[];
-  setPermissions: (perms: string[]) => void;
-  can: (perm: string) => boolean;
-  canAny: (perms: string[]) => boolean;
+  setPermissions: (permissions: string[]) => void;
+  hasPermission: (permission: string) => boolean; // was documented as `can`; `canAny` doesn't exist
   reset: () => void;
 }
 ```
 
-**`uiStore`** — sidebar and theme, nothing else.
+**`uiStore`** — sidebar, mobile menu, and theme (persisted: `sidebarCollapsed` + `theme` only):
+
+```ts
+interface UIState {
+  sidebarCollapsed: boolean;
+  mobileMenuOpen: boolean; // not previously documented
+  theme: "light" | "dark";
+  toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleMobileMenu: () => void;
+  setMobileMenuOpen: (open: boolean) => void;
+  setUiTheme: (theme: "light" | "dark") => void;
+}
+```
+
+**`commandStore`** — the ⌘K command menu's open state, nothing else (missing from this doc
+entirely until now):
+
+```ts
+interface CommandState {
+  isOpen: boolean;
+  setOpen: (open: boolean) => void;
+  toggle: () => void;
+}
+```
 
 **Hard rules for Zustand:**
 
 - Never add `persist` middleware to `authStore` or `permissionStore` — persisted auth state is a security risk
-- `persist` is allowed on `uiStore` only (sidebar state, theme preference)
+- `persist` is allowed on `uiStore` (and `commandStore`, though nothing in it needs persisting today)
 - The access token lives in `lib/token.ts` as a plain module variable — not in any store
 - If you see a PR that puts a token into Zustand, reject it
 
@@ -862,12 +1091,16 @@ Components use `dark:` Tailwind classes — never inline theme checks in JS. `ui
 ### Permission Pattern (frontend)
 
 ```tsx
-const { can } = usePermission(); // reads from permissionStore — no API call
+const { hasPermission } = usePermissionStore(); // no API call — reads the in-memory store directly
 
 {
-  can("tasks.create") && <Button onClick={openCreateModal}>New Task</Button>;
+  hasPermission("tasks.create") && <Button onClick={openCreateModal}>New Task</Button>;
 }
 ```
+
+(This sample previously called a `usePermission()` hook with a `can()` method — neither exists.
+Every real call site in the codebase uses `usePermissionStore()` + `hasPermission()` directly, e.g.
+`frontend/src/app/(dashboard)/[orgId]/tasks/page.tsx`.)
 
 `permissionStore` is populated after org switch by `GET /api/v1/members/me`. Backend enforces on every request — frontend gates are UX only.
 
@@ -957,6 +1190,9 @@ lists when they're next revisited — this does not retroactively obligate rewri
 ### DASHBOARD SHELL [✅ DONE]
 
 Sidebar, Topbar, org switcher, drawer system (`DrawerContext` + `ui/Drawer`), org context in URL.
+Topbar bell opens `components/notifications/NotificationDrawer` (added 2026-08-03 — see
+PLATFORM — NOTIFICATIONS below); org-home page also renders the metrics widget via `lib/dashboard.ts`
+against the backend DASHBOARD route (Section 5).
 
 ### TASKS [✅ DONE — redesigned to the Collection View Pattern]
 
@@ -1001,9 +1237,29 @@ reserved for secondary-field edits, permission-gated actions.
 `/[orgId]/crm/setup/routing` — lead round-robin settings (crm_settings)
 `/[orgId]/crm/setup/templates` — template CRUD (`TemplateForm`)
 
-### CRM — CAPTURE [⚪ NOT STARTED — backend exists, zero frontend]
+### PLATFORM — NOTIFICATIONS [🔵 ACTIVE — built 2026-08-03]
 
-Planned (Task.md Steps 8–10): `/[orgId]/crm/setup/capture` (API key list + create drawer with show-once raw key + embed code panel; email + social tabs) and `/[orgId]/crm/capture/visitors` (visitor list). New `lib/crm/capture.ts`, `types/capture.ts`. Must also add the `capture.*` group to `lib/permissionGroups.ts`.
+`components/notifications/NotificationDrawer.tsx`, opened from the Topbar bell (unread-count
+badge, mark-read on click, mark-all-read action) via `lib/notifications.ts` +
+`types/notification.ts`. Backend: Section 5 → PLATFORM — NOTIFICATIONS. No settings/preferences
+page yet — the backend `GET/PATCH /notifications/preferences` routes exist but nothing in the UI
+calls them.
+
+### CRM — CAPTURE [🔵 PARTIAL — most of the frontend exists, previously documented as "zero"]
+
+This entry was wrong: three of the four planned pieces are built, just under different paths than
+originally planned (`settings/` instead of `crm/setup/capture`):
+
+- `/[orgId]/settings/apikeys` (`lib/apikeys.ts`) — API key list, create drawer with show-once raw key, revoke.
+- `/[orgId]/settings/integrations` (`lib/integrations.ts`) — inbound email address + social integration management (list/create/delete).
+- `/[orgId]/crm/visitors` (`lib/visitors.ts`) — visitor list + JS embed snippet generator.
+- `app/api/lead-capture/route.ts` — a live Next.js route handler proxying to the backend's public `/pub/leads` endpoint.
+
+**Still genuinely missing:** the `capture.*` permission group in `lib/permissionGroups.ts` — the
+six capture permissions (`capture.apikeys.*`, `capture.email.manage`, `capture.social.manage`,
+`capture.visitors.view`) are invisible in the Roles picker even though the pages that need them
+exist and work. This is the one item worth prioritizing here — it's the same class of bug as the
+r10 HRM permission-picker fix. No dedicated `types/capture.ts` — types are inlined in each lib file.
 
 ### HRM [✅ DONE — statuses setup added post-r10]
 
@@ -1019,19 +1275,19 @@ PLATFORM PRIMITIVES and PREP MIGRATIONS sit first because most entries below ref
 
 ---
 
-### PLATFORM PRIMITIVES [⚪ NOT STARTED — shared prerequisites, not a module]
+### PLATFORM PRIMITIVES [🔵 PARTIAL — #1/#2 built 2026-08-03, see Section 5; #3–#5 ⚪ NOT STARTED]
 
 Five buildable pieces of shared infrastructure that multiple modules need. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
 
 Two of these (notification, scheduler) were previously named only inside the CRM Advanced Functionality Pass entry below, as a parenthetical dependency. That mention is now superseded by this entry — one fact, one owner. The CRM entry keeps the dependency note but not the description.
 
-**1. Notification system**
-Delivery-path abstraction: in-app, email, (later) push. Per-user preference matrix, per-event-type opt-out, digest batching, read state. Consumers today: CRM reminders/SLA alerts. Consumers if HRM extends: every single module in the HRM Extended Modules entry below — onboarding reminders, appraisal cycle deadlines, certification expiry, benefit enrollment windows, helpdesk SLA breach, exit clearance nudges.
-Hard dependency: EMAIL SENDING (below) for anything outside in-app.
+**1. Notification system — ✅ built, see Section 5 → PLATFORM — NOTIFICATIONS**
+Delivery-path abstraction: in-app, email (Resend, real), (later) push. Per-user preference matrix, per-event-type opt-out, read state all built; digest batching not built. Consumer today: `auth` (password reset/invite) only — no CRM or HRM consumer wired yet. Consumers if HRM extends: every single module in the HRM Extended Modules entry below — onboarding reminders, appraisal cycle deadlines, certification expiry, benefit enrollment windows, helpdesk SLA breach, exit clearance nudges.
+Hard dependency (EMAIL SENDING) resolved — Resend is wired and live, not stubbed.
 
-**2. Scheduler registry**
-Named recurring jobs with Redis distributed locking (multi-instance safe), run history, failure alerting, manual trigger. HRM already runs two ad-hoc crons (milestones, absences) — those get migrated onto this rather than staying bespoke.
-Consumers: analytics snapshot runs, certification expiry sweeps, enrollment window open/close, ticket auto-close, system access revocation on last working date, cycle phase transitions.
+**2. Scheduler registry — ✅ built, see Section 5 → PLATFORM — SCHEDULER**
+Named recurring jobs with Redis distributed locking (multi-instance safe), run history, manual trigger built. Failure alerting (beyond `consecutive_failures` tracking) not built. The two ad-hoc HRM crons (milestones, absences) are migrated onto this — and both had latent bugs (one a stub, one silently erroring on a dropped column) fixed as part of the migration; see Section 5 entry for detail.
+Consumers still to come: analytics snapshot runs, certification expiry sweeps, enrollment window open/close, ticket auto-close, system access revocation on last working date, cycle phase transitions.
 
 **3. Resource-level permissions**
 Already listed separately below; consolidating the rationale here. Beyond module/action RBAC — per-record filtering, and a `view_own / view_team / view_all` tier applied consistently. `view_team` requires a reporting-manager chain to resolve against (see PREP MIGRATIONS).
@@ -1050,13 +1306,25 @@ Known consumers (all unbuilt): interview scorecards, appraisal forms, LMS assess
 
 ---
 
-### PREP MIGRATIONS [⚪ NOT STARTED — cheap now, expensive later]
+### PREP MIGRATIONS [✅ DONE — 2026-08-03]
 
 Schema hooks that cost one migration today and a system-wide rewrite if deferred:
 
-- `hrm_employees.reporting_manager_id` — verify whether this exists at all (source, not doc). Appraisal routing, expense approval, clearance ownership, `view_team` scoping, and org chart all resolve against it. If absent, this is the single highest-leverage migration in the doc.
-- `legal_entity_id` on org-scoped tables, auto-populated with one default entity, zero logic written. Adding the column later means touching every query, permission check, and report.
-- `currency` alongside every money column, even single-currency today.
+- ~~`hrm_employees.reporting_manager_id` — verify whether this exists at all~~ — resolved: it
+  exists as `hrm_employees.manager_id` (self-FK, `idx_hrm_emp_manager_id`, migration `00021`).
+  There was never a missing column here — the open question was only ever "does the doc's assumed
+  name match the source," and it didn't; the underlying capability was already there. Appraisal
+  routing, expense approval, clearance ownership, `view_team` scoping, and org chart all resolve
+  against `manager_id`, not a new column.
+- `legal_entity_id` — done, migration `00070`. Minimal `hrm_legal_entities` table (zero business
+  logic, per the original scope), one default entity per org, nullable FK backfilled onto every
+  HRM table that carries a direct `org_id` (36 tables).
+- `currency` — done, migration `00071`. `CHAR(3)` added alongside money columns that didn't have
+  one (`hrm_employee_salary_records`, `hrm_promotions`, `hrm_salary_components`,
+  `hrm_salary_structure_components`, `hrm_payslip_lines`), backfilled from each row's org
+  currency; existing ad-hoc `TEXT` currency columns (`organizations`, `hrm_awards`,
+  `hrm_terminations.severance_currency`, `hrm_payslips`, `hrm_payslip_runs`) standardized to the
+  same `CHAR(3)`.
 
 ---
 
@@ -1146,7 +1414,7 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 **Growth & development**
 
 - **Performance Management** — four sub-systems: goals/OKR with cascading parent-child and check-in history; appraisal cycles (configurable rating scales, template + scale snapshotted onto each instance, publish-immutable, phase state machine, `manager_id_snapshot` frozen at instantiation); 360 feedback (formal cycle-bound + continuous) with anonymity enforced at the repository layer plus a minimum-response threshold; PIP feeding into existing terminations. `final_rating` must be structured and queryable — compensation and succession both read it.
-  Depends on: form engine, resource-level permissions (draft leakage is the failure mode), notification, scheduler, `reporting_manager_id`.
+  Depends on: form engine, resource-level permissions (draft leakage is the failure mode), notification, scheduler, `hrm_employees.manager_id` (exists — see PREP MIGRATIONS).
 
 - **Learning & Development** — courses with mandatory version pinning on enrollment, modules/lessons, assessments, instructor-led sessions, certifications with expiry, skills taxonomy, training requests + budgets. No SCORM player, no video hosting — external links, PDFs via the Files module, mark-complete, quiz. Certification expiry sweep is the highest-value feature and is entirely scheduler-dependent. `hrm_skills` is consumed by recruitment, performance, and succession — treat it as shared taxonomy, not an LMS-internal table.
   Depends on: scheduler, form engine, reuses `hrm_acknowledgements` for compliance evidence.
@@ -1232,9 +1500,38 @@ Confirmed not started (r9 audit; unchanged): no Sentry SDK, no Caddyfile, `deplo
 
 ---
 
-### MOBILE APP [🔵 ACTIVE — architecture restored, backend contract defined, zero code written]
+### MOBILE APP [🔵 ACTIVE — real code exists; doc previously said "zero code written," which was false as of 2026-08-03]
 
-Expo + React Native. Full architecture restored from the r10 archive: Section 14 (Mobile Architecture) and Section 15 (Mobile Module Registry) — decided, not redesigned. Backend contract is a real entry now: Section 5 → AUTH → MOBILE. Suggested starting point: AUTH SCREENS (Section 15) paired with the AUTH — MOBILE backend routes, mirroring how every other module here starts with auth before anything else.
+**This entry was wrong.** `mobile/` was committed 2026-07-23 (`a350092`, "Mobile added," 93 files,
++5799/-144) — one day after r14 (2026-07-22) dated the "zero code" claim, so the commit simply
+never got folded back into the doc. Verified directly against source, not against the r10/r14
+plan. See Section 14 for the architecture-vs-actual diff and Section 15 for per-screen status.
+
+**What's real:** full Expo Router app under `mobile/src/`, real dependencies (`expo ~57.0.8`,
+`react-native 0.86.0`, `expo-router ~57.0.8`, `expo-secure-store ~57.0.1`, `zustand ^5.0.14`,
+TanStack Query, axios, react-hook-form/zod), `node_modules` installed. Auth screens (login,
+signup, forgot-password, reset-password), onboarding (create-organization, select-organization),
+dashboard shell, tasks, a single-screen tabbed CRM view, a flat settings screen, real Zustand
+stores (`authStore`, `permissionStore`, `uiStore`), real `expo-secure-store` token handling, real
+API client hitting the actual backend (`api.post('/auth/mobile/login', ...)`,
+`api.get('/organizations/:orgId/crm/leads')`).
+
+**What's stub or missing:** `components/{crm,tasks,rbac}/` are empty directories, tracked as
+nothing in git. `useAuth.ts`'s `forgotPassword`/`resetPassword` are `console.log` + fake
+`setTimeout` — the *pages* exist and the backend routes exist, but the mobile hook doesn't call
+them yet. No `security/` route at all. CRM is one screen with an internal tab switcher (Leads /
+Pipeline / Reports / Agenda / Setup), not split into per-entity routes the way web is. Settings is
+a single flat screen — no members/roles subroutes.
+
+**Structural deviations from the original plan** (not wrong, just different — update Section 14
+to match rather than "fix" the code to match a plan written before this was built): code lives
+under `mobile/src/...`, not bare `mobile/...`; there's an extra `apps/` wrapper route
+(`(dashboard)/[orgId]/apps/{index,crm}`) and an `alerts/` route neither one was planned for.
+
+Suggested next step, given the above: wire the two stub password-recovery calls in `useAuth.ts` to
+the real backend routes (`AUTH — MOBILE` already supports `password-reset/*` — no backend work
+needed), then decide whether to keep CRM as one tabbed screen or split it, before building
+anything further on top of it.
 
 ---
 
@@ -1354,18 +1651,21 @@ Before writing code that depends on any of these, check for version-specific API
 | go-redis            | v9.19.0                                                        |
 | golang-jwt/jwt      | v5.3.1                                                         |
 | expr-lang/expr      | v1.17.8                                                        |
+| shopspring/decimal  | v1.4.0 (added 00066, HRM money fields — Section 10)            |
+| robfig/cron/v3      | v3.0.1 (added 00067, `platform/scheduler`)                     |
+| resend/resend-go/v2 | v2.28.0 (added 00068, `platform/notifications` email channel)  |
 | Next.js             | 16.2.9 (check if unsure)                                       |
 | Tailwind CSS        | v4                                                             |
 | React               | latest stable                                                  |
-| Zustand             | v5                                                             |
+| Zustand             | v5.0.14                                                        |
 | next-themes         | latest stable                                                  |
 | React Hook Form     | v7                                                             |
 | TanStack Query      | v5                                                             |
 | Axios               | v1                                                             |
-| Expo SDK            | 57 (57.0.7 — confirm exact patch at scaffold time, moves fast) |
-| Expo Router         | bundled with Expo SDK 57                                       |
-| React Native        | 0.86 (bundled with SDK 57) — check package.json after scaffold |
-| expo-secure-store   | latest compatible with SDK 57                                  |
+| Expo SDK            | 57.0.8 confirmed (`mobile/package.json`, real app exists — see Section 9 → MOBILE APP) |
+| Expo Router         | ~57.0.8, bundled with Expo SDK 57                               |
+| React Native        | 0.86.0 confirmed (`mobile/package.json`)                        |
+| expo-secure-store   | ~57.0.1 confirmed (`mobile/package.json`)                       |
 
 `create-expo-app@latest` without `--template default@sdk-57` currently defaults to SDK 54 during
 the transition window — pass the flag explicitly.
@@ -1389,39 +1689,59 @@ Restored from the r10 archive, r14 — decided, not redesigned. Expo + React Nat
 the web frontend's architecture (Section 7) wherever the platform allows; diverges only where
 native constraints force it — token storage is the main one.
 
+**Corrected 2026-08-03 against the real `mobile/` tree** (see Section 9 → MOBILE APP) — the
+structure below is what was actually built, not the original r10/r14 plan. Differences from that
+plan: everything lives under a `src/` root (not bare `mobile/app/...`); there's an `apps/` wrapper
+route and an `alerts/` route neither one was planned for; CRM is one screen with an internal tab
+switcher, not split into per-entity routes; settings is flat, no members/roles subroutes; there is
+no `security/` route at all.
+
 ### Folder Structure
 
 ```
 mobile/
-  app/                        ← Expo Router file-based routes
-    (auth)/
-      login.tsx
-      signup.tsx
-      forgot-password.tsx
-      reset-password.tsx
-    (dashboard)/
-      [orgId]/
-        index.tsx             ← dashboard home
-        tasks/
-        crm/
-          leads/  contacts/  companies/  pipeline/  deals/  reports/
-        settings/
-          members/  roles/
-        security/
-    create-organization.tsx
-    select-organization.tsx
-    _layout.tsx               ← root layout: theme provider + auth gate
-  components/
-    ui/  layout/  crm/  tasks/  rbac/
-  lib/
-    api.ts  auth.ts  secureToken.ts  constants.ts
-  stores/
-    authStore.ts  permissionStore.ts  uiStore.ts
-  hooks/
-    useAuth.ts  usePermission.ts  useOrg.ts
-  theme/
-    tokens.ts  ThemeProvider.tsx
-  types/                      ← mirrors frontend/src/types/*
+  src/
+    app/                        ← Expo Router file-based routes
+      (auth)/
+        login.tsx               ← real
+        signup.tsx               ← real
+        forgot-password.tsx      ← real page; hook behind it is a stub (see below)
+        reset-password.tsx       ← real page; hook behind it is a stub (see below)
+        _layout.tsx
+      (dashboard)/
+        _layout.tsx
+        [orgId]/
+          _layout.tsx
+          index.tsx              ← dashboard home, real
+          tasks/index.tsx        ← real
+          apps/                  ← not in the original plan
+            index.tsx
+            crm/index.tsx        ← single screen, internal tabs: Leads/Pipeline/Reports/Agenda/Setup
+          alerts/index.tsx       ← not in the original plan
+          settings/              ← flat, no members/ or roles/ subroutes
+            _layout.tsx
+            index.tsx
+      create-organization.tsx    ← real
+      select-organization.tsx    ← real
+      index.tsx
+      _layout.tsx                ← root layout: theme provider + auth gate
+    components/
+      ui/  layout/                ← real
+      crm/  tasks/  rbac/          ← empty directories, nothing tracked in git
+    lib/
+      api.ts  auth.ts  secureToken.ts  constants.ts   ← all real
+      crmApi.ts  tasksApi.ts  orgApi.ts  dashboardApi.ts   ← not in the original plan, all real
+    stores/
+      authStore.ts  permissionStore.ts  uiStore.ts    ← real, same shape discipline as web
+    hooks/
+      useAuth.ts                 ← real for login/signup/logout; forgotPassword/resetPassword are
+                                    console.log + fake setTimeout, no real API call
+      usePermission.ts  useOrganization.ts             ← real (doc previously said `useOrg.ts`)
+    theme/
+      tokens.ts  ThemeProvider.tsx                     ← real
+    types/
+      index.ts                    ← real, single file (doc previously implied per-domain files
+                                     mirroring frontend/src/types/*; it's one file instead)
 ```
 
 ### Auth Flow (mobile)
@@ -1518,62 +1838,79 @@ you actually scaffold; Expo SDKs move fast enough that this note itself may be s
 
 ## 15. MOBILE MODULE REGISTRY
 
-Same status convention as Section 5/8/9. Nothing built yet — flips to `🔵 ACTIVE` per screen
-group as work starts on it, same promotion pattern as Section 9.
+Same status convention as Section 5/8/9. **This section previously said "nothing built yet" —
+false as of 2026-08-03; see Section 9 → MOBILE APP for the full correction.** Statuses below are
+verified directly against `mobile/src/`, not against the v1 plan this registry originally
+described.
 
 Scope note (added r14): this v1 list predates several web features shipped since r10 — Agenda,
-Setup/Routing, Templates, Capture. They're intentionally not represented here; decide inclusion
-explicitly when this registry is next revisited, don't assume either way.
+Setup/Routing, Templates, Capture. Capture/Agenda status per-screen is noted inline below where
+mobile happens to already cover them (folded into the single CRM screen); the rest still isn't
+represented here — decide inclusion explicitly when next revisited.
 
 ---
 
-### AUTH SCREENS [⚪ NOT STARTED — natural starting point]
+### AUTH SCREENS [🔵 ACTIVE — pages built, two hooks still stubbed]
 
-Login, signup, forgot password, reset password — same fields as web (Section 8, AUTH PAGES).
-Pairs with Section 5 → AUTH → MOBILE on the backend.
-
----
-
-### ONBOARDING [⚪ NOT STARTED]
-
-Create organization, select organization — shown after login when no org context exists.
+Login and signup screens are real and call the real backend (`AUTH — MOBILE`, Section 5). Forgot
+password and reset password *pages* exist (`(auth)/forgot-password.tsx`, `reset-password.tsx`),
+but the hook behind them (`useAuth.ts`) is `console.log` + a fake `setTimeout` — no real API call
+yet, even though the backend routes they'd need already exist. This is the one clear next step
+tracked in the Section 9 entry.
 
 ---
 
-### DASHBOARD SHELL [⚪ NOT STARTED]
+### ONBOARDING [✅ DONE]
 
-Tab bar or drawer navigation (mobile equivalent of the web sidebar), org switcher, profile menu.
-
----
-
-### TASKS [⚪ NOT STARTED]
-
-List with filters, create/edit, permission-gated actions — same permission set as web (`tasks.*`).
+`create-organization.tsx` and `select-organization.tsx` are real, top-level routes — shown after
+login when no org context exists, same as web.
 
 ---
 
-### CRM — LEADS & PIPELINE [⚪ NOT STARTED]
+### DASHBOARD SHELL [✅ DONE]
 
-Lead list + detail, convert flow, pipeline board (list view first — full drag-to-reorder Kanban is
-a lot of native gesture work for v1; move-via-menu instead of drag, revisit later).
+Root and `(dashboard)` layouts, org-scoped `[orgId]` layout, dashboard home (`index.tsx`) all real.
+Org switcher / profile-menu mechanics not independently re-verified beyond confirming the files
+are real and non-trivial (172 lines for the dashboard home alone).
+
+---
+
+### TASKS [✅ DONE]
+
+`tasks/index.tsx` (195 lines) is real, hits the same `tasks.*`-permissioned backend routes as web
+via `lib/tasksApi.ts`.
+
+---
+
+### CRM — LEADS & PIPELINE [🔵 PARTIAL — exists, but as one tabbed screen, not split routes]
+
+`apps/crm/index.tsx` (263 lines) is a single screen with an internal tab switcher covering Leads,
+Pipeline, Reports, Agenda, and Setup — not the per-entity route split (`leads/`, `pipeline/`, etc.)
+this registry originally called for. Real data, real API calls (`lib/crmApi.ts`), just a different
+information architecture than planned. Decide whether to keep this shape or split it before
+building further on top.
 
 ---
 
 ### CRM — CONTACTS [⚪ NOT STARTED]
 
-Contacts and companies list + detail.
+No Contacts or Companies tab was found in the single CRM screen above, and no separate route
+exists — still genuinely not built, unlike Leads/Pipeline/Reports/Agenda which got folded in.
 
 ---
 
-### CRM — REPORTS [⚪ NOT STARTED — v1: summary cards only]
+### CRM — REPORTS [🔵 PARTIAL — folded into the CRM tab screen, not a dedicated summary-cards screen]
 
-Full charts (Section 8's bar/pie breakdowns) are a lot of screen real estate for mobile — start
-with summary numbers, add charts later if they earn their place.
+A "Reports" tab exists inside `apps/crm/index.tsx` rather than the standalone summary-cards screen
+originally planned. Real data via `lib/crmApi.ts`; not independently verified whether it's cards
+or full charts — worth a direct look before assuming either way.
 
 ---
 
 ### SETTINGS — MEMBERS, ROLES & PERMISSIONS [⚪ NOT STARTED — lower priority]
 
+`settings/index.tsx` is a flat profile-style screen; it lists "Members" as a menu item but there is
+no `settings/members/` or `settings/roles/` route behind it — the label exists, the screen doesn't.
 Admin-heavy screens, arguably fine to stay web-only for v1. Revisit after the above ships.
 
 ---

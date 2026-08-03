@@ -29,6 +29,7 @@ type Service interface {
 	DeleteTemplate(ctx context.Context, orgID, ref string) error
 
 	// Instance lifecycle — called by other services
+	ListInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) (*InstanceListResponse, error)
 	CreateInstance(ctx context.Context, orgID string, req CreateInstanceRequest) (*ApprovalInstance, error)
 	GetInstance(ctx context.Context, orgID, ref string) (*ApprovalInstance, error)
 	Decide(ctx context.Context, orgID, instanceRef, approverID string, req DecisionRequest) (*ApprovalInstance, error)
@@ -133,6 +134,13 @@ func (s *serviceImpl) FindDefault(ctx context.Context, orgID string, actionType 
 		t.Levels = levels
 	}
 	return t, nil
+}
+
+func (s *serviceImpl) ListInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) (*InstanceListResponse, error) {
+	list, total, err := s.repo.FindAllInstances(ctx, orgID, limit, offset, status, requesterID)
+	if err != nil { return nil, fmt.Errorf("approvals: ListInstances: %w", err) }
+	if list == nil { list = []*ApprovalInstance{} }
+	return &InstanceListResponse{Instances: list, Total: total}, nil
 }
 
 func (s *serviceImpl) CreateInstance(ctx context.Context, orgID string, req CreateInstanceRequest) (*ApprovalInstance, error) {
