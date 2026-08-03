@@ -16,6 +16,12 @@ export const queryKeys = {
     avatars: () => ["profile", "avatars"] as const,
   },
 
+  // Not org-scoped — /api/v1/notifications is per-user, like /api/v1/me.
+  notifications: {
+    list: () => ["notifications", "list"] as const,
+    preferences: () => ["notifications", "preferences"] as const,
+  },
+
   dashboard: {
     metrics: (orgId: string) => ["dashboard", orgId, "metrics"] as const,
   },
@@ -243,6 +249,13 @@ export const queryKeys = {
       all: (orgId: string) => ["hrm", orgId, "approval-templates"] as const,
       list: (orgId: string) =>
         ["hrm", orgId, "approval-templates", "list"] as const,
+    },
+    approvalInstances: {
+      all: (orgId: string) => ["hrm", orgId, "approval-instances"] as const,
+      list: (orgId: string) =>
+        ["hrm", orgId, "approval-instances", "list"] as const,
+      detail: (orgId: string, instanceId: string) =>
+        ["hrm", orgId, "approval-instances", instanceId] as const,
     },
   },
 } as const;

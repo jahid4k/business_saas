@@ -23,6 +23,7 @@ type Repository interface {
 	FindTemplateLevels(ctx context.Context, templateID string) ([]*ApprovalTemplateLevel, error)
 
 	// Instances
+	FindAllInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) ([]*ApprovalInstance, int, error)
 	FindInstanceByRef(ctx context.Context, orgID, ref string) (*ApprovalInstance, error)
 	FindInstanceByEntity(ctx context.Context, entityType, entityID string) (*ApprovalInstance, error)
 	CreateInstance(ctx context.Context, inst *ApprovalInstance) error
@@ -130,6 +131,45 @@ func (r *repoImpl) FindTemplateLevels(ctx context.Context, templateID string) ([
 		list = append(list, lv)
 	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) FindAllInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) ([]*ApprovalInstance, int, error) {
+	where := "WHERE org_id=$1"
+	args := []any{orgID}
+	
+	if status != "" {
+		args = append(args, status)
+		where += fmt.Sprintf(" AND overall_status=$%d", len(args))
+	}
+	if requesterID != "" {
+		args = append(args, requesterID)
+		where += fmt.Sprintf(" AND requested_by=$%d", len(args))
+	}
+	
+	var total int
+	err := r.db.QueryRow(ctx, "SELECT count(*) FROM hrm_approval_instances "+where, args...).Scan(&total)
+	if err != nil { return nil, 0, err }
+	
+	q := `SELECT id, public_id, org_id, template_id, entity_type, entity_id, instance_snapshot,
+		current_level, overall_status, requested_by, created_at, updated_at, completed_at
+		FROM hrm_approval_instances ` + where + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", len(args)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(args)+2)
+	args = append(args, limit, offset)
+	
+	rows, err := r.db.Query(ctx, q, args...)
+	if err != nil { return nil, 0, err }
+	defer rows.Close()
+	
+	list := make([]*ApprovalInstance, 0)
+	for rows.Next() {
+		inst := &ApprovalInstance{}
+		err := rows.Scan(&inst.ID, &inst.PublicID, &inst.OrgID, &inst.TemplateID, &inst.EntityType, &inst.EntityID,
+			&inst.InstanceSnapshot, &inst.CurrentLevel, &inst.OverallStatus, &inst.RequestedBy,
+			&inst.CreatedAt, &inst.UpdatedAt, &inst.CompletedAt)
+		if err != nil { return nil, 0, err }
+		_ = inst.ParseSnapshot()
+		list = append(list, inst)
+	}
+	return list, total, rows.Err()
 }
 
 func (r *repoImpl) FindInstanceByRef(ctx context.Context, orgID, ref string) (*ApprovalInstance, error) {

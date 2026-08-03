@@ -4,11 +4,20 @@ package payslips
 import (
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
 	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
 )
 
-func f(v float64) *float64 { return &v }
+func f(v float64) *decimal.Decimal {
+	d := decimal.NewFromFloat(v)
+	return &d
+}
+
+func d(v float64) decimal.Decimal {
+	return decimal.NewFromFloat(v)
+}
 
 // twoBracket mirrors the exact example documented on hrm_salary_components.slab_config
 // (migration 00023) and salary.SlabConfig: 5% up to 30,000, 10% on everything above.
@@ -16,8 +25,8 @@ func twoBracket() *hrmsalary.SlabConfig {
 	return &hrmsalary.SlabConfig{
 		BaseVariable: "GROSS",
 		Slabs: []hrmsalary.Slab{
-			{UpTo: f(30000), Rate: 0.05},
-			{UpTo: nil, Rate: 0.10},
+			{UpTo: f(30000), Rate: d(0.05)},
+			{UpTo: nil, Rate: d(0.10)},
 		},
 	}
 }
@@ -50,9 +59,9 @@ func TestComputeSlab_ThreeBrackets_ProgressiveTaxStyle(t *testing.T) {
 	cfg := &hrmsalary.SlabConfig{
 		BaseVariable: "GROSS",
 		Slabs: []hrmsalary.Slab{
-			{UpTo: f(10000), Rate: 0.0},
-			{UpTo: f(30000), Rate: 0.10},
-			{UpTo: nil, Rate: 0.20},
+			{UpTo: f(10000), Rate: d(0.0)},
+			{UpTo: f(30000), Rate: d(0.10)},
+			{UpTo: nil, Rate: d(0.20)},
 		},
 	}
 	// 10000 @ 0% = 0, next 20000 (10000→30000) @ 10% = 2000, next 20000 (30000→50000) @ 20% = 4000
@@ -72,8 +81,8 @@ func TestComputeSlab_UnsortedInputIsSortedDefensively(t *testing.T) {
 	cfg := &hrmsalary.SlabConfig{
 		BaseVariable: "GROSS",
 		Slabs: []hrmsalary.Slab{
-			{UpTo: nil, Rate: 0.10},
-			{UpTo: f(30000), Rate: 0.05},
+			{UpTo: nil, Rate: d(0.10)},
+			{UpTo: f(30000), Rate: d(0.05)},
 		},
 	}
 	got := hrmpayslips.ComputeSlab(100000, cfg)

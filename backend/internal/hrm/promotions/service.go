@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
@@ -62,7 +64,7 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy s
 
 	// Snapshot current employee state
 	var fromPosID, fromDeptID *string
-	var fromBasicPay *float64
+	var fromBasicPay *decimal.Decimal
 	_ = s.db.QueryRow(ctx,
 		`SELECT position_id::text, department_id::text,
 		(SELECT basic_pay FROM hrm_employee_salary_records

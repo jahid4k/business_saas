@@ -22,6 +22,6 @@ func RegisterRoutes(
 	pub.Post("/identify", middleware.RequireAPIKey(apiKeySvc, "capture:visitors"), handler.Identify)
 
 	// Authenticated dashboard routes
-	org := router.Group("/organizations/:orgId/capture/visitors", requireAuth, requireOrgMatch, permFn("crm.view"))
+	org := router.Group("/organizations/:orgId/capture/visitors", requireAuth, requireOrgMatch, permFn("capture.visitors.view"))
 	org.Get("/", handler.ListVisitors)
 }

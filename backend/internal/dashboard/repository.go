@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -64,7 +65,8 @@ func (r *Repository) GetStagnantDeals(ctx context.Context, orgID string, days in
 		LIMIT $3
 	`
 	items := make([]*ActionItem, 0)
-	rows, err := r.db.Query(ctx, query, orgID, days, limit)
+	daysStr := strconv.Itoa(days)
+	rows, err := r.db.Query(ctx, query, orgID, daysStr, limit)
 	if err != nil {
 		return items, err
 	}

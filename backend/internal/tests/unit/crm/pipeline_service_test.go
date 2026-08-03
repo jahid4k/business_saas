@@ -370,8 +370,8 @@ func TestListStages_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if len(resp.Stages) != 2 {
-		t.Errorf("expected 2 stages, got %d", len(resp.Stages))
+	if len(resp.Stages) != 5 {
+		t.Errorf("expected 5 stages, got %d", len(resp.Stages))
 	}
 }
 

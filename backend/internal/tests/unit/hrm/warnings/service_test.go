@@ -121,6 +121,9 @@ func (s *stubApprovalsSvc) GetInstance(context.Context, string, string) (*approv
 func (s *stubApprovalsSvc) Decide(context.Context, string, string, string, approvals.DecisionRequest) (*approvals.ApprovalInstance, error) { return nil, nil }
 func (s *stubApprovalsSvc) CancelInstance(context.Context, string, string, string) (*approvals.ApprovalInstance, error) { return nil, nil }
 func (s *stubApprovalsSvc) RegisterCallback(string, approvals.EntityCallback) {}
+func (s *stubApprovalsSvc) ListInstances(context.Context, string, int, int, string, string) (*approvals.InstanceListResponse, error) {
+	return nil, nil
+}
 
 func newDummyPool() *pgxpool.Pool {
 	cfg, _ := pgxpool.ParseConfig("postgres://dummy:dummy@127.0.0.1:5432/dummy?sslmode=disable")

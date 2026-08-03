@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/mridha/businesssaas/internal/hrm/salary"
+	"github.com/shopspring/decimal"
 )
 
 type stubRepo struct {
@@ -125,7 +126,7 @@ func (s *stubRepo) StructureNameExists(ctx context.Context, orgID, name, exclude
 	}
 	return false, nil
 }
-func (s *stubRepo) AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *float64, displayOrder int) error {
+func (s *stubRepo) AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *decimal.Decimal, displayOrder int) error {
 	if s.structComp[structureID] == nil {
 		s.structComp[structureID] = make(map[string]bool)
 	}
@@ -223,7 +224,7 @@ func TestSalaryService(t *testing.T) {
 	// Assign Salary
 	assignReq := salary.AssignSalaryRequest{
 		StructureID:   &st.ID,
-		BasicPay:      5000,
+		BasicPay:      decimal.NewFromInt(5000),
 		EffectiveDate: "2024-01-01",
 		ChangeReason:  salary.ChangeReasonJoining,
 	}
@@ -231,8 +232,8 @@ func TestSalaryService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AssignSalary failed: %v", err)
 	}
-	if rec.BasicPay != 5000 {
-		t.Errorf("Expected basic pay 5000, got %f", rec.BasicPay)
+	if !rec.BasicPay.Equal(decimal.NewFromInt(5000)) {
+		t.Errorf("Expected basic pay 5000, got %s", rec.BasicPay.String())
 	}
 
 	// Remove Component

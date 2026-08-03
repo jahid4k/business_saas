@@ -115,6 +115,14 @@ func (r *stubOrgRepo) FindByUserID(_ context.Context, userID string) ([]*organiz
 	return nil, nil
 }
 
+func (r *stubOrgRepo) FindAllIDs(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (r *stubOrgRepo) Update(_ context.Context, b *organizations.Business) error {
+	return nil
+}
+
 // ── Stub authz repo ──────────────────────────────────────────────────────────
 
 type stubAuthzRepo struct {

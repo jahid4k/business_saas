@@ -149,6 +149,9 @@ func (s *stubApprovalsSvc) CancelInstance(context.Context, string, string, strin
 	return nil, nil
 }
 func (s *stubApprovalsSvc) RegisterCallback(string, approvals.EntityCallback) {}
+func (s *stubApprovalsSvc) ListInstances(context.Context, string, int, int, string, string) (*approvals.InstanceListResponse, error) {
+	return nil, nil
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

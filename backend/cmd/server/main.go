@@ -57,10 +57,10 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
-	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/security"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
@@ -70,6 +70,8 @@ import (
 	// ── Internal — Platform (shared across modules) ───────────────────────────
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
+	"github.com/mridha/businesssaas/internal/platform/scheduler"
 
 	// ── Internal — Capture ────────────────────────────────────────────────────
 	"github.com/mridha/businesssaas/internal/capture/apikeys"
@@ -211,6 +213,7 @@ func main() {
 	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
+	schedulerRepo := scheduler.NewRepository(pgPool)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineRepo := crmpipeline.NewRepository(pgPool)
@@ -275,7 +278,12 @@ func main() {
 	auditSvc := audit.NewService(auditRepo)
 	userSvc := user.NewService(userRepo)
 	avatarSvc := user.NewAvatarService(avatarRepo)
-	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
+	
+	// ── Platform ──────────────────────────────────────────────────────────────
+	notifRepo := notifications.NewRepository(pgPool)
+	notifSvc := notifications.NewService(cfg.Notifications, notifRepo)
+	
+	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc, notifSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
 	dashboardSvc := dashboard.NewService(dashboardRepo)
@@ -285,6 +293,7 @@ func main() {
 	// ── Platform ──────────────────────────────────────────────────────────────
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
+	schedulerSvc := scheduler.NewService(schedulerRepo, redisClient)
 
 	// ── CRM (wire in dependency order) ────────────────────────────────────────
 	crmSettingsSvc := crmsettings.NewService(crmSettingsRepo)
@@ -378,6 +387,8 @@ func main() {
 	contactsHandler := contacts.NewHandler(contactsSvc)
 	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
+	schedulerHandler := scheduler.NewHandler(schedulerSvc)
+	notifHandler := notifications.NewHandler(notifSvc)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineHandler := crmpipeline.NewHandler(pipelineSvc)
@@ -502,6 +513,8 @@ func main() {
 	// ── Platform (shared layer — CRM and future modules) ──────────────────────
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
+	scheduler.RegisterRoutes(api, schedulerHandler, requireAuth, permFn)
+	notifications.RegisterRoutes(api, notifHandler, requireAuth)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	crmleads.RegisterRoutes(api, leadsHandler, permFn, requireAuth, requireOrgMatch)
@@ -594,6 +607,56 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	// Start the background scheduler
+	go schedulerSvc.Start(ctx)
+
+	// Register scheduler jobs
+	schedulerSvc.Register("milestones.generate_upcoming", "0 1 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		now := time.Now()
+		req := hrmmilestones.GenerateRequest{
+			Year:                    now.Year(),
+			Month:                   int(now.Month()),
+			IncludeAnniversaries:    true,
+			IncludeBirthdays:        true,
+			IncludeProbation:        true,
+			IncludeContractRenewals: true,
+		}
+		var total int
+		for _, orgID := range orgIDs {
+			res, err := hrmMilestonesSvc.GenerateUpcoming(jCtx, orgID, scheduler.SystemUserID, req)
+			if err != nil {
+				slog.Error("scheduler: milestones generation failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			if res != nil {
+				total += res.Generated
+			}
+		}
+		return total, nil
+	})
+
+	schedulerSvc.Register("attendance.absence_sweep", "0 2 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		sweepDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02") // yesterday
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmAttendanceSvc.RunAbsenceSweep(jCtx, orgID, scheduler.SystemUserID, sweepDate)
+			if err != nil {
+				slog.Error("scheduler: absence sweep failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
 
 	<-quit
 	slog.Info("shutdown signal received")

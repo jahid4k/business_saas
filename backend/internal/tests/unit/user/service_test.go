@@ -74,6 +74,7 @@ func (r *stubUserRepo) UpdateSettings(_ context.Context, id string, req user.Upd
 
 func (r *stubUserRepo) RecordFailedLogin(_ context.Context, _ string) error     { return nil }
 func (r *stubUserRepo) RecordSuccessfulLogin(_ context.Context, _ string) error { return nil }
+func (r *stubUserRepo) UpdatePassword(_ context.Context, _ string, _ string) error { return nil }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ package attendance
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +28,10 @@ type Service interface {
 	LockPeriod(ctx context.Context, orgID, lockedBy string, year, month int) (*AttendancePeriod, error)
 	// Summary (called by D2 payslip compute)
 	GetEmployeeSummary(ctx context.Context, orgID, employeeID string, year, month int) (*EmployeeSummary, error)
+	// RunAbsenceSweep marks active employees absent for `date` when they have no
+	// attendance record, it's a working day for their shift, it isn't a holiday, and
+	// they have no approved leave covering it. Returns the number of records created.
+	RunAbsenceSweep(ctx context.Context, orgID, createdBy, date string) (int, error)
 }
 
 type serviceImpl struct {
@@ -66,7 +71,7 @@ func (s *serviceImpl) Record(ctx context.Context, orgID, createdBy string, req C
 	// Resolve shift for this employee
 	var shiftID, shiftName *string
 	var expectedIn, expectedOut *string
-	s.resolveShift(ctx, orgID, req.EmployeeID, &shiftID, &shiftName, &expectedIn, &expectedOut)
+	s.resolveShift(ctx, orgID, req.EmployeeID, req.Date, &shiftID, &shiftName, &expectedIn, &expectedOut)
 
 	// Compute hours
 	breakMins := 0
@@ -94,28 +99,32 @@ func (s *serviceImpl) Record(ctx context.Context, orgID, createdBy string, req C
 	return rec, nil
 }
 
-// resolveShift looks up the employee's assigned shift (employee > dept > org > default).
-func (s *serviceImpl) resolveShift(ctx context.Context, orgID, employeeID string, shiftID, shiftName, expectedIn, expectedOut **string) {
+// resolveShift looks up the employee's assigned shift as of `date` (employee > dept > org),
+// returning the shift's working_days (e.g. {mon,tue,wed,thu,fri}) so callers can determine
+// whether `date` is a working day for this employee.
+func (s *serviceImpl) resolveShift(ctx context.Context, orgID, employeeID, date string, shiftID, shiftName, expectedIn, expectedOut **string) []string {
 	var id, name, sin, sout string
+	var workingDays []string
 	err := s.db.QueryRow(ctx,
-		`SELECT sh.id::text, sh.name, sh.start_time::text, sh.end_time::text
+		`SELECT sh.id::text, sh.name, sh.start_time::text, sh.end_time::text, sh.working_days
 		FROM hrm_work_schedule_assignments wsa
 		JOIN hrm_shifts sh ON sh.id = wsa.shift_id
 		WHERE wsa.org_id=$1 AND sh.is_active=TRUE
 		AND (
-		    (wsa.scope='employee' AND wsa.entity_id=$2::uuid) OR
-		    (wsa.scope='department' AND wsa.entity_id=(SELECT department_id FROM hrm_employees WHERE id=$2::uuid)) OR
-		    (wsa.scope='organization')
+		    (wsa.assignee_type='employee' AND wsa.assignee_id=$2::uuid) OR
+		    (wsa.assignee_type='department' AND wsa.assignee_id=(SELECT department_id FROM hrm_employees WHERE id=$2::uuid)) OR
+		    (wsa.assignee_type='organization')
 		)
-		AND (wsa.end_date IS NULL OR wsa.end_date >= CURRENT_DATE)
-		AND wsa.effective_date <= CURRENT_DATE
-		ORDER BY CASE wsa.scope WHEN 'employee' THEN 1 WHEN 'department' THEN 2 ELSE 3 END
+		AND (wsa.end_date IS NULL OR wsa.end_date >= $3::date)
+		AND wsa.effective_date <= $3::date
+		ORDER BY CASE wsa.assignee_type WHEN 'employee' THEN 1 WHEN 'department' THEN 2 ELSE 3 END
 		LIMIT 1`,
-		orgID, employeeID,
-	).Scan(&id, &name, &sin, &sout)
+		orgID, employeeID, date,
+	).Scan(&id, &name, &sin, &sout, &workingDays)
 	if err == nil {
 		*shiftID = &id; *shiftName = &name; *expectedIn = &sin; *expectedOut = &sout
 	}
+	return workingDays
 }
 
 // computeHours returns (regular_hours, overtime_hours) from check_in/out times.
@@ -262,4 +271,130 @@ func (s *serviceImpl) LockPeriod(ctx context.Context, orgID, lockedBy string, ye
 
 func (s *serviceImpl) GetEmployeeSummary(ctx context.Context, orgID, employeeID string, year, month int) (*EmployeeSummary, error) {
 	return s.repo.GetEmployeeSummary(ctx, orgID, employeeID, year, month)
+}
+
+func (s *serviceImpl) RunAbsenceSweep(ctx context.Context, orgID, createdBy, date string) (int, error) {
+	parsedDate, err := time.Parse(dateLayout, date)
+	if err != nil {
+		return 0, fmt.Errorf("attendance: RunAbsenceSweep: invalid date: %w", err)
+	}
+	weekday := strings.ToLower(parsedDate.Format("Mon")) // "mon", "tue", ...
+
+	rows, err := s.db.Query(ctx,
+		`SELECT e.id::text, e.department_id::text
+		FROM hrm_employees e
+		JOIN hrm_employee_statuses st ON st.id = e.status_id
+		WHERE e.org_id=$1 AND st.category='active'`,
+		orgID)
+	if err != nil {
+		return 0, fmt.Errorf("attendance: RunAbsenceSweep: list active employees: %w", err)
+	}
+	type activeEmp struct {
+		ID     string
+		DeptID *string
+	}
+	var employees []activeEmp
+	for rows.Next() {
+		var e activeEmp
+		if err := rows.Scan(&e.ID, &e.DeptID); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("attendance: RunAbsenceSweep: scan employee: %w", err)
+		}
+		employees = append(employees, e)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("attendance: RunAbsenceSweep: %w", err)
+	}
+
+	created := 0
+	for _, emp := range employees {
+		existing, err := s.repo.FindByEmployeeDate(ctx, orgID, emp.ID, date)
+		if err != nil || existing != nil {
+			continue
+		}
+
+		var shiftID, shiftName, expectedIn, expectedOut *string
+		workingDays := s.resolveShift(ctx, orgID, emp.ID, date, &shiftID, &shiftName, &expectedIn, &expectedOut)
+		if len(workingDays) > 0 && !slices.Contains(workingDays, weekday) {
+			continue // weekend/off day for this employee's shift
+		}
+
+		if s.isHoliday(ctx, orgID, emp.ID, emp.DeptID, date) {
+			continue
+		}
+		if s.hasApprovedLeave(ctx, emp.ID, date) {
+			continue
+		}
+
+		rec := &AttendanceRecord{
+			OrgID: orgID, EmployeeID: emp.ID,
+			AttendanceDate: date,
+			ShiftID:        shiftID, ShiftName: shiftName,
+			ExpectedIn: expectedIn, ExpectedOut: expectedOut,
+			DayType: DayAbsent, Source: SourceSystem, Status: StatusApproved,
+			CreatedBy: createdBy,
+		}
+		if err := s.repo.Create(ctx, rec); err != nil {
+			continue
+		}
+		created++
+	}
+	return created, nil
+}
+
+// isHoliday reports whether `date` is a holiday under the calendar assigned to the
+// employee, falling back to department then organization (documented cascade in
+// hrm_calendar_assignments: employee > department > organization).
+func (s *serviceImpl) isHoliday(ctx context.Context, orgID, employeeID string, deptID *string, date string) bool {
+	calendarID := s.resolveHolidayCalendar(ctx, orgID, employeeID, deptID)
+	if calendarID == "" {
+		return false
+	}
+	var exists bool
+	_ = s.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM hrm_holidays WHERE calendar_id=$1::uuid AND date=$2::date)`,
+		calendarID, date,
+	).Scan(&exists)
+	return exists
+}
+
+func (s *serviceImpl) resolveHolidayCalendar(ctx context.Context, orgID, employeeID string, deptID *string) string {
+	var calendarID string
+	if err := s.db.QueryRow(ctx,
+		`SELECT calendar_id::text FROM hrm_calendar_assignments WHERE assignee_type='employee' AND assignee_id=$1::uuid`,
+		employeeID,
+	).Scan(&calendarID); err == nil {
+		return calendarID
+	}
+	if deptID != nil {
+		if err := s.db.QueryRow(ctx,
+			`SELECT calendar_id::text FROM hrm_calendar_assignments WHERE assignee_type='department' AND assignee_id=$1::uuid`,
+			*deptID,
+		).Scan(&calendarID); err == nil {
+			return calendarID
+		}
+	}
+	if err := s.db.QueryRow(ctx,
+		`SELECT calendar_id::text FROM hrm_calendar_assignments WHERE assignee_type='organization' AND assignee_id=$1::uuid`,
+		orgID,
+	).Scan(&calendarID); err == nil {
+		return calendarID
+	}
+	return ""
+}
+
+// hasApprovedLeave reports whether the employee has an approved leave request
+// covering `date`.
+func (s *serviceImpl) hasApprovedLeave(ctx context.Context, employeeID, date string) bool {
+	var exists bool
+	_ = s.db.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM hrm_leave_requests
+			WHERE employee_id=$1::uuid AND status='approved'
+			AND start_date <= $2::date AND end_date >= $2::date
+		)`,
+		employeeID, date,
+	).Scan(&exists)
+	return exists
 }

@@ -4,6 +4,8 @@ package payslips
 import (
 	"errors"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type RunStatus string
@@ -35,9 +37,9 @@ type PayslipRun struct {
 	Currency            string     `db:"currency"              json:"currency"`
 	AttendancePeriodID  *string    `db:"attendance_period_id"  json:"attendance_period_id,omitempty"`
 	TotalEmployees      int        `db:"total_employees"       json:"total_employees"`
-	TotalGrossPay       float64    `db:"total_gross_pay"       json:"total_gross_pay"`
-	TotalDeductions     float64    `db:"total_deductions"      json:"total_deductions"`
-	TotalNetPay         float64    `db:"total_net_pay"         json:"total_net_pay"`
+	TotalGrossPay       decimal.Decimal `db:"total_gross_pay"       json:"total_gross_pay"`
+	TotalDeductions     decimal.Decimal `db:"total_deductions"      json:"total_deductions"`
+	TotalNetPay         decimal.Decimal `db:"total_net_pay"         json:"total_net_pay"`
 	Status              RunStatus  `db:"status"                json:"status"`
 	ComputedAt          *time.Time `db:"computed_at"           json:"computed_at,omitempty"`
 	ComputedBy          *string    `db:"computed_by"           json:"computed_by,omitempty"`
@@ -61,10 +63,10 @@ type Payslip struct {
 	PeriodMonth         int        `db:"period_month"          json:"period_month"`
 	SalaryStructureID   *string    `db:"salary_structure_id"   json:"salary_structure_id,omitempty"`
 	SalaryStructureName *string    `db:"salary_structure_name" json:"salary_structure_name,omitempty"`
-	GrossPay            float64    `db:"gross_pay"             json:"gross_pay"`
-	TotalDeductions     float64    `db:"total_deductions"      json:"total_deductions"`
-	NetPay              float64    `db:"net_pay"               json:"net_pay"`
-	BasicPay            float64    `db:"basic_pay"             json:"basic_pay"`
+	GrossPay            decimal.Decimal `db:"gross_pay"             json:"gross_pay"`
+	TotalDeductions     decimal.Decimal `db:"total_deductions"      json:"total_deductions"`
+	NetPay              decimal.Decimal `db:"net_pay"               json:"net_pay"`
+	BasicPay            decimal.Decimal `db:"basic_pay"             json:"basic_pay"`
 	WorkDays            int        `db:"work_days"             json:"work_days"`
 	PresentDays         int        `db:"present_days"          json:"present_days"`
 	AbsentDays          int        `db:"absent_days"           json:"absent_days"`
@@ -91,7 +93,7 @@ type PayslipLine struct {
 	ComponentType  string    `db:"component_type"  json:"component_type"`
 	CalcMethod     string    `db:"calc_method"     json:"calc_method"`
 	FormulaUsed    *string   `db:"formula_used"    json:"formula_used,omitempty"`
-	ComputedAmount float64   `db:"computed_amount" json:"computed_amount"`
+	ComputedAmount decimal.Decimal `db:"computed_amount" json:"computed_amount"`
 	DisplayOrder   int       `db:"display_order"   json:"display_order"`
 	CreatedAt      time.Time `db:"created_at"      json:"created_at"`
 }

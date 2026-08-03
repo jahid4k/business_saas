@@ -18,6 +18,8 @@ type Business struct {
 	Country   string     `db:"country" json:"country,omitempty"`
 	Timezone  string     `db:"timezone" json:"timezone"`
 	Currency  string     `db:"currency" json:"currency"`
+	MoneyRoundingScale int `db:"money_rounding_scale" json:"moneyRoundingScale"`
+	MoneyRoundingMode  string `db:"money_rounding_mode" json:"moneyRoundingMode"`
 	Status    string     `db:"status" json:"status"`
 	CreatedAt time.Time  `db:"created_at" json:"createdAt"`
 	UpdatedAt time.Time  `db:"updated_at" json:"updatedAt"`

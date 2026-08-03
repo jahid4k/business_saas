@@ -2,6 +2,7 @@
 package terminations
 
 import (
+	"github.com/shopspring/decimal"
 	"errors"
 	"time"
 )
@@ -54,7 +55,7 @@ type Termination struct {
 	InternalNotes          *string           `db:"internal_notes"            json:"internal_notes,omitempty"`
 	ApprovalInstanceID     *string           `db:"approval_instance_id"      json:"approval_instance_id,omitempty"`
 	DocumentID             *string           `db:"document_id"               json:"document_id,omitempty"`
-	SeveranceAmount        *float64          `db:"severance_amount"          json:"severance_amount,omitempty"`
+	SeveranceAmount        *decimal.Decimal          `db:"severance_amount"          json:"severance_amount,omitempty"`
 	SeveranceCurrency      string            `db:"severance_currency"        json:"severance_currency"`
 	IsRehireEligible       bool              `db:"is_rehire_eligible"        json:"is_rehire_eligible"`
 	ExitClearanceCompleted bool              `db:"exit_clearance_completed"  json:"exit_clearance_completed"`
@@ -72,7 +73,7 @@ type CreateTerminationRequest struct {
 	LastWorkingDate   string          `json:"last_working_date"`
 	Reason            *string         `json:"reason"`
 	InternalNotes     *string         `json:"internal_notes"`
-	SeveranceAmount   *float64        `json:"severance_amount"`
+	SeveranceAmount   *decimal.Decimal        `json:"severance_amount"`
 	SeveranceCurrency *string         `json:"severance_currency"`
 	IsRehireEligible  *bool           `json:"is_rehire_eligible"` // defaults true
 }
@@ -82,7 +83,7 @@ type UpdateTerminationRequest struct {
 	LastWorkingDate        *string  `json:"last_working_date"`
 	Reason                 *string  `json:"reason"`
 	InternalNotes          *string  `json:"internal_notes"`
-	SeveranceAmount        *float64 `json:"severance_amount"`
+	SeveranceAmount        *decimal.Decimal `json:"severance_amount"`
 	IsRehireEligible       *bool    `json:"is_rehire_eligible"`
 	ExitClearanceCompleted *bool    `json:"exit_clearance_completed"`
 	DocumentID             *string  `json:"document_id"`
