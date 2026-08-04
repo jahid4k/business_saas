@@ -32,6 +32,14 @@ type Service interface {
 	// Can three times themselves. ScopeNone means the caller holds none of the
 	// three tiers — the base "<resource>.view" route gate is unaffected by this.
 	ResolveScope(ctx context.Context, userID, organizationID, resource string) (Scope, error)
+	// RoleExists reports whether roleName resolves to a role visible to
+	// organizationID. Used by platform/checklists to validate owner_role
+	// on write, so a typo doesn't silently produce an item nobody can claim.
+	RoleExists(ctx context.Context, organizationID, roleName string) (bool, error)
+	// UserRoleName returns the name of the role userID holds in
+	// organizationID via a live membership, or "" if none. Used by
+	// platform/checklists for completion authorization and /items/mine.
+	UserRoleName(ctx context.Context, organizationID, userID string) (string, error)
 	GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error)
 	MyMembership(ctx context.Context, userID, organizationID string) (*MyMembershipResponse, error)
 	ListMembers(ctx context.Context, organizationID string) ([]*MemberWithUser, error)
@@ -141,6 +149,22 @@ func (s *serviceImpl) ResolveScope(ctx context.Context, userID, organizationID, 
 		}
 	}
 	return ScopeNone, nil
+}
+
+func (s *serviceImpl) RoleExists(ctx context.Context, organizationID, roleName string) (bool, error) {
+	ok, err := s.repo.RoleExists(ctx, organizationID, roleName)
+	if err != nil {
+		return false, fmt.Errorf("authz: RoleExists: %w", err)
+	}
+	return ok, nil
+}
+
+func (s *serviceImpl) UserRoleName(ctx context.Context, organizationID, userID string) (string, error) {
+	name, err := s.repo.UserRoleName(ctx, organizationID, userID)
+	if err != nil {
+		return "", fmt.Errorf("authz: UserRoleName: %w", err)
+	}
+	return name, nil
 }
 
 func (s *serviceImpl) GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error) {

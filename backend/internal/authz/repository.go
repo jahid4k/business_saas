@@ -21,6 +21,14 @@ type Repository interface {
 	GetRoleByName(ctx context.Context, name string) (*Role, error)
 	GetRoleByID(ctx context.Context, roleID string) (*Role, error)
 	GetRoleByRef(ctx context.Context, organizationID, roleRef string) (*Role, error)
+	// RoleExists reports whether roleName resolves to a role visible to
+	// organizationID (org-owned or global system role), case-insensitive.
+	RoleExists(ctx context.Context, organizationID, roleName string) (bool, error)
+	// UserRoleName returns the name of the role userID currently holds via
+	// an active, accepted membership in organizationID — preferring an
+	// org-owned role over a same-named global one. Returns "" (not an
+	// error) when there is no live membership.
+	UserRoleName(ctx context.Context, organizationID, userID string) (string, error)
 	UpdateMembershipRole(ctx context.Context, userID, organizationID, roleID string) error
 	UpdateMembership(ctx context.Context, organizationID, memberRef string, role *Role, req UpdateMemberRequest) (*Membership, error)
 	UpdateMemberPermissions(ctx context.Context, organizationID, memberRef string, customPermissions, deniedPermissions []string) (*Membership, error)
@@ -271,6 +279,47 @@ func (r *repoImpl) GetRoleByRef(ctx context.Context, organizationID, roleRef str
 		return nil, fmt.Errorf("authz: GetRoleByRef: %w", err)
 	}
 	return role, nil
+}
+
+// RoleExists checks org-owned and global (org_id IS NULL) roles by name,
+// case-insensitive — the same visibility rule GetRoleByRef uses.
+func (r *repoImpl) RoleExists(ctx context.Context, organizationID, roleName string) (bool, error) {
+	const q = `SELECT EXISTS(
+		SELECT 1 FROM roles
+		WHERE (org_id IS NULL OR org_id = $1) AND LOWER(name) = LOWER($2)
+	)`
+	var ok bool
+	if err := r.db.QueryRow(ctx, q, organizationID, strings.TrimSpace(roleName)).Scan(&ok); err != nil {
+		return false, fmt.Errorf("authz: RoleExists: %w", err)
+	}
+	return ok, nil
+}
+
+// UserRoleName reproduces the OR-join from GetUserPermissions verbatim: a
+// membership's role_id may be NULL (role deleted via ON DELETE SET NULL, or
+// the row was inserted directly by seed SQL) while role_key still names a
+// global system role — omitting the OR silently misses those members.
+func (r *repoImpl) UserRoleName(ctx context.Context, organizationID, userID string) (string, error) {
+	const q = `
+		SELECT r.name
+		FROM organization_members om
+		LEFT JOIN roles r ON r.id = om.role_id OR (r.org_id IS NULL AND LOWER(r.name) = LOWER(om.role_key))
+		WHERE om.user_id = $1
+		  AND om.org_id = $2
+		  AND om.status = 'active'
+		  AND om.invitation_status = 'accepted'
+		  AND r.name IS NOT NULL
+		ORDER BY CASE WHEN r.org_id = $2 THEN 0 WHEN r.org_id IS NULL THEN 1 ELSE 2 END
+		LIMIT 1`
+	var name string
+	err := r.db.QueryRow(ctx, q, userID, organizationID).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("authz: UserRoleName: %w", err)
+	}
+	return name, nil
 }
 
 func (r *repoImpl) UpdateMembershipRole(ctx context.Context, userID, organizationID, roleID string) error {

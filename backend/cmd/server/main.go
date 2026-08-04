@@ -57,10 +57,10 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/database"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/internal/organizations"
-	"github.com/mridha/businesssaas/internal/dashboard"
 	"github.com/mridha/businesssaas/internal/security"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
@@ -68,6 +68,7 @@ import (
 	"github.com/mridha/businesssaas/pkg/response"
 
 	// ── Internal — Platform (shared across modules) ───────────────────────────
+	"github.com/mridha/businesssaas/internal/platform/checklists"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
@@ -92,6 +93,7 @@ import (
 	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
 	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
+	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
 	hrmpositions "github.com/mridha/businesssaas/internal/hrm/positions"
 	hrmreports "github.com/mridha/businesssaas/internal/hrm/reports"
 
@@ -212,6 +214,7 @@ func main() {
 	taskRepo := task.NewRepository(pgPool)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	checklistsRepo := checklists.NewRepository(pgPool)
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
 	schedulerRepo := scheduler.NewRepository(pgPool)
@@ -238,6 +241,7 @@ func main() {
 	hrmPosRepo := hrmpositions.NewRepository(pgPool)
 	hrmEmpRepo := hrmemployees.NewRepository(pgPool)
 	hrmLeaveRepo := hrmleave.NewRepository(pgPool)
+	hrmOnboardingRepo := hrmonboarding.NewRepository(pgPool)
 	hrmReportsRepo := hrmreports.NewRepository(pgPool)
 
 	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────
@@ -279,11 +283,11 @@ func main() {
 	auditSvc := audit.NewService(auditRepo)
 	userSvc := user.NewService(userRepo)
 	avatarSvc := user.NewAvatarService(avatarRepo)
-	
+
 	// ── Platform ──────────────────────────────────────────────────────────────
 	notifRepo := notifications.NewRepository(pgPool)
 	notifSvc := notifications.NewService(cfg.Notifications, notifRepo)
-	
+
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc, notifSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
 	hrmScopeResolver := hrmscope.NewResolver(pgPool)
@@ -293,6 +297,9 @@ func main() {
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	// checklistsSvc takes authzSvc directly as its AccessDirectory — authz.Service
+	// satisfies that narrow interface structurally, so no adapter is needed.
+	checklistsSvc := checklists.NewService(checklistsRepo, authzSvc)
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
 	schedulerSvc := scheduler.NewService(schedulerRepo, redisClient)
@@ -316,7 +323,12 @@ func main() {
 	// NewService(repo, auditSvc) below.
 	hrmDeptsSvc := hrmdepts.NewService(hrmDeptsRepo)
 	hrmPosSvc := hrmpositions.NewService(hrmPosRepo)
-	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc)
+	// hrmOnboardingSvc must be constructed before hrmEmpSvc — it is passed in
+	// as hrmEmpSvc's ChecklistHook (Phase 3). Building it here, not in a Group
+	// block below, is deliberate: doing it later would compile fine but wire
+	// a nil hook into hrmEmpSvc, a silent no-op rather than a build error.
+	hrmOnboardingSvc := hrmonboarding.NewService(hrmOnboardingRepo, checklistsSvc)
+	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc, hrmOnboardingSvc)
 	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc, pgPool)
 	hrmPhase1Rpts := hrmreports.NewService(hrmReportsRepo)
 
@@ -386,6 +398,7 @@ func main() {
 	taskHandler := task.NewHandler(taskSvc, authzSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	checklistsHandler := checklists.NewHandler(checklistsSvc)
 	contactsHandler := contacts.NewHandler(contactsSvc)
 	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
@@ -412,6 +425,7 @@ func main() {
 	hrmPosHandler := hrmpositions.NewHandler(hrmPosSvc)
 	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc, authzSvc, hrmScopeResolver)
 	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc, authzSvc, hrmScopeResolver)
+	hrmOnboardingHandler := hrmonboarding.NewHandler(hrmOnboardingSvc, authzSvc, hrmScopeResolver)
 	hrmRptsHandler := hrmreports.NewHandler(hrmPhase1Rpts)
 
 	// ── HRM Group A ───────────────────────────────────────────────────────────
@@ -513,6 +527,7 @@ func main() {
 	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
 
 	// ── Platform (shared layer — CRM and future modules) ──────────────────────
+	checklists.RegisterRoutes(api, checklistsHandler, permFn, requireAuth, requireOrgMatch)
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
 	scheduler.RegisterRoutes(api, schedulerHandler, requireAuth, permFn)
@@ -539,6 +554,7 @@ func main() {
 	hrmpositions.RegisterRoutes(api, hrmPosHandler, permFn, requireAuth, requireOrgMatch)
 	hrmemployees.RegisterRoutes(api, hrmEmpHandler, permFn, requireAuth, requireOrgMatch)
 	hrmleave.RegisterRoutes(api, hrmLeaveHandler, permFn, requireAuth, requireOrgMatch)
+	hrmonboarding.RegisterRoutes(api, hrmOnboardingHandler, permFn, requireAuth, requireOrgMatch)
 	hrmreports.RegisterRoutes(api, hrmRptsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────

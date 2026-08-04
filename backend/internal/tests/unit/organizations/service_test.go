@@ -183,6 +183,10 @@ func (r *stubAuthzRepo) GetRoleByID(_ context.Context, _ string) (*authz.Role, e
 func (r *stubAuthzRepo) GetRoleByRef(_ context.Context, _, _ string) (*authz.Role, error) {
 	return nil, nil
 }
+func (r *stubAuthzRepo) RoleExists(_ context.Context, _, _ string) (bool, error) { return false, nil }
+func (r *stubAuthzRepo) UserRoleName(_ context.Context, _, _ string) (string, error) {
+	return "", nil
+}
 func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, _, _, _ string) error { return nil }
 func (r *stubAuthzRepo) UpdateMembership(_ context.Context, _, _ string, _ *authz.Role, _ authz.UpdateMemberRequest) (*authz.Membership, error) {
 	return nil, nil

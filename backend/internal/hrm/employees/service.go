@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +14,15 @@ import (
 
 // dateLayout is the ISO 8601 date format used for hire/termination/birth dates.
 const dateLayout = "2006-01-02"
+
+// ChecklistHook is the minimal slice of the HRM onboarding consumer that
+// employee creation needs. Declared here and implemented in
+// internal/hrm/onboarding so this package keeps zero cross-module imports —
+// the authz.SessionRevoker shape. A nil hook is valid: Create then behaves
+// exactly as it did before Phase 3.
+type ChecklistHook interface {
+	OnEmployeeCreated(ctx context.Context, orgID, actorID, employeeID string) error
+}
 
 // Service defines business logic for HRM employees.
 type Service interface {
@@ -29,12 +39,13 @@ type Service interface {
 }
 
 type serviceImpl struct {
-	repo  Repository
-	audit audit.Service
+	repo      Repository
+	audit     audit.Service
+	checklist ChecklistHook
 }
 
-func NewService(repo Repository, auditSvc audit.Service) Service {
-	return &serviceImpl{repo: repo, audit: auditSvc}
+func NewService(repo Repository, auditSvc audit.Service, checklist ChecklistHook) Service {
+	return &serviceImpl{repo: repo, audit: auditSvc, checklist: checklist}
 }
 
 func (s *serviceImpl) List(ctx context.Context, orgID string, filter ListFilter) (*EmployeeListResponse, error) {
@@ -159,6 +170,15 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 	s.audit.Log(ctx, audit.EventHRMEmployeeCreated, createdBy, orgID, "", "", map[string]string{
 		"employee_id": e.ID, "first_name": e.FirstName,
 	})
+
+	// Auto-instantiate the org's default onboarding checklist, if any is
+	// configured. Never fails employee creation: OnEmployeeCreated recovers
+	// its own panics, and any error it returns is logged, not propagated.
+	if s.checklist != nil {
+		if err := s.checklist.OnEmployeeCreated(ctx, orgID, createdBy, e.ID); err != nil {
+			slog.Error("employees: onboarding checklist hook failed", slog.Any("error", err), slog.String("employee_id", e.ID))
+		}
+	}
 
 	return e, nil
 }

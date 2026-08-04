@@ -6,6 +6,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,6 +177,23 @@ func (r *stubAuthzRepo) GetRoleByID(_ context.Context, id string) (*authz.Role, 
 
 func (r *stubAuthzRepo) GetRoleByRef(_ context.Context, _, ref string) (*authz.Role, error) {
 	return r.roles[ref], nil
+}
+
+func (r *stubAuthzRepo) RoleExists(_ context.Context, _, roleName string) (bool, error) {
+	for _, role := range r.roles {
+		if strings.EqualFold(role.Name, roleName) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *stubAuthzRepo) UserRoleName(_ context.Context, orgID, userID string) (string, error) {
+	m := r.memberships[userID+":"+orgID]
+	if m == nil {
+		return "", nil
+	}
+	return m.RoleKey, nil
 }
 
 func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, userID, orgID, roleID string) error {

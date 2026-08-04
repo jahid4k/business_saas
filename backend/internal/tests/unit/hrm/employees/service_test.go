@@ -2,6 +2,7 @@ package employees_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -142,7 +143,7 @@ func ptrStr(s string) *string {
 
 func TestEmployeesService_Create(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	t.Run("success", func(t *testing.T) {
@@ -168,16 +169,16 @@ func TestEmployeesService_Create(t *testing.T) {
 			t.Errorf("expected ErrFirstNameRequired, got %v", err)
 		}
 	})
-	
+
 	t.Run("conflict_emp_number", func(t *testing.T) {
 		repo.employees["id_exist"] = &employees.Employee{
-			ID: "id_exist",
-			OrgID: "org1",
+			ID:             "id_exist",
+			OrgID:          "org1",
 			EmployeeNumber: ptrStr("EMP001"),
 		}
 		req := employees.CreateEmployeeRequest{
-			FirstName: "Jane",
-			HireDate:  "2023-01-01",
+			FirstName:      "Jane",
+			HireDate:       "2023-01-01",
 			EmployeeNumber: ptrStr("EMP001"),
 		}
 		_, err := svc.Create(ctx, "org1", "user1", req)
@@ -189,15 +190,15 @@ func TestEmployeesService_Create(t *testing.T) {
 
 func TestEmployeesService_Get(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	repo.employees["id1"] = &employees.Employee{
-		ID: "id1",
-		OrgID: "org1",
+		ID:        "id1",
+		OrgID:     "org1",
 		FirstName: "John",
 	}
-	
+
 	t.Run("success", func(t *testing.T) {
 		emp, err := svc.Get(ctx, "org1", "id1")
 		if err != nil {
@@ -225,12 +226,12 @@ func TestEmployeesService_Get(t *testing.T) {
 
 func TestEmployeesService_Update(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	repo.employees["id1"] = &employees.Employee{
-		ID: "id1",
-		OrgID: "org1",
+		ID:        "id1",
+		OrgID:     "org1",
 		FirstName: "John",
 	}
 
@@ -260,15 +261,15 @@ func TestEmployeesService_Update(t *testing.T) {
 
 func TestEmployeesService_Terminate(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	repo.employees["id1"] = &employees.Employee{
-		ID: "id1",
-		OrgID: "org1",
+		ID:        "id1",
+		OrgID:     "org1",
 		FirstName: "John",
-		HireDate: time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC),
-		StatusID: "status_active",
+		HireDate:  time.Date(2022, 1, 1, 0, 0, 0, 0, time.UTC),
+		StatusID:  "status_active",
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -283,7 +284,7 @@ func TestEmployeesService_Terminate(t *testing.T) {
 			t.Errorf("expected terminated, got %s", emp.StatusID)
 		}
 	})
-	
+
 	t.Run("already_terminated", func(t *testing.T) {
 		req := employees.TerminateEmployeeRequest{
 			TerminationDate: "2023-01-01",
@@ -297,7 +298,7 @@ func TestEmployeesService_Terminate(t *testing.T) {
 
 func TestEmployeesService_List(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	repo.employees["id1"] = &employees.Employee{ID: "id1", OrgID: "org1"}
@@ -320,7 +321,7 @@ func TestEmployeesService_List(t *testing.T) {
 
 func TestEmployeesService_Delete(t *testing.T) {
 	repo := newStubRepo()
-	svc := employees.NewService(repo, &mockAudit{})
+	svc := employees.NewService(repo, &mockAudit{}, nil)
 	ctx := context.Background()
 
 	repo.employees["id1"] = &employees.Employee{ID: "id1", OrgID: "org1"}
@@ -341,4 +342,55 @@ func TestEmployeesService_Delete(t *testing.T) {
 			t.Errorf("expected ErrEmployeeNotFound, got %v", err)
 		}
 	})
+}
+
+// ── ChecklistHook (Phase 3) ──────────────────────────────────────────────────
+
+type stubChecklistHook struct {
+	err                        error
+	called                     bool
+	orgID, actorID, employeeID string
+}
+
+func (h *stubChecklistHook) OnEmployeeCreated(ctx context.Context, orgID, actorID, employeeID string) error {
+	h.called = true
+	h.orgID, h.actorID, h.employeeID = orgID, actorID, employeeID
+	return h.err
+}
+
+func TestEmployeesService_Create_SucceedsWhenChecklistHookIsNil(t *testing.T) {
+	repo := newStubRepo()
+	svc := employees.NewService(repo, &mockAudit{}, nil)
+
+	emp, err := svc.Create(context.Background(), "org1", "user1", employees.CreateEmployeeRequest{
+		FirstName: "NoHook", HireDate: "2023-01-01",
+	})
+	if err != nil {
+		t.Fatalf("expected Create to succeed with a nil hook, got %v", err)
+	}
+	if emp.FirstName != "NoHook" {
+		t.Errorf("expected employee to be created, got %+v", emp)
+	}
+}
+
+func TestEmployeesService_Create_SucceedsWhenChecklistHookErrors(t *testing.T) {
+	repo := newStubRepo()
+	hook := &stubChecklistHook{err: errors.New("checklists: boom")}
+	svc := employees.NewService(repo, &mockAudit{}, hook)
+
+	emp, err := svc.Create(context.Background(), "org1", "user1", employees.CreateEmployeeRequest{
+		FirstName: "HookErrors", HireDate: "2023-01-01",
+	})
+	if err != nil {
+		t.Fatalf("expected Create to succeed even when the checklist hook errors, got %v", err)
+	}
+	if emp.FirstName != "HookErrors" {
+		t.Errorf("expected employee to be created despite the hook error, got %+v", emp)
+	}
+	if !hook.called {
+		t.Error("expected the checklist hook to have been invoked")
+	}
+	if hook.orgID != "org1" || hook.actorID != "user1" || hook.employeeID != emp.ID {
+		t.Errorf("expected hook to receive (org1, user1, %s), got (%s, %s, %s)", emp.ID, hook.orgID, hook.actorID, hook.employeeID)
+	}
 }

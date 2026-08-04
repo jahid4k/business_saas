@@ -1,5 +1,37 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-08-05 (r19 — HRM Extended Phase 3 shipped: the checklist engine (Section 9 →
+> PLATFORM PRIMITIVES #4) plus its first consumer, HRM Onboarding. New platform package
+> `internal/platform/checklists/` — 4 tables (migration `00076`): `platform_checklist_templates`
+> (org-scoped, not global like `roles` — a global template can't express `owner_type='specific_user'`
+> or an org-created role), `platform_checklist_template_items` (`owner_type` mirrors
+> `hrm_approval_template_levels.approver_type`'s shape — `subject`/`manager`/`role`/`specific_user` —
+> rather than literal hr/it/finance roles, which are not seeded system roles),
+> `platform_checklist_instances` (polymorphic `subject_type`/`subject_id`, no FK — the
+> `hrm_acknowledgements` precedent — so this package never references `hrm_employees` and stays a
+> true platform primitive), `platform_checklist_instance_items` (column-level snapshot, not JSONB,
+> since items are individually completed/skipped rows aggregated with `COUNT(*) FILTER`). Owner
+> resolution happens once at instantiation via a caller-supplied `SubjectContext` value — this is
+> also the security property behind a deliberate design choice: there is **no generic
+> `POST .../checklists/instances` route**. Instantiation is reachable only through module-owned
+> endpoints (here, `internal/hrm/onboarding/`) that resolve the subject server-side; a generic
+> route would have to trust a client-supplied `subject_user_id`/`manager_user_id`, an impersonation
+> vector. Two new `authz` methods (`RoleExists`, `UserRoleName`) reproduce the OR-join from
+> `GetUserPermissions` (`internal/authz/repository.go`) verbatim — needed for role-owned "group
+> claim" checklist items (nullable `assignee_user_id`, any holder of the named role may complete
+> it; no role→users query ever runs). `internal/hrm/employees` gains a `ChecklistHook` interface
+> and a breaking `NewService` signature (third param, nil-safe) — `Create` calls the hook
+> synchronously after its existing audit log, with panic recovery inside the hook implementation so
+> a bug in the checklist path can never fail employee creation, only log it. Migration `00077`
+> seeds `platform.checklists.view/.complete/.manage`; `.complete` is granted broadly then narrowed
+> per-item by the service (assignee, or matching role holder, or `.manage`) since the route gate
+> cannot express "is this your own item." One real bug caught only by integration testing (not the
+> 16 stub-backed unit tests, which share the same blind spot as the code under test): `FindTemplateItems`
+> and `FindTemplateItemByID` joined `platform_checklist_template_items` to `platform_checklist_templates`
+> with an unqualified column list — both tables have `id`/`public_id`/`created_at`/`updated_at`,
+> so Postgres rejected the query as ambiguous (`42702`) despite every stub-backed unit test passing.
+> Migration count 75 → 77, table count 82 → 86.)
+
 > Last updated: 2026-08-04 (r18 — two HRM Extended phases shipped, neither previously folded into
 > this document. **Phase 1 — Resource-Level Permissions**: `authz.Scope` type + `ResolveScope`
 > method (`internal/authz`), plus a new `internal/hrm/scope` package (`Predicate()` for list-query
@@ -725,6 +757,68 @@ consumer arrives). Digest batching and push channel are not built.
 
 ---
 
+### PLATFORM — CHECKLISTS [✅ DONE — built 2026-08-05]
+
+Generic checklist engine in `internal/platform/checklists/`: templates → typed items (`owner_type`
+∈ `subject`/`manager`/`role`/`specific_user`) → instances → per-item runtime state, with
+`checklist_type` as the discriminator (`onboarding`/`offboarding`/`probation_confirmation`/
+`transfer_handover` — all four seeded now, only `onboarding` has a consumer). Migration `00076`.
+Supersedes the PLATFORM PRIMITIVES §4 scoping entry in Section 9 — built, not just scoped.
+
+Never imports `internal/hrm/employees` or any other `hrm_*` table — owner resolution takes a
+caller-supplied `SubjectContext` value (subject/manager user IDs, anchor date) instead of querying
+HRM directly. This is also a security boundary, not just an architectural one: there is
+deliberately **no generic `POST .../instances` route**. A generic route would have to trust a
+client-supplied `subject_user_id`/`manager_user_id`, letting a caller point every checklist item at
+themselves or manufacture items assigned to a victim. Instantiation is service-level only, reached
+through module-owned endpoints that resolve the subject server-side — today, only
+`internal/hrm/onboarding/` (Section 5 → HRM MODULE → Group B).
+
+Role-owned items (`owner_type='role'`) never resolve to a specific `assignee_user_id` at
+instantiation — no role→users query runs. Instead the instance item carries `owner_type`+`owner_role`
+forward as a "group claim": any org member currently holding that role may complete it, checked at
+completion time via two new `authz` methods (`RoleExists`, `UserRoleName`) that reproduce the
+OR-join from `GetUserPermissions` (`internal/authz/repository.go`) — a membership's `role_id` can be
+NULL while `role_key` still names a live global role, and missing that OR silently drops those
+members. `RoleHolders` (the reverse role→users direction) was deliberately not built — it has zero
+callers; `/items/mine` and completion auth both only need the cheap user→role direction.
+
+Routes (all under `/organizations/:orgId/checklists/`):
+
+```
+Templates       GET/POST         /templates                              ← platform.checklists.view / .manage
+                GET/PATCH/DELETE /templates/:templateId                  ← .view / .manage / .manage
+Template items  GET/POST         /templates/:templateId/items            ← .view / .manage
+                PATCH/DELETE     /templates/:templateId/items/:itemId    ← .manage
+Instances       GET              /instances                              ← .view
+                GET              /instances/:instanceId                  ← .view
+                POST             /instances/:instanceId/cancel           ← .manage
+Items           GET              /items/mine                             ← .view  (registered before /items/:itemId)
+                POST             /items/:itemId/complete                 ← .complete
+                POST             /items/:itemId/reopen                   ← .complete
+                POST             /items/:itemId/skip                     ← .manage
+```
+
+Permissions (migration `00077`): `platform.checklists.view` (owner/admin/manager/member/viewer),
+`.complete` (owner/admin/manager/member — narrowed per-item by the service: assignee, or matching
+role holder, or `.manage`, since the route gate cannot express "is this your own item"), `.manage`
+(owner/admin only). Org-created custom roles get none of these until an admin grants them
+explicitly — a deliberate choice, not an oversight (these are new capabilities, unlike Phase 1's
+`view_own` backfill which restored prior behaviour).
+
+Completion is always computed from instance items (`COUNT(*) FILTER`), never stored — an instance
+auto-transitions to `completed` when every item is terminal (completed or skipped) and flips back
+to `in_progress` if the last terminal item is reopened. Due dates are frozen at instantiation
+(`anchor_date + due_offset_days`, `AddDate` not raw duration arithmetic — DST-safe); negative
+offsets are valid (pre-boarding items) and not clamped.
+
+Known limitation, stated not hidden: `owner_role TEXT` (not `owner_role_id UUID`) means renaming a
+role via `authz.UpdateRole` silently breaks any template item still referencing the old name —
+`RoleExists` validates on write and template-item reads expose `owner_role_exists` so the UI can
+flag a broken reference, but the underlying fragility is accepted, not fixed, in this phase.
+
+---
+
 ### CRM — LEADS [✅ DONE — extended r11]
 
 Routes:
@@ -891,9 +985,9 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ---
 
-### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18]
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **26 sub-modules, 216 routes** (206 as of the 2026-08-03 recount + 10 new leave-balance routes, r18). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **26 sub-modules, 218 routes** (216 as of r18 + 2 new onboarding routes, r19). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 45 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18).
 
@@ -909,6 +1003,15 @@ PATCH/DELETE /organizations/:orgId/hrm/employee-statuses/:id    ← hrm.employee
 ```
 
 Dynamic statuses (00053): per-org status list with category (`active/inactive/on_leave/terminated`) + color token; `hrm_employees.status_id` FK; migration auto-seeded defaults and mapped existing employees.
+
+**Onboarding checklist consumer (r19):** `internal/hrm/onboarding/` (thin — does not import `internal/hrm/employees`, its own `FindSubject` query instead, to avoid the import cycle) adds 2 routes:
+
+```
+GET  /organizations/:orgId/hrm/employees/:empId/checklists   ← hrm.employees.view
+POST /organizations/:orgId/hrm/employees/:empId/checklists   ← hrm.employees.update
+```
+
+Reuses `hrm.employees.view`/`.update` rather than minting `hrm.onboarding.*` keys — new keys would need their own seeding, and an unseeded key silently 403s admins. `employees.Service.Create` gained a `ChecklistHook` interface param (breaking `NewService` signature, nil-safe) — on employee creation it auto-instantiates the org's default onboarding template if one exists, synchronously, with panic recovery inside the hook so a checklist-engine bug can never fail employee creation. The POST route above is the manual retry path for when the auto-hook's own failure (logged, not surfaced) needs re-running. See Section 9 → PLATFORM PRIMITIVES #4 for the checklist engine itself.
 
 **Group C — Disciplinary** (`warnings, complaints, employeedocs, acknowledgements`): 34 routes. Cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles.
 
@@ -943,7 +1046,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 75
+### Migration Count: 77
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -957,15 +1060,17 @@ for scheduler-triggered writes · `00070` `hrm_legal_entities` + `legal_entity_i
 `00072` seeds `view_own`/`view_team`/`view_all` per resource per role (Phase 1) · `00073`
 backfills that tier onto custom roles/member overrides holding bare `.view` · `00074`
 `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (Phase 2) · `00075` seeds
-`hrm.leave.adjust_balance`/`hrm.leave.encash`, owner/admin only.
+`hrm.leave.adjust_balance`/`hrm.leave.encash`, owner/admin only · `00076`
+`platform_checklist_templates`/`_template_items`/`_instances`/`_instance_items` (Phase 3) · `00077`
+seeds `platform.checklists.view`/`.complete`/`.manage`.
 
-### Key Tables (82 total)
+### Key Tables (86 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
 
-**Platform (10):**
-`platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs` · `platform_scheduled_jobs` · `platform_job_runs` · `platform_notifications` · `platform_notification_preferences`
+**Platform (14):**
+`platform_contacts` · `platform_companies` · `platform_notes` · `platform_tasks` · `platform_activities` · `platform_email_logs` · `platform_scheduled_jobs` · `platform_job_runs` · `platform_notifications` · `platform_notification_preferences` · `platform_checklist_templates` · `platform_checklist_template_items` · `platform_checklist_instances` · `platform_checklist_instance_items`
 
 **CRM (6):**
 `crm_leads` (+ `custom_fields`, `capture_source`, `capture_metadata` since 00058) · `crm_pipelines` · `crm_pipeline_stages` · `crm_deals` · `crm_templates` · `crm_settings`
@@ -1319,7 +1424,7 @@ PLATFORM PRIMITIVES and PREP MIGRATIONS sit first because most entries below ref
 
 ---
 
-### PLATFORM PRIMITIVES [🔵 PARTIAL — #1/#2 built 2026-08-03, see Section 5; #3–#5 ⚪ NOT STARTED]
+### PLATFORM PRIMITIVES [🔵 PARTIAL — #1–#4 built, see Section 5; #5 ⚪ NOT STARTED]
 
 Five buildable pieces of shared infrastructure that multiple modules need. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
 
@@ -1337,16 +1442,16 @@ Consumers still to come: analytics snapshot runs, certification expiry sweeps, e
 Beyond module/action RBAC — per-record filtering, and a `view_own / view_team / view_all` tier applied consistently. `view_team` resolves against a reporting-manager chain (a depth-parameterized recursive CTE over `hrm_employees.manager_id`, default depth 1 — see PREP MIGRATIONS). Shipped as `authz.Scope`/`ResolveScope` (`internal/authz`) + a new `internal/hrm/scope` package (`Predicate()` for list queries, `Resolver.AuthorizeRecordAccess()` for GET-by-ID), rolled out across all 12 employee-record HRM modules plus salary's per-employee endpoints.
 This is the primitive with the highest severity of failure: appraisal draft leakage, salary visibility, anonymous 360 de-anonymization, and succession/flight-risk exposure are trust and legal issues, not UX polish. Every future module that returns employee-level records (performance, compensation depth, succession, etc.) should build on this from day one rather than retrofitting later — retrofitting is exactly what r18 just did for the 12 already-shipped modules, and it touched every one of their repository query layers.
 
-**4. Checklist engine**
-Template + typed items + `owner_type` → assignee resolution at instantiation + offset-based due dates + blocking vs non-blocking + instance completion tracking.
-One engine with a `checklist_type` discriminator, not one per consumer.
-Known consumers (all unbuilt): HRM onboarding, exit clearance, probation confirmation, transfer handover.
+**4. Checklist engine — ✅ built (r19), see Section 5 → PLATFORM — CHECKLISTS**
+Template + typed items + `owner_type` → assignee resolution at instantiation + offset-based due dates + blocking-flag (reported, not yet enforced — nothing to gate until an offboarding consumer exists) + instance completion tracking, computed not stored.
+One engine with a `checklist_type` discriminator, not one per consumer — all four values (`onboarding`/`offboarding`/`probation_confirmation`/`transfer_handover`) seeded now, only `onboarding` has a consumer.
+First real consumer: HRM onboarding (`internal/hrm/onboarding/`, Section 5 → HRM MODULE → Group B). Still-unbuilt consumers: exit clearance (F&F, consumer #2 — needs `blocking_amount` added as a pure ALTER), probation confirmation, transfer handover.
 
 **5. Form / question engine**
 Configurable sections → typed questions → typed responses → scoring → aggregate, with definition snapshotting so historical records render as they were authored.
 Known consumers (all unbuilt): interview scorecards, appraisal forms, LMS assessments, exit interviews, potential-criteria assessment, employee surveys.
 
-⚠️ Build order note: #1–#3 have real consumers in already-shipped or already-planned work and are genuinely blocking. #4 and #5 have **zero current consumers** — every module that would use them is unbuilt. They are documented here because the pattern was identified across five independent designs, not because they should be built speculatively. Build them when the first real consumer arrives, and only if the second one is already visible.
+⚠️ Build order note: #1–#4 have real consumers in already-shipped or already-planned work and are genuinely blocking. #5 has **zero current consumers** — every module that would use it is unbuilt. It is documented here because the pattern was identified across five independent designs, not because it should be built speculatively. Build it when the first real consumer arrives, and only if the second one is already visible.
 
 ---
 
@@ -1452,8 +1557,8 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 - **Recruitment / ATS** — requisitions (approval-gated), postings, candidates, applications, configurable pipeline stages, interviews + scorecards, offers (approval-gated), referrals. Two hard structural rules: candidate ≠ application (stage lives on the application), and stage history from day one — `crm_deals` skipped this and that is exactly why sales velocity is blocked above. Reuses the approval engine and `hrm_document_templates`. Resume parsing is a vendor bolt-on, not in scope.
   Depends on: EMAIL SENDING (not optional — an ATS without candidate email is half a product), resource-level permissions (scorecard bias-blocking), scheduler (candidate data purge / GDPR).
 
-- **Onboarding** — checklist-driven, multi-owner, offset-based due dates relative to joining date. Not a table of its own: this is checklist engine consumer #1.
-  Depends on: checklist engine, notification.
+- **Onboarding — ✅ built (r19), see Section 5 → HRM MODULE → Group B and → PLATFORM — CHECKLISTS.** Checklist-driven, multi-owner, offset-based due dates relative to hire date. Not a table of its own — checklist engine consumer #1. Auto-instantiates the org's default onboarding template on employee creation (non-blocking — never fails employee creation), plus a manual retry endpoint. Reminders are explicitly out of scope for this build (no scheduler job, no notification dispatch) — the "Depends on: notification" line below is therefore not yet exercised.
+  Depends on: checklist engine (built), notification (not yet wired — reminders deferred).
 
 **Growth & development**
 

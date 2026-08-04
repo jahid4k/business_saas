@@ -18,7 +18,10 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
 	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/platform/checklists"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
@@ -27,13 +30,16 @@ import (
 
 // testEnv holds fully-wired services for integration tests.
 type testEnv struct {
-	db          *pgxpool.Pool
-	redis       *redis.Client
-	authSvc     auth.Service
-	userSvc     user.Service
-	authzSvc    authz.Service
-	orgSvc      organizations.Service
-	taskSvc     task.Service
+	db               *pgxpool.Pool
+	redis            *redis.Client
+	authSvc          auth.Service
+	userSvc          user.Service
+	authzSvc         authz.Service
+	orgSvc           organizations.Service
+	taskSvc          task.Service
+	checklistsSvc    checklists.Service
+	hrmOnboardingSvc hrmonboarding.Service
+	hrmEmpSvc        hrmemployees.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -98,14 +104,31 @@ func newTestEnv(t *testing.T) *testEnv {
 	notifRepo := notifications.NewRepository(db)
 	notifSvc := notifications.NewService(config.NotificationsConfig{}, notifRepo)
 
+	authzSvc := authz.NewService(authzRepo, rdb, auditSvc, authRepo)
+
+	// checklistsSvc takes authzSvc directly as its AccessDirectory, mirroring
+	// main.go's wiring — authz.Service satisfies that narrow interface
+	// structurally, so no adapter is needed here either.
+	checklistsRepo := checklists.NewRepository(db)
+	checklistsSvc := checklists.NewService(checklistsRepo, authzSvc)
+
+	hrmOnboardingRepo := hrmonboarding.NewRepository(db)
+	hrmOnboardingSvc := hrmonboarding.NewService(hrmOnboardingRepo, checklistsSvc)
+
+	hrmEmpRepo := hrmemployees.NewRepository(db)
+	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc, hrmOnboardingSvc)
+
 	return &testEnv{
-		db:       db,
-		redis:    rdb,
-		authSvc:  auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
-		userSvc:  user.NewService(userRepo),
-		authzSvc: authz.NewService(authzRepo, rdb, auditSvc, authRepo),
-		orgSvc:   organizations.NewService(orgRepo, authzRepo, jwtMgr),
-		taskSvc:  task.NewService(taskRepo, auditSvc),
+		db:               db,
+		redis:            rdb,
+		authSvc:          auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
+		userSvc:          user.NewService(userRepo),
+		authzSvc:         authzSvc,
+		orgSvc:           organizations.NewService(orgRepo, authzRepo, jwtMgr),
+		taskSvc:          task.NewService(taskRepo, auditSvc),
+		checklistsSvc:    checklistsSvc,
+		hrmOnboardingSvc: hrmOnboardingSvc,
+		hrmEmpSvc:        hrmEmpSvc,
 	}
 }
 
