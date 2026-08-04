@@ -4,6 +4,8 @@ package warnings
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // WarningStatus tracks the warning lifecycle.
@@ -96,6 +98,40 @@ type CloseRequest struct {
 type WarningListResponse struct {
 	Warnings []*EmployeeWarning `json:"warnings"`
 	Total    int                `json:"total"`
+	Limit    int                `json:"limit"`
+	Offset   int                `json:"offset"`
+}
+
+// WarningListFilter narrows the warning list query.
+type WarningListFilter struct {
+	EmployeeID string
+	Status     string
+	ActiveOnly bool
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *WarningListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

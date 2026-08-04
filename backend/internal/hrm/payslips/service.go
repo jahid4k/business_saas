@@ -28,7 +28,7 @@ type Service interface {
 	ApproveRun(ctx context.Context, orgID, ref, approvedBy string) (*PayslipRun, error)
 	MarkPaid(ctx context.Context, orgID, ref, paidBy string) (*PayslipRun, error)
 	CancelRun(ctx context.Context, orgID, ref string) (*PayslipRun, error)
-	ListPayslips(ctx context.Context, orgID, runID, employeeID string) (*SlipListResponse, error)
+	ListPayslips(ctx context.Context, orgID string, filter SlipListFilter) (*SlipListResponse, error)
 	GetPayslip(ctx context.Context, orgID, ref string) (*Payslip, error)
 }
 
@@ -515,15 +515,20 @@ func (s *serviceImpl) CancelRun(ctx context.Context, orgID, ref string) (*Paysli
 	return run, nil
 }
 
-func (s *serviceImpl) ListPayslips(ctx context.Context, orgID, runID, employeeID string) (*SlipListResponse, error) {
-	list, err := s.repo.FindPayslips(ctx, orgID, runID, employeeID)
+func (s *serviceImpl) ListPayslips(ctx context.Context, orgID string, filter SlipListFilter) (*SlipListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindPayslips(ctx, orgID, filter)
 	if err != nil {
 		return nil, fmt.Errorf("payslips: ListPayslips: %w", err)
 	}
 	if list == nil {
 		list = []*Payslip{}
 	}
-	return &SlipListResponse{Payslips: list, Total: len(list)}, nil
+	total, err := s.repo.CountPayslips(ctx, orgID, filter)
+	if err != nil {
+		return nil, fmt.Errorf("payslips: ListPayslips: count: %w", err)
+	}
+	return &SlipListResponse{Payslips: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) GetPayslip(ctx context.Context, orgID, ref string) (*Payslip, error) {

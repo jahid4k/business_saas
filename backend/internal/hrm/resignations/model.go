@@ -4,6 +4,8 @@ package resignations
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type ResignationStatus string
@@ -79,6 +81,39 @@ type UpdateResignationRequest struct {
 type ResignationListResponse struct {
 	Resignations []*Resignation `json:"resignations"`
 	Total        int            `json:"total"`
+	Limit        int            `json:"limit"`
+	Offset       int            `json:"offset"`
+}
+
+// ResignationListFilter narrows the resignation list query.
+type ResignationListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *ResignationListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

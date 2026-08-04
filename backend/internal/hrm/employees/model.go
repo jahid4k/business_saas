@@ -4,6 +4,8 @@ package employees
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // EmploymentType defines the allowed values for an employee's employment type.
@@ -115,6 +117,14 @@ type ListFilter struct {
 	Search         string // fuzzy match on first_name, last_name, email, employee_number
 	Limit          int
 	Offset         int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List — never left for the service/repository to
+	// resolve themselves. Scope zero value (authz.ScopeNone) means "no rows",
+	// not "no filter" — callers that intend no scoping must explicitly pass
+	// authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
 }
 
 const (

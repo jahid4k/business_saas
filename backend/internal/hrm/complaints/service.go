@@ -13,7 +13,7 @@ import (
 const dateLayout = "2006-01-02"
 
 type Service interface {
-	List(ctx context.Context, orgID, employeeID, status string) (*ComplaintListResponse, error)
+	List(ctx context.Context, orgID string, filter ComplaintListFilter) (*ComplaintListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Complaint, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateComplaintRequest) (*Complaint, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateComplaintRequest) (*Complaint, error)
@@ -30,11 +30,14 @@ type serviceImpl struct {
 }
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
-func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*ComplaintListResponse, error) {
-	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter ComplaintListFilter) (*ComplaintListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("complaints: List: %w", err) }
 	if list == nil { list = []*Complaint{} }
-	return &ComplaintListResponse{Complaints: list, Total: len(list)}, nil
+	total, err := s.repo.Count(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("complaints: List: count: %w", err) }
+	return &ComplaintListResponse{Complaints: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Complaint, error) {

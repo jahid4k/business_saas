@@ -14,7 +14,7 @@ const dateLayout = "2006-01-02"
 
 // Service defines business logic for employee resignations.
 type Service interface {
-	List(ctx context.Context, orgID, employeeID, status string) (*ResignationListResponse, error)
+	List(ctx context.Context, orgID string, filter ResignationListFilter) (*ResignationListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Resignation, error)
 	Submit(ctx context.Context, orgID, employeeID, createdBy string, req SubmitResignationRequest) (*Resignation, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateResignationRequest) (*Resignation, error)
@@ -33,11 +33,14 @@ func NewService(repo Repository, db *pgxpool.Pool) Service {
 	return &serviceImpl{repo: repo, db: db}
 }
 
-func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*ResignationListResponse, error) {
-	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter ResignationListFilter) (*ResignationListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("resignations: List: %w", err) }
 	if list == nil { list = []*Resignation{} }
-	return &ResignationListResponse{Resignations: list, Total: len(list)}, nil
+	total, err := s.repo.Count(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("resignations: List: count: %w", err) }
+	return &ResignationListResponse{Resignations: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Resignation, error) {

@@ -5,6 +5,8 @@ import (
 	"github.com/shopspring/decimal"
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type PromotionStatus string
@@ -71,6 +73,43 @@ type UpdatePromotionRequest struct {
 type PromotionListResponse struct {
 	Promotions []*Promotion `json:"promotions"`
 	Total      int          `json:"total"`
+	Limit      int          `json:"limit"`
+	Offset     int          `json:"offset"`
+}
+
+// PromotionListFilter narrows the promotion list query. Scope is enforced
+// against the employee's current hrm_employees.manager_id/department_id
+// (via scope.Predicate's live subquery) — never this record's own from_*/to_*
+// snapshot columns, which reflect state at the time of the promotion, not
+// today's reporting line.
+type PromotionListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *PromotionListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

@@ -15,7 +15,7 @@ import (
 const dateLayout = "2006-01-02"
 
 type Service interface {
-	List(ctx context.Context, orgID, employeeID, status string) (*TransferListResponse, error)
+	List(ctx context.Context, orgID string, filter TransferListFilter) (*TransferListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTransferRequest) (*Transfer, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTransferRequest) (*Transfer, error)
@@ -38,11 +38,14 @@ func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Servic
 	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
-func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*TransferListResponse, error) {
-	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter TransferListFilter) (*TransferListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("transfers: List: %w", err) }
 	if list == nil { list = []*Transfer{} }
-	return &TransferListResponse{Transfers: list, Total: len(list)}, nil
+	total, err := s.repo.Count(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("transfers: List: count: %w", err) }
+	return &TransferListResponse{Transfers: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {

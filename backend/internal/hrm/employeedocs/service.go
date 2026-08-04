@@ -10,7 +10,7 @@ import (
 )
 
 type Service interface {
-	List(ctx context.Context, orgID, employeeID, status, relatedType string) (*DocListResponse, error)
+	List(ctx context.Context, orgID string, filter DocListFilter) (*DocListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*EmployeeDocument, error)
 	Create(ctx context.Context, orgID, employeeID, issuedBy string, req CreateDocumentRequest) (*EmployeeDocument, error)
 	// Send moves a draft document to sent status.
@@ -29,11 +29,14 @@ type serviceImpl struct {
 }
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
-func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status, relatedType string) (*DocListResponse, error) {
-	list, err := s.repo.FindAll(ctx, orgID, employeeID, status, relatedType)
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter DocListFilter) (*DocListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("employeedocs: List: %w", err) }
 	if list == nil { list = []*EmployeeDocument{} }
-	return &DocListResponse{Documents: list, Total: len(list)}, nil
+	total, err := s.repo.Count(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("employeedocs: List: count: %w", err) }
+	return &DocListResponse{Documents: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*EmployeeDocument, error) {

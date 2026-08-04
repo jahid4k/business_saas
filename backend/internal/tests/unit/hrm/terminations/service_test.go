@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
 	"github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/shopspring/decimal"
@@ -30,20 +31,25 @@ func (r *stubRepo) nextID() string {
 	return fmt.Sprintf("term-%d", r.seq)
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*terminations.Termination, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter terminations.TerminationListFilter) ([]*terminations.Termination, error) {
 	var out []*terminations.Termination
 	for _, t := range r.byID {
 		if t.OrgID == orgID {
-			if employeeID != "" && t.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && t.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(t.Status) != status {
+			if filter.Status != "" && string(t.Status) != filter.Status {
 				continue
 			}
 			out = append(out, t)
 		}
 	}
 	return out, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter terminations.TerminationListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*terminations.Termination, error) {
@@ -175,7 +181,7 @@ func TestTerminationsService(t *testing.T) {
 			t.Errorf("ID mismatch")
 		}
 
-		list, err := svc.List(ctx, "org1", "emp3", "")
+		list, err := svc.List(ctx, "org1", terminations.TerminationListFilter{EmployeeID: "emp3", Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

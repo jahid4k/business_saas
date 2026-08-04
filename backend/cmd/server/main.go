@@ -101,6 +101,7 @@ import (
 	hrmdoctmpls "github.com/mridha/businesssaas/internal/hrm/doctemplates"
 	hrmholidays "github.com/mridha/businesssaas/internal/hrm/holidays"
 	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
+	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
 	hrmshifts "github.com/mridha/businesssaas/internal/hrm/shifts"
 	hrmwarntypes "github.com/mridha/businesssaas/internal/hrm/warningtypes"
 
@@ -285,6 +286,7 @@ func main() {
 	
 	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc, notifSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
+	hrmScopeResolver := hrmscope.NewResolver(pgPool)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
 	dashboardSvc := dashboard.NewService(dashboardRepo)
 	securitySvc := security.NewService(securityRepo)
@@ -408,12 +410,12 @@ func main() {
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	hrmDeptsHandler := hrmdepts.NewHandler(hrmDeptsSvc)
 	hrmPosHandler := hrmpositions.NewHandler(hrmPosSvc)
-	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc)
-	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc)
+	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc, authzSvc, hrmScopeResolver)
+	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc, authzSvc, hrmScopeResolver)
 	hrmRptsHandler := hrmreports.NewHandler(hrmPhase1Rpts)
 
 	// ── HRM Group A ───────────────────────────────────────────────────────────
-	hrmSalaryHandler := hrmsalary.NewHandler(hrmSalarySvc)
+	hrmSalaryHandler := hrmsalary.NewHandler(hrmSalarySvc, authzSvc, hrmScopeResolver)
 	hrmApprovalsHandler := hrmapprovals.NewHandler(hrmApprovalsSvc)
 	hrmWarnTypesHandler := hrmwarntypes.NewHandler(hrmWarnTypesSvc)
 	hrmDocTmplsHandler := hrmdoctmpls.NewHandler(hrmDocTmplsSvc)
@@ -422,20 +424,20 @@ func main() {
 	hrmContractsHandler := hrmcontracts.NewHandler(hrmContractsSvc)
 
 	// ── HRM Group B ───────────────────────────────────────────────────────────
-	hrmPromotionsHandler := hrmpromotions.NewHandler(hrmPromotionsSvc)
-	hrmTransfersHandler := hrmtransfers.NewHandler(hrmTransfersSvc)
-	hrmResignationsHandler := hrmresignations.NewHandler(hrmResignationsSvc)
-	hrmTerminationsHandler := hrmterminations.NewHandler(hrmTerminationsSvc)
+	hrmPromotionsHandler := hrmpromotions.NewHandler(hrmPromotionsSvc, authzSvc, hrmScopeResolver)
+	hrmTransfersHandler := hrmtransfers.NewHandler(hrmTransfersSvc, authzSvc, hrmScopeResolver)
+	hrmResignationsHandler := hrmresignations.NewHandler(hrmResignationsSvc, authzSvc, hrmScopeResolver)
+	hrmTerminationsHandler := hrmterminations.NewHandler(hrmTerminationsSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group C ───────────────────────────────────────────────────────────
-	hrmWarningsHandler := hrmwarnings.NewHandler(hrmWarningsSvc)
-	hrmCplHandler := hrmcomplaints.NewHandler(hrmCplSvc)
-	hrmEmpDocsHandler := hrmemployeedocs.NewHandler(hrmEmpDocsSvc)
+	hrmWarningsHandler := hrmwarnings.NewHandler(hrmWarningsSvc, authzSvc, hrmScopeResolver)
+	hrmCplHandler := hrmcomplaints.NewHandler(hrmCplSvc, authzSvc, hrmScopeResolver)
+	hrmEmpDocsHandler := hrmemployeedocs.NewHandler(hrmEmpDocsSvc, authzSvc, hrmScopeResolver)
 	hrmAcksHandler := hrmacks.NewHandler(hrmAcksSvc)
 
 	// ── HRM Group D ───────────────────────────────────────────────────────────
-	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc)
-	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc)
+	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc, authzSvc, hrmScopeResolver)
+	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group E ───────────────────────────────────────────────────────────
 	hrmAwardsHandler := hrmawards.NewHandler(hrmAwardsSvc)

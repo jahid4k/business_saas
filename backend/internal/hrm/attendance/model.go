@@ -4,6 +4,8 @@ package attendance
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type DayType string
@@ -131,6 +133,42 @@ type PeriodRequest struct {
 type RecordListResponse struct {
 	Records []*AttendanceRecord `json:"records"`
 	Total   int                 `json:"total"`
+	Limit   int                 `json:"limit"`
+	Offset  int                 `json:"offset"`
+}
+
+// RecordListFilter narrows the attendance record list query.
+type RecordListFilter struct {
+	EmployeeID string
+	Status     string
+	Year       int
+	Month      int
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.ListRecords. Scope zero value (authz.ScopeNone)
+	// means "no rows" — callers that intend no scoping must explicitly pass
+	// authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *RecordListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 type PeriodListResponse struct {

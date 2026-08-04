@@ -9,6 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 // Repository defines data access for HRM leave types and leave requests.
@@ -198,6 +201,11 @@ func buildRequestWhere(orgID string, filter LeaveRequestFilter) (string, []any) 
 	if filter.Status != "" {
 		args = append(args, string(filter.Status))
 		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
 	}
 	return strings.Join(clauses, " AND "), args
 }

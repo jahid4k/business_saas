@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
 	"github.com/mridha/businesssaas/internal/hrm/warnings"
 )
@@ -27,23 +28,28 @@ func (r *stubRepo) nextID() string {
 	return fmt.Sprintf("warn-%d", r.seq)
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status string, activeOnly bool) ([]*warnings.EmployeeWarning, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter warnings.WarningListFilter) ([]*warnings.EmployeeWarning, error) {
 	var out []*warnings.EmployeeWarning
 	for _, w := range r.byID {
 		if w.OrgID == orgID {
-			if employeeID != "" && w.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && w.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(w.Status) != status {
+			if filter.Status != "" && string(w.Status) != filter.Status {
 				continue
 			}
-			if activeOnly && !w.IsActive {
+			if filter.ActiveOnly && !w.IsActive {
 				continue
 			}
 			out = append(out, w)
 		}
 	}
 	return out, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter warnings.WarningListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*warnings.EmployeeWarning, error) {
@@ -170,7 +176,7 @@ func TestWarningsService(t *testing.T) {
 			t.Errorf("ID mismatch")
 		}
 
-		list, err := svc.List(ctx, "org1", "emp1", "", false)
+		list, err := svc.List(ctx, "org1", warnings.WarningListFilter{EmployeeID: "emp1", Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

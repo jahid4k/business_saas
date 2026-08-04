@@ -4,16 +4,25 @@ package payslips
 import (
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
-type Handler struct{ service Service }
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+type Handler struct {
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
+}
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
+}
 
 // ListRuns godoc
 //
@@ -196,9 +205,21 @@ func (h *Handler) CancelRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/payslips [get]
 func (h *Handler) ListPayslips(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	res, err := h.service.ListPayslips(c.Context(), orgID, c.Query("run_id"), c.Query("employee_id"))
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.payroll")
+	if err != nil { log.Error("payslips: ListPayslips", slog.Any("error", err)); return response.InternalServerError(c) }
+	filter := SlipListFilter{
+		RunID:        c.Query("run_id"),
+		EmployeeID:   c.Query("employee_id"),
+		Scope:        scopeTier,
+		CallerUserID: userID,
+	}
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil { filter.Limit = limit }
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil { filter.Offset = offset }
+	res, err := h.service.ListPayslips(c.Context(), orgID, filter)
 	if err != nil { log.Error("payslips: ListPayslips", slog.Any("error", err)); return response.InternalServerError(c) }
 	return response.OK(c, res, "OK")
 }
@@ -217,10 +238,18 @@ func (h *Handler) ListPayslips(c fiber.Ctx) error {
 //	@Success		200			{object}	response.OK{data=object{payslip=Payslip}}
 //	@Router			/organizations/{orgId}/hrm/payroll/payslips/{payslipId} [get]
 func (h *Handler) GetPayslip(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
 	p, err := h.service.GetPayslip(c.Context(), orgID, c.Params("payslipId"))
 	if err != nil { return h.err(c, err) }
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.payroll")
+	if err != nil { log.Error("payslips: GetPayslip", slog.Any("error", err)); return response.InternalServerError(c) }
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, p.EmployeeID)
+	if err != nil { log.Error("payslips: GetPayslip", slog.Any("error", err)); return response.InternalServerError(c) }
+	if !allowed { return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record") }
 	return response.OK(c, fiber.Map{"payslip": p}, "OK")
 }
 

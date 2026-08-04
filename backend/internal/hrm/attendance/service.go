@@ -15,7 +15,7 @@ const dateLayout = "2006-01-02"
 
 type Service interface {
 	// Records
-	ListRecords(ctx context.Context, orgID, employeeID, status string, year, month int) (*RecordListResponse, error)
+	ListRecords(ctx context.Context, orgID string, filter RecordListFilter) (*RecordListResponse, error)
 	GetRecord(ctx context.Context, orgID, ref string) (*AttendanceRecord, error)
 	Record(ctx context.Context, orgID, createdBy string, req CreateRecordRequest) (*AttendanceRecord, error)
 	Approve(ctx context.Context, orgID, ref, approvedBy string) (*AttendanceRecord, error)
@@ -40,11 +40,14 @@ type serviceImpl struct {
 }
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
-func (s *serviceImpl) ListRecords(ctx context.Context, orgID, employeeID, status string, year, month int) (*RecordListResponse, error) {
-	list, err := s.repo.FindRecords(ctx, orgID, employeeID, status, year, month)
+func (s *serviceImpl) ListRecords(ctx context.Context, orgID string, filter RecordListFilter) (*RecordListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindRecords(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("attendance: ListRecords: %w", err) }
 	if list == nil { list = []*AttendanceRecord{} }
-	return &RecordListResponse{Records: list, Total: len(list)}, nil
+	total, err := s.repo.CountRecords(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("attendance: ListRecords: count: %w", err) }
+	return &RecordListResponse{Records: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) GetRecord(ctx context.Context, orgID, ref string) (*AttendanceRecord, error) {

@@ -18,7 +18,7 @@ const dateLayout = "2006-01-02"
 
 // Service defines business logic for employee promotions.
 type Service interface {
-	List(ctx context.Context, orgID, employeeID, status string) (*PromotionListResponse, error)
+	List(ctx context.Context, orgID string, filter PromotionListFilter) (*PromotionListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreatePromotionRequest) (*Promotion, error)
 	Update(ctx context.Context, orgID, employeeID, ref string, req UpdatePromotionRequest) (*Promotion, error)
@@ -43,11 +43,14 @@ func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Servic
 	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
-func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*PromotionListResponse, error) {
-	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
+func (s *serviceImpl) List(ctx context.Context, orgID string, filter PromotionListFilter) (*PromotionListResponse, error) {
+	filter.Normalise()
+	list, err := s.repo.FindAll(ctx, orgID, filter)
 	if err != nil { return nil, fmt.Errorf("promotions: List: %w", err) }
 	if list == nil { list = []*Promotion{} }
-	return &PromotionListResponse{Promotions: list, Total: len(list)}, nil
+	total, err := s.repo.Count(ctx, orgID, filter)
+	if err != nil { return nil, fmt.Errorf("promotions: List: count: %w", err) }
+	return &PromotionListResponse{Promotions: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {

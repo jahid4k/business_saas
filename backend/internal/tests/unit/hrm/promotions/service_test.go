@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
 	"github.com/mridha/businesssaas/internal/hrm/promotions"
 )
@@ -27,20 +28,25 @@ func (r *stubRepo) nextID() string {
 	return fmt.Sprintf("promo-%d", r.seq)
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*promotions.Promotion, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter promotions.PromotionListFilter) ([]*promotions.Promotion, error) {
 	var out []*promotions.Promotion
 	for _, p := range r.byID {
 		if p.OrgID == orgID {
-			if employeeID != "" && p.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && p.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(p.Status) != status {
+			if filter.Status != "" && string(p.Status) != filter.Status {
 				continue
 			}
 			out = append(out, p)
 		}
 	}
 	return out, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter promotions.PromotionListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*promotions.Promotion, error) {
@@ -166,7 +172,7 @@ func TestPromotionsService(t *testing.T) {
 			t.Errorf("ID mismatch")
 		}
 
-		list, err := svc.List(ctx, "org1", "emp1", "")
+		list, err := svc.List(ctx, "org1", promotions.PromotionListFilter{EmployeeID: "emp1", Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

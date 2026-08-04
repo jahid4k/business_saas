@@ -4,6 +4,8 @@ package complaints
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type ComplaintType string
@@ -96,6 +98,44 @@ type DismissRequest struct {
 type ComplaintListResponse struct {
 	Complaints []*Complaint `json:"complaints"`
 	Total      int          `json:"total"`
+	Limit      int          `json:"limit"`
+	Offset     int          `json:"offset"`
+}
+
+// ComplaintListFilter narrows the complaint list query.
+//
+// Scope is enforced against employee_id (the filer) only — never
+// against_employee_id (the accused). A complaint filed against the caller
+// must never surface under view_own; that would let a subject of a complaint
+// discover it exists and potentially retaliate before HR has reviewed it.
+type ComplaintListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *ComplaintListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

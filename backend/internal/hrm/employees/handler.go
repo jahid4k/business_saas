@@ -9,6 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -16,11 +18,13 @@ import (
 
 // Handler handles HRM employee HTTP endpoints.
 type Handler struct {
-	service Service
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
 }
 
 // List handles GET /api/v1/organizations/:orgId/hrm/employees
@@ -28,12 +32,22 @@ func NewHandler(service Service) *Handler {
 // Query: status, employment_type, department_id, manager_id, search, limit, offset
 func (h *Handler) List(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
-	filter := ListFilter{}
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.employees")
+	if err != nil {
+		log.Error("employees: List: resolve scope", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	filter := ListFilter{Scope: scopeTier, CallerUserID: userID}
 
 	if st := strings.TrimSpace(c.Query("status_id")); st != "" {
 		filter.StatusID = st
@@ -92,11 +106,30 @@ func (h *Handler) Create(c fiber.Ctx) error {
 // Get handles GET /api/v1/organizations/:orgId/hrm/employees/:empId
 // Requires: hrm.employees.view
 func (h *Handler) Get(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
-	e, err := h.service.Get(c.Context(), orgID, c.Params("empId"))
+	empID := c.Params("empId")
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.employees")
+	if err != nil {
+		log.Error("employees: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, empID)
+	if err != nil {
+		log.Error("employees: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
+	}
+	e, err := h.service.Get(c.Context(), orgID, empID)
 	if err != nil {
 		return h.empError(c, err)
 	}

@@ -4,31 +4,74 @@ package complaints
 import (
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
-type Handler struct{ service Service }
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+type Handler struct {
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
+}
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
+}
+
+// resolveListFilter builds the shared parts of a ComplaintListFilter (scope,
+// pagination, status) once userID is already known — ListAll and
+// ListForEmployee each add their own employee_id source (query param vs path
+// param) on top. err is a plain ResolveScope failure, never a written
+// response — callers log and 500 it themselves.
+func (h *Handler) resolveListFilter(c fiber.Ctx, orgID, userID string) (ComplaintListFilter, error) {
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.complaints")
+	if err != nil {
+		return ComplaintListFilter{}, err
+	}
+	filter := ComplaintListFilter{
+		Status:       c.Query("status"),
+		Scope:        scopeTier,
+		CallerUserID: userID,
+	}
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil {
+		filter.Limit = limit
+	}
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil {
+		filter.Offset = offset
+	}
+	return filter, nil
+}
 
 func (h *Handler) ListAll(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	res, err := h.service.List(c.Context(), orgID, c.Query("employee_id"), c.Query("status"))
+	filter, err := h.resolveListFilter(c, orgID, userID)
+	if err != nil { log.Error("complaints: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
+	filter.EmployeeID = c.Query("employee_id")
+	res, err := h.service.List(c.Context(), orgID, filter)
 	if err != nil { log.Error("complaints: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
 	return response.OK(c, res, "OK")
 }
 
 func (h *Handler) ListForEmployee(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	res, err := h.service.List(c.Context(), orgID, c.Params("employeeId"), c.Query("status"))
+	filter, err := h.resolveListFilter(c, orgID, userID)
+	if err != nil { log.Error("complaints: ListForEmployee", slog.Any("error", err)); return response.InternalServerError(c) }
+	filter.EmployeeID = c.Params("employeeId")
+	res, err := h.service.List(c.Context(), orgID, filter)
 	if err != nil { log.Error("complaints: ListForEmployee", slog.Any("error", err)); return response.InternalServerError(c) }
 	return response.OK(c, res, "OK")
 }
@@ -65,9 +108,18 @@ func (h *Handler) Create(c fiber.Ctx) error {
 }
 
 func (h *Handler) Get(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	cmp, err := h.service.Get(c.Context(), orgID, c.Params("employeeId"), c.Params("complaintId"))
+	employeeID := c.Params("employeeId")
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.complaints")
+	if err != nil { log.Error("complaints: Get", slog.Any("error", err)); return response.InternalServerError(c) }
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, employeeID)
+	if err != nil { log.Error("complaints: Get", slog.Any("error", err)); return response.InternalServerError(c) }
+	if !allowed { return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record") }
+	cmp, err := h.service.Get(c.Context(), orgID, employeeID, c.Params("complaintId"))
 	if err != nil { return h.err(c, err) }
 	return response.OK(c, fiber.Map{"complaint": cmp}, "OK")
 }

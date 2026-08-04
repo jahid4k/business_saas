@@ -5,9 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 type Repository interface {
@@ -18,7 +22,8 @@ type Repository interface {
 	CreateRun(ctx context.Context, r *PayslipRun) error
 	UpdateRun(ctx context.Context, r *PayslipRun) error
 	// Payslips
-	FindPayslips(ctx context.Context, orgID, runID, employeeID string) ([]*Payslip, error)
+	FindPayslips(ctx context.Context, orgID string, filter SlipListFilter) ([]*Payslip, error)
+	CountPayslips(ctx context.Context, orgID string, filter SlipListFilter) (int, error)
 	FindPayslipByRef(ctx context.Context, orgID, ref string) (*Payslip, error)
 	CreatePayslip(ctx context.Context, p *Payslip) error
 	CreatePayslipLines(ctx context.Context, lines []*PayslipLine) error
@@ -113,18 +118,45 @@ func scanSlip(row pgx.Row) (*Payslip, error) {
 	return p, nil
 }
 
-func (r *repoImpl) FindPayslips(ctx context.Context, orgID, runID, employeeID string) ([]*Payslip, error) {
-	q := `SELECT ` + slipSel + ` FROM hrm_payslips WHERE org_id=$1`
+func buildPayslipsWhere(orgID string, filter SlipListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if runID != "" { args = append(args, runID); q += fmt.Sprintf(` AND payslip_run_id=$%d`, len(args)) }
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.RunID != "" {
+		args = append(args, filter.RunID)
+		clauses = append(clauses, fmt.Sprintf("payslip_run_id = $%d", len(args)))
+	}
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindPayslips(ctx context.Context, orgID string, filter SlipListFilter) ([]*Payslip, error) {
+	where, args := buildPayslipsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_payslips WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		slipSel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil { return nil, fmt.Errorf("payslips: FindPayslips: %w", err) }
 	defer rows.Close()
 	list := make([]*Payslip, 0)
 	for rows.Next() { s, err := scanSlip(rows); if err != nil { return nil, err }; list = append(list, s) }
 	return list, rows.Err()
+}
+
+func (r *repoImpl) CountPayslips(ctx context.Context, orgID string, filter SlipListFilter) (int, error) {
+	where, args := buildPayslipsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_payslips WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("payslips: CountPayslips: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindPayslipByRef(ctx context.Context, orgID, ref string) (*Payslip, error) {

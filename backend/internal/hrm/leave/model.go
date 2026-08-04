@@ -4,6 +4,8 @@ package leave
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // LeaveRequestStatus defines the allowed status values for a leave request.
@@ -119,6 +121,13 @@ type LeaveRequestFilter struct {
 	Status      LeaveRequestStatus
 	Limit       int
 	Offset      int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.ListRequests. Scope zero value (authz.ScopeNone)
+	// means "no rows" — callers that intend no scoping must explicitly pass
+	// authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
 }
 
 const (

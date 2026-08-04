@@ -8,6 +8,8 @@ package employeedocs
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type DocStatus string
@@ -74,6 +76,40 @@ type AcknowledgeDocRequest struct {
 type DocListResponse struct {
 	Documents []*EmployeeDocument `json:"documents"`
 	Total     int                 `json:"total"`
+	Limit     int                 `json:"limit"`
+	Offset    int                 `json:"offset"`
+}
+
+// DocListFilter narrows the document list query.
+type DocListFilter struct {
+	EmployeeID  string
+	Status      string
+	RelatedType string
+	Limit       int
+	Offset      int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *DocListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

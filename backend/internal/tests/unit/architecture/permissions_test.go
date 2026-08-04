@@ -204,3 +204,77 @@ func TestPermissions_UsedStringsExistInMigrations(t *testing.T) {
 		t.Fatalf("Failed to walk internal directory: %v", err)
 	}
 }
+
+// TestPermissions_ScopeTiersSeeded is TestPermissions_UsedStringsExistInMigrations's
+// counterpart for resource-level scoping (Phase 1): it does not scan permFn(...)
+// calls in routes.go (the route-level gate), it scans for
+// authzSvc.ResolveScope(ctx, ..., "<resource>") call sites anywhere in
+// internal/ and asserts all three tiers — <resource>.view_own, .view_team,
+// .view_all — are seeded in a migration. Without this, a handler could call
+// ResolveScope("hrm.newmodule") against a resource that was never seeded any
+// tier permission, silently making every caller resolve to ScopeNone
+// (empty-list results, not an error) — the same class of bug
+// TestPermissions_UsedStringsExistInMigrations exists to catch for permFn,
+// just via a call site that test's regex doesn't look at.
+func TestPermissions_ScopeTiersSeeded(t *testing.T) {
+	backendDir := "../../../.."
+	internalDir := filepath.Join(backendDir, "internal")
+	migrationsDir := filepath.Join(backendDir, "internal", "migrations")
+
+	seeded := seededPermissionKeys(t, migrationsDir)
+	if len(seeded) == 0 {
+		t.Fatal("no permission keys found in migrations — the scan regex or migrations path is broken")
+	}
+
+	err := filepath.Walk(internalDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".go") || strings.HasSuffix(info.Name(), "_test.go") {
+			return nil
+		}
+
+		fset := token.NewFileSet()
+		node, perr := parser.ParseFile(fset, path, nil, 0)
+		if perr != nil {
+			t.Errorf("Failed to parse %s: %v", path, perr)
+			return nil
+		}
+
+		ast.Inspect(node, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "ResolveScope" {
+				return true
+			}
+			if len(call.Args) == 0 {
+				return true
+			}
+			lit, ok := call.Args[len(call.Args)-1].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			resource := strings.Trim(lit.Value, `"`)
+
+			for _, tier := range []string{"view_own", "view_team", "view_all"} {
+				key := resource + "." + tier
+				if !seeded[key] {
+					relPath, _ := filepath.Rel(internalDir, path)
+					pos := fset.Position(call.Pos())
+					t.Errorf("🚨 UNSEEDED SCOPE TIER in %s:%d\nResolveScope(...) is called for resource '%s' but '%s' is not seeded in any migration — callers with this tier will silently resolve to ScopeNone (empty results, not an error).\n",
+						relPath, pos.Line, resource, key)
+				}
+			}
+			return true
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("Failed to walk internal directory: %v", err)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"github.com/shopspring/decimal"
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // TerminationType is always HR-initiated — not employee self-service.
@@ -92,6 +94,43 @@ type UpdateTerminationRequest struct {
 type TerminationListResponse struct {
 	Terminations []*Termination `json:"terminations"`
 	Total        int            `json:"total"`
+	Limit        int            `json:"limit"`
+	Offset       int            `json:"offset"`
+}
+
+// TerminationListFilter narrows the termination list query. There is no
+// employee-scoped list route for terminations (see routes.go) — employees
+// cannot see their own termination records by default. view_own exists in
+// the permission catalog for custom-role opt-in only; no system role grants
+// it.
+type TerminationListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *TerminationListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (

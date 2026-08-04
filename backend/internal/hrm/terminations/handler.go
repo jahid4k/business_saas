@@ -4,9 +4,12 @@ package terminations
 import (
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -14,9 +17,15 @@ import (
 
 // Handler handles HRM termination HTTP endpoints.
 // Terminations are always HR-initiated — employees use /resignations.
-type Handler struct{ service Service }
+type Handler struct {
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
+}
 
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
+}
 
 // ListAll godoc
 //
@@ -38,9 +47,21 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 //	@Router			/organizations/{orgId}/hrm/terminations [get]
 func (h *Handler) ListAll(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	res, err := h.service.List(c.Context(), orgID, c.Query("employee_id"), c.Query("status"))
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.terminations")
+	if err != nil { log.Error("terminations: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
+	filter := TerminationListFilter{
+		EmployeeID:   c.Query("employee_id"),
+		Status:       c.Query("status"),
+		Scope:        scopeTier,
+		CallerUserID: userID,
+	}
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil { filter.Limit = limit }
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil { filter.Offset = offset }
+	res, err := h.service.List(c.Context(), orgID, filter)
 	if err != nil { log.Error("terminations: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
 	return response.OK(c, res, "OK")
 }
@@ -104,9 +125,18 @@ func (h *Handler) Create(c fiber.Ctx) error {
 //	@Failure		500				{object}	response.Error
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId} [get]
 func (h *Handler) Get(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	t, err := h.service.Get(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"))
+	employeeID := c.Params("employeeId")
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.terminations")
+	if err != nil { log.Error("terminations: Get", slog.Any("error", err)); return response.InternalServerError(c) }
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, employeeID)
+	if err != nil { log.Error("terminations: Get", slog.Any("error", err)); return response.InternalServerError(c) }
+	if !allowed { return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record") }
+	t, err := h.service.Get(c.Context(), orgID, employeeID, c.Params("terminationId"))
 	if err != nil { return h.err(c, err) }
 	return response.OK(c, fiber.Map{"termination": t}, "OK")
 }

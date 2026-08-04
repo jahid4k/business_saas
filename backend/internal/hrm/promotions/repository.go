@@ -5,15 +5,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 // Repository defines data access for employee promotions.
 // TENANT ISOLATION: every query includes org_id.
 type Repository interface {
-	FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Promotion, error)
+	FindAll(ctx context.Context, orgID string, filter PromotionListFilter) ([]*Promotion, error)
+	Count(ctx context.Context, orgID string, filter PromotionListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error)
 	Create(ctx context.Context, p *Promotion) error
 	Update(ctx context.Context, p *Promotion) error
@@ -47,12 +52,30 @@ func scanPromo(row pgx.Row) (*Promotion, error) {
 	return p, nil
 }
 
-func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Promotion, error) {
-	q := `SELECT ` + sel + ` FROM hrm_promotions WHERE org_id=$1`
+func buildPromotionsWhere(orgID string, filter PromotionListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter PromotionListFilter) ([]*Promotion, error) {
+	where, args := buildPromotionsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_promotions WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
 	if err != nil { return nil, fmt.Errorf("promotions: FindAll: %w", err) }
 	defer rows.Close()
@@ -63,6 +86,15 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string
 		list = append(list, p)
 	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter PromotionListFilter) (int, error) {
+	where, args := buildPromotionsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_promotions WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("promotions: Count: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {

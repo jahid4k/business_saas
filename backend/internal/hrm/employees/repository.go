@@ -9,6 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 // Repository defines data access for HRM employees.
@@ -102,6 +105,11 @@ func buildListWhere(orgID string, filter ListFilter) (string, []any) {
 			  OR LOWER(COALESCE(email,'')) LIKE $%d OR LOWER(COALESCE(employee_number,'')) LIKE $%d)`,
 			n, n, n, n,
 		))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
 	}
 	return strings.Join(clauses, " AND "), args
 }

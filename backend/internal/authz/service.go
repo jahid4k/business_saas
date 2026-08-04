@@ -25,6 +25,13 @@ var roleNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]{1,49}$`)
 
 type Service interface {
 	Can(ctx context.Context, userID, organizationID, resource, action string) (bool, error)
+	// ResolveScope returns the highest resource-level visibility tier userID holds
+	// for resource within organizationID, checking "<resource>.view_all" →
+	// ".view_team" → ".view_own" in priority order via Can (each check is a cached
+	// lookup, not a new DB round trip). Callers invoke this once instead of calling
+	// Can three times themselves. ScopeNone means the caller holds none of the
+	// three tiers — the base "<resource>.view" route gate is unaffected by this.
+	ResolveScope(ctx context.Context, userID, organizationID, resource string) (Scope, error)
 	GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error)
 	MyMembership(ctx context.Context, userID, organizationID string) (*MyMembershipResponse, error)
 	ListMembers(ctx context.Context, organizationID string) ([]*MemberWithUser, error)
@@ -113,6 +120,27 @@ func (s *serviceImpl) Can(ctx context.Context, userID, organizationID, resource,
 		}
 	}
 	return false, nil
+}
+
+func (s *serviceImpl) ResolveScope(ctx context.Context, userID, organizationID, resource string) (Scope, error) {
+	tiers := []struct {
+		action string
+		scope  Scope
+	}{
+		{"view_all", ScopeAll},
+		{"view_team", ScopeTeam},
+		{"view_own", ScopeOwn},
+	}
+	for _, t := range tiers {
+		ok, err := s.Can(ctx, userID, organizationID, resource, t.action)
+		if err != nil {
+			return ScopeNone, fmt.Errorf("authz: ResolveScope: %w", err)
+		}
+		if ok {
+			return t.scope, nil
+		}
+	}
+	return ScopeNone, nil
 }
 
 func (s *serviceImpl) GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error) {

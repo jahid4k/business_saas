@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/payslips"
 )
 
@@ -64,21 +65,26 @@ func (m *mockPayslipsRepo) UpdateRun(ctx context.Context, r *payslips.PayslipRun
 	return nil
 }
 
-func (m *mockPayslipsRepo) FindPayslips(ctx context.Context, orgID, runID, employeeID string) ([]*payslips.Payslip, error) {
+func (m *mockPayslipsRepo) FindPayslips(ctx context.Context, orgID string, filter payslips.SlipListFilter) ([]*payslips.Payslip, error) {
 	var list []*payslips.Payslip
 	for _, p := range m.payslips {
 		if p.OrgID != orgID {
 			continue
 		}
-		if runID != "" && p.PayslipRunID != runID {
+		if filter.RunID != "" && p.PayslipRunID != filter.RunID {
 			continue
 		}
-		if employeeID != "" && p.EmployeeID != employeeID {
+		if filter.EmployeeID != "" && p.EmployeeID != filter.EmployeeID {
 			continue
 		}
 		list = append(list, p)
 	}
 	return list, nil
+}
+
+func (m *mockPayslipsRepo) CountPayslips(ctx context.Context, orgID string, filter payslips.SlipListFilter) (int, error) {
+	out, err := m.FindPayslips(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (m *mockPayslipsRepo) FindPayslipByRef(ctx context.Context, orgID, ref string) (*payslips.Payslip, error) {
@@ -195,7 +201,7 @@ func TestPayslipsService(t *testing.T) {
 			OrgID:      orgID,
 			EmployeeID: "emp1",
 		})
-		res, err := svc.ListPayslips(ctx, orgID, "", "emp1")
+		res, err := svc.ListPayslips(ctx, orgID, payslips.SlipListFilter{EmployeeID: "emp1", Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

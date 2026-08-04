@@ -8,15 +8,23 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
 )
 
 // Handler handles all HRM salary HTTP endpoints.
-type Handler struct{ service Service }
+type Handler struct {
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
+}
 
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
+}
 
 // ─────────────────────────────────────────────────────────────
 // Salary Components
@@ -504,11 +512,29 @@ func (h *Handler) RemoveComponentFromStructure(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/salary [get]
 func (h *Handler) GetSalaryHistory(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
-	result, err := h.service.GetSalaryHistory(c.Context(), orgID, c.Params("employeeId"))
+	employeeID := c.Params("employeeId")
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.salary.employee")
+	if err != nil {
+		log.Error("salary: GetSalaryHistory", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, employeeID)
+	if err != nil {
+		log.Error("salary: GetSalaryHistory", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
+	}
+	result, err := h.service.GetSalaryHistory(c.Context(), orgID, employeeID)
 	if err != nil {
 		log.Error("salary: GetSalaryHistory", slog.Any("error", err))
 		return response.InternalServerError(c)
