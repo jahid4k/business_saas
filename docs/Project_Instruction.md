@@ -1,5 +1,43 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-08-04 (r18 — two HRM Extended phases shipped, neither previously folded into
+> this document. **Phase 1 — Resource-Level Permissions**: `authz.Scope` type + `ResolveScope`
+> method (`internal/authz`), plus a new `internal/hrm/scope` package (`Predicate()` for list-query
+> WHERE-fragments, `Resolver.AuthorizeRecordAccess()` for GET-by-ID checks) — `view_own`/
+> `view_team`/`view_all` layered on top of existing flat RBAC. `view_team` is a depth-parameterized
+> recursive CTE over `hrm_employees.manager_id` (default depth 1, direct reports only) with an
+> explicit path guard, since `manager_id` is a self-FK with no DB-level cycle prevention beyond
+> blocking direct self-reference — proven safe against a real 3-node cycle via integration test.
+> Migrations `00072`/`00073` seed the three tiers per resource per role and backfill custom
+> roles/member overrides that held bare `.view` with no tier (a silent-regression risk otherwise:
+> pass the route gate, then get zero rows with no error). Rolled out across all 12 employee-
+> record-returning HRM modules plus salary's per-employee endpoints — every GET-by-ID now returns
+> 403 `RECORD_ACCESS_DENIED` on an out-of-scope record instead of a silently wrong result. Also
+> fixed while touching this area: `hrm.salary.employee` was missing from
+> `frontend/src/lib/permissionGroups.ts`, and `PermissionForm.tsx` had its own hardcoded duplicate
+> copy of the categorization instead of importing the shared one — same class of bug as the r10
+> capture-permissions fix.
+> **Phase 2 — Leave Engine Upgrade**: found during the Extended-plan audit, not on the original
+> build list — shipped HRM had leave *requests* but no leave *balance*, and Phase 9 (Full & Final
+> settlement) cannot compute encashment without one. Three new tables (migration `00074`):
+> `hrm_leave_policies` (per-leave-type accrual method/rate, carry-forward cap, encashable flag —
+> opt-in; a leave type with no policy behaves exactly as it did before this phase),
+> `hrm_leave_transactions` (append-only signed ledger, the source of truth), `hrm_leave_balances`
+> (immutable monthly snapshots, modeled on `hrm_employee_salary_records`'s single-`effective_date`
+> pattern — the one actually-working "effective-dated" convention in this codebase, not the
+> `effective_from`/`effective_to` one Section 4 describes). Two new scheduler jobs:
+> `leave.accrue_and_snapshot` (daily) and `leave.year_end_carry_forward` (annual). Two new
+> permissions, owner/admin only: `hrm.leave.adjust_balance`, `hrm.leave.encash` — balance/ledger
+> reads reuse the existing `hrm.leave.view_own/team/all` tiers from Phase 1 with zero new seeding.
+> `CreateRequest`/`ApproveRequest`/`CancelRequest`/`DeleteRequest` now post/reverse ledger
+> transactions when a policy exists, via a real `pgx.Tx` bypassing `Repository` (mirroring
+> `promotions.Apply`'s existing pattern) — approving past zero always succeeds, there is no
+> balance-sufficiency gate anywhere in the write path, by design. One real bug caught by
+> integration testing before it shipped: a snapshot boundary comparison used the wrong operator,
+> silently dropping any transaction dated exactly on a snapshot's boundary date — fixed, and the
+> test that caught it (comparing the checkpoint+delta read against a brute-force full-ledger sum)
+> is now a permanent regression guard. Migration count 71 → 75, table count 79 → 82.)
+
 > Last updated: 2026-08-03 (r17 — full-document drift audit, prompted by r16 having only touched
 > Section 5. Read the whole doc against the whole source tree (three parallel audits: frontend,
 > backend/database, mobile) rather than trusting any section's own status flags. Found drift in
@@ -853,11 +891,13 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ---
 
-### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03]
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **26 sub-modules, 206 routes** (recounted directly from source 2026-08-03 — the prior "205" total didn't even match the sum of its own group breakdown below, and the Leave group was missing from that breakdown entirely). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **26 sub-modules, 216 routes** (206 as of the 2026-08-03 recount + 10 new leave-balance routes, r18). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
-**Database:** 41 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053).
+**Database:** 45 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18).
+
+**Resource-level permissions (r18):** `view_own`/`view_team`/`view_all` scoping (`internal/hrm/scope`) layered on top of every group below plus salary's per-employee endpoints — see Section 9 → PLATFORM PRIMITIVES #3 for the primitive itself; this entry just records that it's now live across the whole module, not a config-only subset.
 
 **Group A — Setup/Config** (`departments, positions, salary, approvals, warningtypes, doctemplates, shifts, holidays, contracts`): 72 routes. Salary formula engine via `expr-lang/expr`. Approvals' instance-list endpoint (`GET /hrm/setup/approvals/instances`) exists — a prior "missing since r9" note here was stale; confirmed against `internal/hrm/approvals/routes.go` 2026-08-03.
 
@@ -876,7 +916,7 @@ Dynamic statuses (00053): per-org status list with category (`active/inactive/on
 
 **Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences now genuinely run (see Section 5 → PLATFORM — SCHEDULER) — `milestones.generate_upcoming` previously errored on every run against a column `00053` had already dropped, silently, so it never generated anything despite being "wired."
 
-**Leave** (`leave` — types + requests): 12 routes, `hrm.leave.*` permissions. Existed in code and in the Section 6 table list (`hrm_leave_types`, `hrm_leave_requests`) but was never added to this module's route breakdown until now.
+**Leave** (`leave` — types + requests + balances): 22 routes (12 original + 10 added r18), `hrm.leave.*` permissions. Balance tracking (accrual, carry-forward, encashment recording) is opt-in per leave type — a type with no `hrm_leave_policies` row behaves exactly as it always has, zero enforcement. Two new scheduler jobs (`leave.accrue_and_snapshot` daily, `leave.year_end_carry_forward` annually — see Section 5 → PLATFORM — SCHEDULER) and two new owner/admin-only permissions (`hrm.leave.adjust_balance`, `hrm.leave.encash`); balance/ledger reads reuse the existing `hrm.leave.view_own/team/all` tiers, no new scope permissions needed. Encashment records days only — it does not compute a currency amount, that's Section 9 → HRM EXTENDED MODULES → Compensation depth (F&F)'s job once built.
 
 **Reports:** 3 routes.
 
@@ -903,7 +943,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 71
+### Migration Count: 75
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -913,9 +953,13 @@ open) · `00066` HRM money `float64`→`decimal.Decimal` + `organizations.money_
 (`platform_scheduled_jobs`, `platform_job_runs`) · `00068` notification tables
 (`platform_notifications`, `platform_notification_preferences`) · `00069` sentinel system user
 for scheduler-triggered writes · `00070` `hrm_legal_entities` + `legal_entity_id` backfilled onto
-36 HRM tables · `00071` `currency CHAR(3)` prep (new columns + standardized existing ones).
+36 HRM tables · `00071` `currency CHAR(3)` prep (new columns + standardized existing ones) ·
+`00072` seeds `view_own`/`view_team`/`view_all` per resource per role (Phase 1) · `00073`
+backfills that tier onto custom roles/member overrides holding bare `.view` · `00074`
+`hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (Phase 2) · `00075` seeds
+`hrm.leave.adjust_balance`/`hrm.leave.encash`, owner/admin only.
 
-### Key Tables (79 total)
+### Key Tables (82 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -929,14 +973,14 @@ for scheduler-triggered writes · `00070` `hrm_legal_entities` + `legal_entity_i
 **Capture (7):**
 `org_api_keys` · `org_inbound_emails` · `social_integrations` · `website_visitors` · `visitor_pageviews` · `inbound_email_logs` · `social_lead_logs`
 
-**HRM (42):**
+**HRM (45):**
 `hrm_legal_entities` (prep migration `00070`, zero business logic yet — see PREP MIGRATIONS in Section 9) ·
 Group A (19): `hrm_departments` · `hrm_positions` · `hrm_salary_components` · `hrm_salary_structures` · `hrm_salary_structure_components` · `hrm_approval_templates` · `hrm_approval_template_levels` · `hrm_approval_instances` · `hrm_approval_decisions` · `hrm_warning_types` · `hrm_warning_escalation_rules` · `hrm_document_templates` · `hrm_document_bulk_sends` · `hrm_shifts` · `hrm_work_schedule_assignments` · `hrm_holiday_calendars` · `hrm_holidays` · `hrm_calendar_assignments` · `hrm_employee_contracts`
 Group B (6): `hrm_employees` · `hrm_promotions` · `hrm_transfers` · `hrm_resignations` · `hrm_terminations` · `hrm_employee_statuses`
 Group C (4): `hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_documents` · `hrm_acknowledgements`
 Group D (6): `hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
 Group E (4): `hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
-Leave (2): `hrm_leave_types` · `hrm_leave_requests`
+Leave (5): `hrm_leave_types` · `hrm_leave_requests` · `hrm_leave_policies` · `hrm_leave_transactions` · `hrm_leave_balances`
 
 ---
 
@@ -1289,9 +1333,9 @@ Hard dependency (EMAIL SENDING) resolved — Resend is wired and live, not stubb
 Named recurring jobs with Redis distributed locking (multi-instance safe), run history, manual trigger built. Failure alerting (beyond `consecutive_failures` tracking) not built. The two ad-hoc HRM crons (milestones, absences) are migrated onto this — and both had latent bugs (one a stub, one silently erroring on a dropped column) fixed as part of the migration; see Section 5 entry for detail.
 Consumers still to come: analytics snapshot runs, certification expiry sweeps, enrollment window open/close, ticket auto-close, system access revocation on last working date, cycle phase transitions.
 
-**3. Resource-level permissions**
-Already listed separately below; consolidating the rationale here. Beyond module/action RBAC — per-record filtering, and a `view_own / view_team / view_all` tier applied consistently. `view_team` requires a reporting-manager chain to resolve against (see PREP MIGRATIONS).
-This is the primitive with the highest severity of failure: appraisal draft leakage, salary visibility, anonymous 360 de-anonymization, and succession/flight-risk exposure are trust and legal issues, not UX polish. Touches every repository's query layer — needs its own ADR.
+**3. Resource-level permissions — ✅ built (r18), see Section 5 → HRM MODULE**
+Beyond module/action RBAC — per-record filtering, and a `view_own / view_team / view_all` tier applied consistently. `view_team` resolves against a reporting-manager chain (a depth-parameterized recursive CTE over `hrm_employees.manager_id`, default depth 1 — see PREP MIGRATIONS). Shipped as `authz.Scope`/`ResolveScope` (`internal/authz`) + a new `internal/hrm/scope` package (`Predicate()` for list queries, `Resolver.AuthorizeRecordAccess()` for GET-by-ID), rolled out across all 12 employee-record HRM modules plus salary's per-employee endpoints.
+This is the primitive with the highest severity of failure: appraisal draft leakage, salary visibility, anonymous 360 de-anonymization, and succession/flight-risk exposure are trust and legal issues, not UX polish. Every future module that returns employee-level records (performance, compensation depth, succession, etc.) should build on this from day one rather than retrofitting later — retrofitting is exactly what r18 just did for the 12 already-shipped modules, and it touched every one of their repository query layers.
 
 **4. Checklist engine**
 Template + typed items + `owner_type` → assignee resolution at instantiation + offset-based due dates + blocking vs non-blocking + instance completion tracking.

@@ -317,7 +317,7 @@ func main() {
 	hrmDeptsSvc := hrmdepts.NewService(hrmDeptsRepo)
 	hrmPosSvc := hrmpositions.NewService(hrmPosRepo)
 	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc)
-	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc)
+	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc, pgPool)
 	hrmPhase1Rpts := hrmreports.NewService(hrmReportsRepo)
 
 	// ── HRM Group A — config-layer services; no cross-module dependencies ──────
@@ -653,6 +653,50 @@ func main() {
 			n, err := hrmAttendanceSvc.RunAbsenceSweep(jCtx, orgID, scheduler.SystemUserID, sweepDate)
 			if err != nil {
 				slog.Error("scheduler: absence sweep failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
+
+	// Daily (not monthly-only): on_joining grants need to fire promptly for
+	// new hires; monthly/annual policies simply no-op on days they're not
+	// due. Also rolls the period into a hrm_leave_balances snapshot on the
+	// 1st of each month.
+	schedulerSvc.Register("leave.accrue_and_snapshot", "0 3 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		today := time.Now().Format("2006-01-02")
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmLeaveSvc.RunAccrual(jCtx, orgID, scheduler.SystemUserID, today)
+			if err != nil {
+				slog.Error("scheduler: leave accrual failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
+
+	// Annual (Jan 1, after the 03:00 accrual run): forfeits any balance in
+	// excess of a policy's carry_forward_cap. Its Dec-31-dated forfeiture is
+	// picked up by the next accrual run's snapshot window — ordering is
+	// enforced only by this cron gap, not an explicit call chain.
+	schedulerSvc.Register("leave.year_end_carry_forward", "30 2 1 1 *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		today := time.Now().Format("2006-01-02")
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmLeaveSvc.RunCarryForward(jCtx, orgID, scheduler.SystemUserID, today)
+			if err != nil {
+				slog.Error("scheduler: leave carry-forward failed for org", "orgID", orgID, "error", err)
 				continue
 			}
 			total += n

@@ -281,11 +281,15 @@ func (h *Handler) CancelRequest(c fiber.Ctx) error {
 // DeleteRequest handles DELETE /api/v1/organizations/:orgId/hrm/leave/requests/:reqId
 // Requires: hrm.leave.delete
 func (h *Handler) DeleteRequest(c fiber.Ctx) error {
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
-	if err := h.service.DeleteRequest(c.Context(), orgID, c.Params("reqId")); err != nil {
+	if err := h.service.DeleteRequest(c.Context(), orgID, c.Params("reqId"), userID); err != nil {
 		return h.leaveRequestError(c, err)
 	}
 	return response.NoContent(c)

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/mridha/businesssaas/internal/audit"
 )
 
@@ -26,16 +28,37 @@ type Service interface {
 	ApproveRequest(ctx context.Context, orgID, ref, reviewerID string, req ReviewLeaveRequestRequest) (*LeaveRequest, error)
 	RejectRequest(ctx context.Context, orgID, ref, reviewerID string, req ReviewLeaveRequestRequest) (*LeaveRequest, error)
 	CancelRequest(ctx context.Context, orgID, ref, actorID string) (*LeaveRequest, error)
-	DeleteRequest(ctx context.Context, orgID, ref string) error
+	DeleteRequest(ctx context.Context, orgID, ref, actorID string) error
+
+	// Balances — see balances_service.go
+	ListPolicies(ctx context.Context, orgID string) (*PolicyListResponse, error)
+	GetPolicy(ctx context.Context, orgID, ref string) (*LeavePolicy, error)
+	CreatePolicy(ctx context.Context, orgID, createdBy string, req CreatePolicyRequest) (*LeavePolicy, error)
+	UpdatePolicy(ctx context.Context, orgID, ref string, req UpdatePolicyRequest) (*LeavePolicy, error)
+
+	GetCurrentBalance(ctx context.Context, orgID, employeeID, leaveTypeID string) (*CurrentBalance, error)
+	ListCurrentBalances(ctx context.Context, orgID, employeeID string) ([]*CurrentBalance, error)
+	ListBalanceHistory(ctx context.Context, orgID, employeeID, leaveTypeID string, limit, offset int) (*BalanceHistoryResponse, error)
+	ListTransactions(ctx context.Context, orgID, employeeID string, filter TransactionFilter) (*TransactionListResponse, error)
+
+	PostAdjustment(ctx context.Context, orgID, employeeID, leaveTypeID, actorID string, req PostAdjustmentRequest) (*LeaveTransaction, error)
+	PostEncashment(ctx context.Context, orgID, employeeID, leaveTypeID, actorID string, req PostEncashmentRequest) (*LeaveTransaction, error)
+
+	// Scheduler entry points — asOfDate is an explicit param (mirrors
+	// attendance.RunAbsenceSweep's own `date string` arg) so both jobs are
+	// testable without manipulating wall-clock time.
+	RunAccrual(ctx context.Context, orgID, systemUserID, asOfDate string) (int, error)
+	RunCarryForward(ctx context.Context, orgID, systemUserID, asOfDate string) (int, error)
 }
 
 type serviceImpl struct {
 	repo  Repository
 	audit audit.Service
+	db    *pgxpool.Pool
 }
 
-func NewService(repo Repository, auditSvc audit.Service) Service {
-	return &serviceImpl{repo: repo, audit: auditSvc}
+func NewService(repo Repository, auditSvc audit.Service, db *pgxpool.Pool) Service {
+	return &serviceImpl{repo: repo, audit: auditSvc, db: db}
 }
 
 // ─────────────────────────────────────────────────────────
@@ -261,7 +284,26 @@ func (s *serviceImpl) CreateRequest(ctx context.Context, orgID, createdBy string
 		CreatedBy:   createdBy,
 	}
 
-	if err := s.repo.CreateRequest(ctx, lr); err != nil {
+	// Auto-approved requests (leave type doesn't require approval) post a
+	// usage debit immediately if a balance policy is active for this leave
+	// type — this branch never goes through ApproveRequest, so posting only
+	// there would silently skip balance tracking for every leave type with
+	// requires_approval=false. Leave types with no policy are untouched
+	// (opt-in): this call returns nil, nil in that case.
+	var policy *LeavePolicy
+	if status == LeaveRequestStatusApproved {
+		var perr error
+		policy, perr = s.repo.FindPolicyByLeaveType(ctx, orgID, lt.ID)
+		if perr != nil {
+			return nil, fmt.Errorf("leave: CreateRequest: policy check: %w", perr)
+		}
+	}
+
+	if policy != nil {
+		if err := s.createRequestWithUsage(ctx, lr, policy, createdBy); err != nil {
+			return nil, fmt.Errorf("leave: CreateRequest: %w", err)
+		}
+	} else if err := s.repo.CreateRequest(ctx, lr); err != nil {
 		return nil, fmt.Errorf("leave: CreateRequest: %w", err)
 	}
 
@@ -290,7 +332,18 @@ func (s *serviceImpl) ApproveRequest(ctx context.Context, orgID, ref, reviewerID
 	lr.ReviewedAt = &now
 	lr.ReviewNote = req.Note
 
-	if err := s.repo.UpdateRequest(ctx, lr); err != nil {
+	// Posts a usage debit if a balance policy is active for this leave type
+	// (opt-in). Approving a request that drives the balance negative always
+	// succeeds — there is no balance-sufficiency gate anywhere in this path.
+	policy, err := s.repo.FindPolicyByLeaveType(ctx, orgID, lr.LeaveTypeID)
+	if err != nil {
+		return nil, fmt.Errorf("leave: ApproveRequest: policy check: %w", err)
+	}
+	if policy != nil {
+		if err := s.updateRequestWithLedger(ctx, lr, policy, TransactionUsage, -lr.TotalDays, reviewerID); err != nil {
+			return nil, fmt.Errorf("leave: ApproveRequest: %w", err)
+		}
+	} else if err := s.repo.UpdateRequest(ctx, lr); err != nil {
 		return nil, fmt.Errorf("leave: ApproveRequest: %w", err)
 	}
 
@@ -341,19 +394,43 @@ func (s *serviceImpl) CancelRequest(ctx context.Context, orgID, ref, actorID str
 	if lr.Status == LeaveRequestStatusCancelled {
 		return nil, ErrAlreadyCancelled
 	}
+	wasApproved := lr.Status == LeaveRequestStatusApproved
 
 	now := time.Now()
 	lr.Status = LeaveRequestStatusCancelled
 	lr.ReviewedBy = &actorID
 	lr.ReviewedAt = &now
 
-	if err := s.repo.UpdateRequest(ctx, lr); err != nil {
+	// Cancelling an already-approved (usage-posted) request reverses the
+	// usage debit if a balance policy is active. Cancelling from `pending`
+	// posts nothing — nothing was ever debited.
+	var policy *LeavePolicy
+	if wasApproved {
+		var perr error
+		policy, perr = s.repo.FindPolicyByLeaveType(ctx, orgID, lr.LeaveTypeID)
+		if perr != nil {
+			return nil, fmt.Errorf("leave: CancelRequest: policy check: %w", perr)
+		}
+	}
+
+	if policy != nil {
+		if err := s.updateRequestWithLedger(ctx, lr, policy, TransactionUsageReversal, lr.TotalDays, actorID); err != nil {
+			return nil, fmt.Errorf("leave: CancelRequest: %w", err)
+		}
+	} else if err := s.repo.UpdateRequest(ctx, lr); err != nil {
 		return nil, fmt.Errorf("leave: CancelRequest: %w", err)
 	}
 	return lr, nil
 }
 
-func (s *serviceImpl) DeleteRequest(ctx context.Context, orgID, ref string) error {
+// DeleteRequest hard-deletes a leave request. If it was approved (and thus
+// usage-posted) and a balance policy is active for its leave type, the
+// usage is reversed first — this is not in the original Phase 2 ask, but
+// has the identical bug shape as CancelRequest: DeleteRequest is reachable
+// from any status today, including approved, and the FK is ON DELETE SET
+// NULL, so an un-reversed delete would permanently overstate usage with an
+// orphaned debit.
+func (s *serviceImpl) DeleteRequest(ctx context.Context, orgID, ref, actorID string) error {
 	lr, err := s.repo.FindRequestByRef(ctx, orgID, ref)
 	if err != nil {
 		return fmt.Errorf("leave: DeleteRequest: %w", err)
@@ -361,6 +438,20 @@ func (s *serviceImpl) DeleteRequest(ctx context.Context, orgID, ref string) erro
 	if lr == nil {
 		return ErrLeaveRequestNotFound
 	}
+
+	if lr.Status == LeaveRequestStatusApproved {
+		policy, perr := s.repo.FindPolicyByLeaveType(ctx, orgID, lr.LeaveTypeID)
+		if perr != nil {
+			return fmt.Errorf("leave: DeleteRequest: policy check: %w", perr)
+		}
+		if policy != nil {
+			if err := s.deleteRequestWithReversal(ctx, lr, policy, actorID); err != nil {
+				return fmt.Errorf("leave: DeleteRequest: %w", err)
+			}
+			return nil
+		}
+	}
+
 	if err := s.repo.DeleteRequest(ctx, orgID, ref); err != nil {
 		return fmt.Errorf("leave: DeleteRequest: %w", err)
 	}

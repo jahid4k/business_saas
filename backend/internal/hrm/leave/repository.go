@@ -33,6 +33,9 @@ type Repository interface {
 	CreateRequest(ctx context.Context, r *LeaveRequest) error
 	UpdateRequest(ctx context.Context, r *LeaveRequest) error
 	DeleteRequest(ctx context.Context, orgID, ref string) error
+
+	// Balances (policies, snapshots, ledger) — see balances_repository.go
+	BalanceRepository
 }
 
 type repoImpl struct {

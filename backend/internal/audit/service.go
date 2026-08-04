@@ -33,12 +33,14 @@ const (
 	EventTaskDeleted          EventType = "task.deleted"
 
 	// HRM events
-	EventHRMEmployeeCreated    EventType = "hrm.employee.created"
-	EventHRMEmployeeTerminated EventType = "hrm.employee.terminated"
-	EventHRMLeaveRequested     EventType = "hrm.leave.requested"
-	EventHRMLeaveApproved      EventType = "hrm.leave.approved"
-	EventHRMLeaveRejected      EventType = "hrm.leave.rejected"
-	EventMemberPasswordReset   EventType = "authz.member_password_reset"
+	EventHRMEmployeeCreated      EventType = "hrm.employee.created"
+	EventHRMEmployeeTerminated   EventType = "hrm.employee.terminated"
+	EventHRMLeaveRequested       EventType = "hrm.leave.requested"
+	EventHRMLeaveApproved        EventType = "hrm.leave.approved"
+	EventHRMLeaveRejected        EventType = "hrm.leave.rejected"
+	EventHRMLeaveBalanceAdjusted EventType = "hrm.leave.balance_adjusted"
+	EventHRMLeaveEncashed        EventType = "hrm.leave.encashed"
+	EventMemberPasswordReset     EventType = "authz.member_password_reset"
 )
 
 // Event represents a single audit log entry.
