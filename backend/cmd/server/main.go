@@ -378,14 +378,17 @@ func main() {
 	hrmCalSvc := hrmcalendar.NewService(hrmCalRepo, pgPool)
 	hrmMilestonesSvc := hrmmilestones.NewService(hrmMilestonesRepo, pgPool)
 
-	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
-	// Requisitions are approval-gated the same way promotions/transfers/etc.
-	// are — takes hrmApprovalsSvc so SubmitRequisition() can route into an
-	// approval chain when one is configured.
-	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc)
+	// ── HRM Extended Phase 4A/4B — Recruitment / ATS ───────────────────────────
+	// Requisitions and offers are approval-gated the same way promotions/
+	// transfers/etc. are — takes hrmApprovalsSvc so SubmitRequisition()/
+	// SubmitOffer() can route into an approval chain when one is configured.
+	// hrmEmpSvc (constructed above, in the HRM Phase 1 block) satisfies
+	// recruitment.EmployeeCreator structurally — HireApplication uses it to
+	// materialize an employee record from a hired application.
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc)
 
-	// Wire approval-instance completion back into each of the six workflow
-	// modules. Must run after all six services above exist. entityType here
+	// Wire approval-instance completion back into each of the seven workflow
+	// modules. Must run after all seven services above exist. entityType here
 	// must match the EntityType string each Submit()/Issue() uses when calling
 	// approvalsSvc.CreateInstance — see each module's service.go.
 	hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
@@ -394,6 +397,7 @@ func main() {
 	hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS

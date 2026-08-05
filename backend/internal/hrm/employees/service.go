@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/mridha/businesssaas/internal/audit"
+	"github.com/mridha/businesssaas/internal/hrm/recruitment"
 )
 
 // dateLayout is the ISO 8601 date format used for hire/termination/birth dates.
@@ -36,6 +38,29 @@ type Service interface {
 	CreateStatus(ctx context.Context, orgID string, req CreateEmployeeStatusRequest) (*EmployeeStatusModel, error)
 	UpdateStatus(ctx context.Context, orgID, statusID string, req UpdateEmployeeStatusRequest) (*EmployeeStatusModel, error)
 	DeleteStatus(ctx context.Context, orgID, statusID string) error
+
+	// CreateEmployeeTx and AfterHireCommit together implement
+	// recruitment.EmployeeCreator (internal/hrm/recruitment declares that
+	// interface; this package imports recruitment only for the request
+	// type, the crm/leads ContactCreator/DealCreator precedent — recruitment
+	// orchestrates the transaction, employees is the provider).
+	//
+	// CreateEmployeeTx does ONLY the insert, inside the caller's tx. It must
+	// have zero post-commit side effects — the caller's outer transaction
+	// (which also updates the application and requisition) might still roll
+	// back after this returns, and both the audit log and the onboarding
+	// checklist hook are independent, non-transactional writes (audit.Log
+	// swaps to a background context specifically so it can outlive the
+	// request; the checklist engine opens its own transaction). Firing
+	// either one before the outer commit would record an employee that
+	// might never actually exist.
+	CreateEmployeeTx(ctx context.Context, tx pgx.Tx, orgID, createdBy string, req recruitment.HireEmployeeRequest) (employeeID, employeePublicID string, err error)
+
+	// AfterHireCommit runs Create's normal post-commit side effects (audit
+	// log + best-effort onboarding checklist) for an employee inserted via
+	// CreateEmployeeTx. The orchestrator (recruitment.HireApplication) calls
+	// this ONLY after its own transaction has committed successfully.
+	AfterHireCommit(ctx context.Context, orgID, actorID, employeeID string)
 }
 
 type serviceImpl struct {
@@ -181,6 +206,86 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 	}
 
 	return e, nil
+}
+
+// CreateEmployeeTx implements recruitment.EmployeeCreator's insert half. It
+// deliberately does NOT call s.audit.Log or s.checklist — see the Service
+// interface doc comment for why those must wait for AfterHireCommit.
+func (s *serviceImpl) CreateEmployeeTx(ctx context.Context, tx pgx.Tx, orgID, createdBy string, req recruitment.HireEmployeeRequest) (string, string, error) {
+	firstName := strings.TrimSpace(req.FirstName)
+	if firstName == "" {
+		return "", "", ErrFirstNameRequired
+	}
+	if len(firstName) > 100 {
+		return "", "", ErrFirstNameTooLong
+	}
+
+	hireDateStr := strings.TrimSpace(req.HireDate)
+	if hireDateStr == "" {
+		return "", "", ErrHireDateRequired
+	}
+	hireDate, err := time.Parse(dateLayout, hireDateStr)
+	if err != nil {
+		return "", "", ErrInvalidHireDate
+	}
+
+	empType := EmploymentTypeFullTime
+	if req.EmploymentType != nil && strings.TrimSpace(*req.EmploymentType) != "" {
+		empType = EmploymentType(strings.TrimSpace(*req.EmploymentType))
+		if !empType.IsValid() {
+			return "", "", ErrInvalidEmploymentType
+		}
+	}
+
+	// GetDefaultStatusID is a stable reference-data read (org statuses
+	// change rarely), so it goes through the pool rather than needing its
+	// own Tx variant — matching how Create reads it before ever touching
+	// row-mutating SQL.
+	defaultStatusID, err := s.repo.GetDefaultStatusID(ctx, orgID, EmployeeStatusCategoryActive)
+	if err != nil {
+		return "", "", fmt.Errorf("employees: CreateEmployeeTx: fetch default status: %w", err)
+	}
+
+	sourceCandidateID := strings.TrimSpace(req.SourceCandidateID)
+
+	e := &Employee{
+		OrgID:          orgID,
+		FirstName:      firstName,
+		HireDate:       hireDate,
+		EmploymentType: empType,
+		StatusID:       defaultStatusID,
+		CreatedBy:      createdBy,
+	}
+	e.LastName = nilIfEmpty(&req.LastName)
+	e.Email = req.Email
+	e.DepartmentID = nilIfEmpty(req.DepartmentID)
+	e.PositionID = nilIfEmpty(req.PositionID)
+	e.ManagerID = nilIfEmpty(req.ManagerID)
+	if sourceCandidateID != "" {
+		e.SourceCandidateID = &sourceCandidateID
+	}
+
+	if err := s.repo.CreateTx(ctx, tx, e); err != nil {
+		return "", "", fmt.Errorf("employees: CreateEmployeeTx: %w", err)
+	}
+
+	return e.ID, e.PublicID, nil
+}
+
+// AfterHireCommit runs Create's normal post-commit side effects for an
+// employee inserted via CreateEmployeeTx. See the Service interface doc
+// comment: the caller must invoke this only after its own transaction has
+// committed successfully.
+func (s *serviceImpl) AfterHireCommit(ctx context.Context, orgID, actorID, employeeID string) {
+	s.audit.Log(ctx, audit.EventHRMEmployeeCreated, actorID, orgID, "", "", map[string]string{
+		"employee_id": employeeID, "source": "hire_conversion",
+	})
+
+	if s.checklist != nil {
+		if err := s.checklist.OnEmployeeCreated(ctx, orgID, actorID, employeeID); err != nil {
+			slog.Error("employees: onboarding checklist hook failed (hire conversion)", slog.Any("error", err), slog.String("employee_id", employeeID))
+		}
+	}
 }
 
 func (s *serviceImpl) Update(ctx context.Context, orgID, ref string, req UpdateEmployeeRequest) (*Employee, error) {

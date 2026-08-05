@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
 	"github.com/mridha/businesssaas/internal/hrm/recruitment"
 )
@@ -24,6 +27,13 @@ type stubRepo struct {
 	candidates   map[string]*recruitment.Candidate
 	applications map[string]*recruitment.Application
 	history      map[string][]*recruitment.ApplicationStageHistory
+
+	interviews    map[string]*recruitment.Interview
+	panelists     map[string]*recruitment.Panelist
+	scorecards    map[string]*recruitment.Scorecard
+	offers        map[string]*recruitment.Offer
+	referrals     map[string]*recruitment.Referral
+	employeeUsers map[string]string // userID -> employeeID, seeded directly by tests
 }
 
 func newStubRepo() *stubRepo {
@@ -35,6 +45,13 @@ func newStubRepo() *stubRepo {
 		candidates:   map[string]*recruitment.Candidate{},
 		applications: map[string]*recruitment.Application{},
 		history:      map[string][]*recruitment.ApplicationStageHistory{},
+
+		interviews:    map[string]*recruitment.Interview{},
+		panelists:     map[string]*recruitment.Panelist{},
+		scorecards:    map[string]*recruitment.Scorecard{},
+		offers:        map[string]*recruitment.Offer{},
+		referrals:     map[string]*recruitment.Referral{},
+		employeeUsers: map[string]string{},
 	}
 }
 
@@ -452,6 +469,289 @@ func (r *stubRepo) SlugExists(_ context.Context, orgID, slug, excludeID string) 
 	return false, nil
 }
 
+// ── Tx plumbing ──────────────────────────────────────────────────────────────
+//
+// fakeTx is a minimal no-op pgx.Tx — the crm/leads_service_test.go precedent.
+// HireApplication is the only caller of BeginTx in this package; the stub
+// repo methods it drives (LockApplicationForHireTx,
+// SetApplicationConvertedEmployeeTx, IncrementRequisitionFilledCountTx) don't
+// actually need a real transaction to exercise service-level logic.
+type fakeTx struct{}
+
+func (t *fakeTx) Begin(_ context.Context) (pgx.Tx, error)                    { return t, nil }
+func (t *fakeTx) Commit(_ context.Context) error                             { return nil }
+func (t *fakeTx) Rollback(_ context.Context) error                           { return nil }
+func (t *fakeTx) Conn() *pgx.Conn                                            { return nil }
+func (t *fakeTx) LargeObjects() pgx.LargeObjects                             { return pgx.LargeObjects{} }
+func (t *fakeTx) SendBatch(_ context.Context, _ *pgx.Batch) pgx.BatchResults { return nil }
+func (t *fakeTx) CopyFrom(_ context.Context, _ pgx.Identifier, _ []string, _ pgx.CopyFromSource) (int64, error) {
+	return 0, nil
+}
+func (t *fakeTx) Prepare(_ context.Context, _, _ string) (*pgconn.StatementDescription, error) {
+	return nil, nil
+}
+func (t *fakeTx) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+func (t *fakeTx) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) { return nil, nil }
+func (t *fakeTx) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row        { return nil }
+
+func (r *stubRepo) BeginTx(_ context.Context) (pgx.Tx, error) { return &fakeTx{}, nil }
+
+func (r *stubRepo) IncrementRequisitionFilledCountTx(_ context.Context, _ pgx.Tx, requisitionID string) error {
+	req, ok := r.requisitions[requisitionID]
+	if !ok {
+		return recruitment.ErrRequisitionNotFound
+	}
+	req.FilledCount++
+	return nil
+}
+
+func (r *stubRepo) LockApplicationForHireTx(_ context.Context, _ pgx.Tx, orgID, applicationID string) (*recruitment.Application, error) {
+	app, ok := r.applications[applicationID]
+	if !ok || app.OrgID != orgID {
+		return nil, nil
+	}
+	return app, nil
+}
+
+func (r *stubRepo) SetApplicationConvertedEmployeeTx(_ context.Context, _ pgx.Tx, applicationID, employeeID string) error {
+	app, ok := r.applications[applicationID]
+	if !ok {
+		return recruitment.ErrApplicationNotFound
+	}
+	app.ConvertedEmployeeID = &employeeID
+	return nil
+}
+
+// ── Interviews + panelists ───────────────────────────────────────────────────
+
+func (r *stubRepo) FindInterviews(_ context.Context, orgID, applicationID string) ([]*recruitment.Interview, error) {
+	var out []*recruitment.Interview
+	for _, i := range r.interviews {
+		if i.OrgID == orgID && i.ApplicationID == applicationID {
+			out = append(out, i)
+		}
+	}
+	return out, nil
+}
+func (r *stubRepo) FindInterviewByRef(_ context.Context, orgID, ref string) (*recruitment.Interview, error) {
+	for _, i := range r.interviews {
+		if i.OrgID == orgID && matchRef(i.ID, i.PublicID, ref) {
+			return i, nil
+		}
+	}
+	return nil, nil
+}
+func (r *stubRepo) CreateInterview(_ context.Context, i *recruitment.Interview) error {
+	i.ID = r.nextID("intv")
+	i.PublicID = "pub_" + i.ID
+	i.Status = recruitment.InterviewStatusScheduled
+	i.CreatedAt, i.UpdatedAt = time.Now(), time.Now()
+	r.interviews[i.ID] = i
+	return nil
+}
+func (r *stubRepo) UpdateInterview(_ context.Context, i *recruitment.Interview) error {
+	if _, ok := r.interviews[i.ID]; !ok {
+		return recruitment.ErrInterviewNotFound
+	}
+	i.UpdatedAt = time.Now()
+	r.interviews[i.ID] = i
+	return nil
+}
+func (r *stubRepo) DeleteInterview(_ context.Context, _, interviewID string) error {
+	if _, ok := r.interviews[interviewID]; !ok {
+		return recruitment.ErrInterviewNotFound
+	}
+	delete(r.interviews, interviewID)
+	return nil
+}
+func (r *stubRepo) FindPanelists(_ context.Context, interviewID string) ([]*recruitment.Panelist, error) {
+	var out []*recruitment.Panelist
+	for _, p := range r.panelists {
+		if p.InterviewID == interviewID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+func (r *stubRepo) FindPanelist(_ context.Context, interviewID, employeeID string) (*recruitment.Panelist, error) {
+	for _, p := range r.panelists {
+		if p.InterviewID == interviewID && p.EmployeeID == employeeID {
+			return p, nil
+		}
+	}
+	return nil, nil
+}
+func (r *stubRepo) AddPanelist(_ context.Context, p *recruitment.Panelist) error {
+	p.ID = r.nextID("panl")
+	p.PublicID = "pub_" + p.ID
+	p.CreatedAt = time.Now()
+	r.panelists[p.ID] = p
+	return nil
+}
+func (r *stubRepo) RemovePanelist(_ context.Context, interviewID, employeeID string) error {
+	for id, p := range r.panelists {
+		if p.InterviewID == interviewID && p.EmployeeID == employeeID {
+			delete(r.panelists, id)
+			return nil
+		}
+	}
+	return recruitment.ErrPanelistNotFound
+}
+func (r *stubRepo) FindEmployeeIDByUserID(_ context.Context, _, userID string) (string, error) {
+	return r.employeeUsers[userID], nil
+}
+
+// ── Scorecards ────────────────────────────────────────────────────────────────
+
+func (r *stubRepo) FindScorecards(_ context.Context, interviewID string) ([]*recruitment.Scorecard, error) {
+	var out []*recruitment.Scorecard
+	for _, sc := range r.scorecards {
+		if sc.InterviewID == interviewID {
+			out = append(out, sc)
+		}
+	}
+	return out, nil
+}
+func (r *stubRepo) FindScorecard(_ context.Context, interviewID, panelistEmployeeID string) (*recruitment.Scorecard, error) {
+	for _, sc := range r.scorecards {
+		if sc.InterviewID == interviewID && sc.PanelistEmployeeID == panelistEmployeeID {
+			return sc, nil
+		}
+	}
+	return nil, nil
+}
+func (r *stubRepo) UpsertScorecardDraft(_ context.Context, sc *recruitment.Scorecard) error {
+	for _, existing := range r.scorecards {
+		if existing.InterviewID == sc.InterviewID && existing.PanelistEmployeeID == sc.PanelistEmployeeID {
+			if existing.SubmittedAt != nil {
+				return recruitment.ErrScorecardAlreadySubmitted
+			}
+			sc.ID, sc.PublicID, sc.CreatedAt = existing.ID, existing.PublicID, existing.CreatedAt
+			sc.UpdatedAt = time.Now()
+			r.scorecards[sc.ID] = sc
+			return nil
+		}
+	}
+	sc.ID = r.nextID("sc")
+	sc.PublicID = "pub_" + sc.ID
+	sc.CreatedAt, sc.UpdatedAt = time.Now(), time.Now()
+	r.scorecards[sc.ID] = sc
+	return nil
+}
+func (r *stubRepo) SubmitScorecard(_ context.Context, interviewID, panelistEmployeeID string) (*recruitment.Scorecard, error) {
+	for _, sc := range r.scorecards {
+		if sc.InterviewID == interviewID && sc.PanelistEmployeeID == panelistEmployeeID {
+			if sc.SubmittedAt != nil {
+				return nil, recruitment.ErrScorecardAlreadySubmitted
+			}
+			now := time.Now()
+			sc.SubmittedAt = &now
+			sc.UpdatedAt = now
+			return sc, nil
+		}
+	}
+	return nil, recruitment.ErrScorecardNotFound
+}
+
+// ── Offers ────────────────────────────────────────────────────────────────────
+
+func (r *stubRepo) FindOffers(_ context.Context, orgID, applicationID string) ([]*recruitment.Offer, error) {
+	var out []*recruitment.Offer
+	for _, o := range r.offers {
+		if o.OrgID == orgID && o.ApplicationID == applicationID {
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+func (r *stubRepo) FindOfferByRef(_ context.Context, orgID, ref string) (*recruitment.Offer, error) {
+	for _, o := range r.offers {
+		if o.OrgID == orgID && matchRef(o.ID, o.PublicID, ref) {
+			return o, nil
+		}
+	}
+	return nil, nil
+}
+func (r *stubRepo) CreateOffer(_ context.Context, o *recruitment.Offer) error {
+	o.ID = r.nextID("ofr")
+	o.PublicID = "pub_" + o.ID
+	o.Status = recruitment.OfferStatusDraft
+	o.CreatedAt, o.UpdatedAt = time.Now(), time.Now()
+	r.offers[o.ID] = o
+	return nil
+}
+func (r *stubRepo) UpdateOffer(_ context.Context, o *recruitment.Offer) error {
+	if _, ok := r.offers[o.ID]; !ok {
+		return recruitment.ErrOfferNotFound
+	}
+	o.UpdatedAt = time.Now()
+	r.offers[o.ID] = o
+	return nil
+}
+func (r *stubRepo) SetOfferApprovalInstance(_ context.Context, id, instanceID string, status recruitment.OfferStatus) error {
+	o, ok := r.offers[id]
+	if !ok {
+		return recruitment.ErrOfferNotFound
+	}
+	o.ApprovalInstanceID, o.Status = &instanceID, status
+	return nil
+}
+func (r *stubRepo) UpdateOfferStatus(_ context.Context, id string, status recruitment.OfferStatus) error {
+	o, ok := r.offers[id]
+	if !ok {
+		return recruitment.ErrOfferNotFound
+	}
+	o.Status = status
+	return nil
+}
+
+// ── Referrals ─────────────────────────────────────────────────────────────────
+
+func (r *stubRepo) FindReferrals(_ context.Context, orgID string, _ recruitment.ReferralListFilter) ([]*recruitment.Referral, error) {
+	var out []*recruitment.Referral
+	for _, ref := range r.referrals {
+		if ref.OrgID == orgID {
+			out = append(out, ref)
+		}
+	}
+	return out, nil
+}
+func (r *stubRepo) CountReferrals(ctx context.Context, orgID string, f recruitment.ReferralListFilter) (int, error) {
+	out, _ := r.FindReferrals(ctx, orgID, f)
+	return len(out), nil
+}
+func (r *stubRepo) FindReferralByRef(_ context.Context, orgID, ref string) (*recruitment.Referral, error) {
+	for _, rf := range r.referrals {
+		if rf.OrgID == orgID && matchRef(rf.ID, rf.PublicID, ref) {
+			return rf, nil
+		}
+	}
+	return nil, nil
+}
+func (r *stubRepo) CreateReferral(_ context.Context, rf *recruitment.Referral) error {
+	rf.ID = r.nextID("ref")
+	rf.PublicID = "pub_" + rf.ID
+	rf.Status = recruitment.ReferralStatusSubmitted
+	rf.BonusCurrency = "USD"
+	rf.CreatedAt, rf.UpdatedAt = time.Now(), time.Now()
+	r.referrals[rf.ID] = rf
+	return nil
+}
+func (r *stubRepo) UpdateReferral(_ context.Context, rf *recruitment.Referral) error {
+	if _, ok := r.referrals[rf.ID]; !ok {
+		return recruitment.ErrReferralNotFound
+	}
+	if rf.Status == recruitment.ReferralStatusBonusPaid && rf.PaidAt == nil {
+		now := time.Now()
+		rf.PaidAt = &now
+	}
+	rf.UpdatedAt = time.Now()
+	r.referrals[rf.ID] = rf
+	return nil
+}
+
 var _ recruitment.Repository = (*stubRepo)(nil)
 
 // ── Stub approvals.Service ──────────────────────────────────────────────────
@@ -499,13 +799,42 @@ func (s *stubApprovalsSvc) ListInstances(context.Context, string, int, int, stri
 
 var _ approvals.Service = (*stubApprovalsSvc)(nil)
 
+// ── Stub EmployeeCreator ─────────────────────────────────────────────────────
+
+type stubEmployeeCreator struct {
+	seq            int
+	createErr      error
+	created        []recruitment.HireEmployeeRequest
+	afterHireCalls []string // employeeIDs passed to AfterHireCommit
+}
+
+func (e *stubEmployeeCreator) CreateEmployeeTx(_ context.Context, _ pgx.Tx, _, _ string, req recruitment.HireEmployeeRequest) (string, string, error) {
+	if e.createErr != nil {
+		return "", "", e.createErr
+	}
+	e.seq++
+	id := fmt.Sprintf("emp_%d", e.seq)
+	e.created = append(e.created, req)
+	return id, "pub_" + id, nil
+}
+func (e *stubEmployeeCreator) AfterHireCommit(_ context.Context, _, _, employeeID string) {
+	e.afterHireCalls = append(e.afterHireCalls, employeeID)
+}
+
+var _ recruitment.EmployeeCreator = (*stubEmployeeCreator)(nil)
+
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
 const testOrg = "org_1"
 
 func newTestSvc(appSvc approvals.Service) (recruitment.Service, *stubRepo) {
 	repo := newStubRepo()
-	return recruitment.NewService(repo, appSvc), repo
+	return recruitment.NewService(repo, appSvc, &stubEmployeeCreator{}), repo
+}
+
+func newTestSvcWithEmployeeCreator(appSvc approvals.Service, ec recruitment.EmployeeCreator) (recruitment.Service, *stubRepo) {
+	repo := newStubRepo()
+	return recruitment.NewService(repo, appSvc, ec), repo
 }
 
 func seedPipelineWithStages(t *testing.T, repo *stubRepo, kinds ...recruitment.StageKind) (*recruitment.Pipeline, []*recruitment.Stage) {
@@ -856,5 +1185,417 @@ func TestRequisitionListFilter_Normalise_Clamps(t *testing.T) {
 	f2.Normalise()
 	if f2.Limit != recruitment.MaxLimit {
 		t.Errorf("expected limit clamped to MaxLimit, got %d", f2.Limit)
+	}
+}
+
+// ============================================================
+// Phase 4B — helpers
+// ============================================================
+
+func strPtr(s string) *string { return &s }
+
+func seedApplicationFull(t *testing.T, svc recruitment.Service, repo *stubRepo, pipeline *recruitment.Pipeline) (*recruitment.Application, *recruitment.Candidate, *recruitment.Requisition) {
+	t.Helper()
+	ctx := context.Background()
+	cand, err := svc.CreateCandidate(ctx, testOrg, nil, recruitment.CreateCandidateRequest{FirstName: "Alex", LastName: strPtr("Doe")})
+	if err != nil {
+		t.Fatalf("seed candidate: %v", err)
+	}
+	req, err := svc.CreateRequisition(ctx, testOrg, "user_1", recruitment.CreateRequisitionRequest{Title: "Role"})
+	if err != nil {
+		t.Fatalf("seed requisition: %v", err)
+	}
+	pID := pipeline.ID
+	posting, err := svc.CreatePosting(ctx, testOrg, "user_1", recruitment.CreatePostingRequest{
+		RequisitionID: req.ID, Title: "Role", PipelineID: &pID,
+	})
+	if err != nil {
+		t.Fatalf("seed posting: %v", err)
+	}
+	app, err := svc.CreateApplication(ctx, testOrg, nil, recruitment.CreateApplicationRequest{CandidateID: cand.ID, PostingID: posting.ID})
+	if err != nil {
+		t.Fatalf("seed application: %v", err)
+	}
+	return app, cand, req
+}
+
+func seedHiredApplication(t *testing.T, svc recruitment.Service, repo *stubRepo) (*recruitment.Application, *recruitment.Candidate, *recruitment.Requisition) {
+	t.Helper()
+	ctx := context.Background()
+	pipeline, stages := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app, cand, req := seedApplicationFull(t, svc, repo, pipeline)
+	moved, err := svc.MoveApplication(ctx, testOrg, app.ID, "user_1", recruitment.MoveApplicationRequest{StageID: stages[1].ID})
+	if err != nil {
+		t.Fatalf("move to hired stage: %v", err)
+	}
+	return moved, cand, req
+}
+
+func seedInterviewWithPanelist(t *testing.T, svc recruitment.Service, repo *stubRepo) (*recruitment.Interview, string, string) {
+	t.Helper()
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app := seedApplication(t, svc, repo, pipeline)
+	interview, err := svc.CreateInterview(ctx, testOrg, app.ID, "user_1", recruitment.CreateInterviewRequest{ScheduledAt: time.Now().Format(time.RFC3339)})
+	if err != nil {
+		t.Fatalf("create interview: %v", err)
+	}
+	employeeID, userID := "emp_panelist_1", "user_panelist_1"
+	repo.employeeUsers[userID] = employeeID
+	if _, err := svc.AddPanelist(ctx, testOrg, interview.ID, recruitment.AddPanelistRequest{EmployeeID: employeeID}); err != nil {
+		t.Fatalf("add panelist: %v", err)
+	}
+	return interview, employeeID, userID
+}
+
+// ============================================================
+// Scorecards — visibility, immutability, panelist narrowing
+// ============================================================
+
+func TestListScorecards_HidesOthersUntilOwnSubmitted(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, userA := seedInterviewWithPanelist(t, svc, repo)
+
+	employeeB, userB := "emp_panelist_2", "user_panelist_2"
+	repo.employeeUsers[userB] = employeeB
+	if _, err := svc.AddPanelist(ctx, testOrg, interview.ID, recruitment.AddPanelistRequest{EmployeeID: employeeB}); err != nil {
+		t.Fatalf("add panelist B: %v", err)
+	}
+
+	ratingA := 5
+	if _, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userA, recruitment.UpsertScorecardRequest{OverallRating: &ratingA}); err != nil {
+		t.Fatalf("A upsert: %v", err)
+	}
+	if _, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userA); err != nil {
+		t.Fatalf("A submit: %v", err)
+	}
+
+	// B has not submitted their own yet — must not see A's, even though
+	// A's is already submitted. This is the core rule: reveal is gated on
+	// the CALLER's own submission, not on whether anyone else has submitted.
+	listB, err := svc.ListScorecards(ctx, testOrg, interview.ID, userB)
+	if err != nil {
+		t.Fatalf("list as B before B submits: %v", err)
+	}
+	if len(listB) != 0 {
+		t.Fatalf("expected B to see nothing before submitting their own, got %d", len(listB))
+	}
+
+	ratingB := 3
+	if _, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userB, recruitment.UpsertScorecardRequest{OverallRating: &ratingB}); err != nil {
+		t.Fatalf("B upsert: %v", err)
+	}
+	if _, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userB); err != nil {
+		t.Fatalf("B submit: %v", err)
+	}
+
+	listB2, err := svc.ListScorecards(ctx, testOrg, interview.ID, userB)
+	if err != nil {
+		t.Fatalf("list as B after B submits: %v", err)
+	}
+	if len(listB2) != 2 {
+		t.Fatalf("expected B to see both submitted scorecards after submitting their own, got %d", len(listB2))
+	}
+}
+
+func TestListScorecards_NonPanelistSeesOnlySubmitted(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, userA := seedInterviewWithPanelist(t, svc, repo)
+
+	rating := 4
+	if _, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userA, recruitment.UpsertScorecardRequest{OverallRating: &rating}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	// An HR admin auditing after the fact, with no employee record at all —
+	// before A submits, nothing is visible (drafts are always private).
+	admin := "user_hr_admin"
+	before, err := svc.ListScorecards(ctx, testOrg, interview.ID, admin)
+	if err != nil {
+		t.Fatalf("list as admin before submit: %v", err)
+	}
+	if len(before) != 0 {
+		t.Fatalf("expected admin to see nothing while A's scorecard is still a draft, got %d", len(before))
+	}
+
+	if _, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userA); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	after, err := svc.ListScorecards(ctx, testOrg, interview.ID, admin)
+	if err != nil {
+		t.Fatalf("list as admin after submit: %v", err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("expected admin (not a panelist) to see the submitted scorecard, got %d", len(after))
+	}
+}
+
+func TestSubmitOwnScorecard_Twice_Fails(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, userID := seedInterviewWithPanelist(t, svc, repo)
+
+	if _, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userID, recruitment.UpsertScorecardRequest{}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if _, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userID); err != nil {
+		t.Fatalf("first submit: %v", err)
+	}
+	_, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userID)
+	if !errors.Is(err, recruitment.ErrScorecardAlreadySubmitted) {
+		t.Fatalf("expected ErrScorecardAlreadySubmitted, got %v", err)
+	}
+}
+
+func TestUpsertOwnScorecard_AfterSubmit_Immutable(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, userID := seedInterviewWithPanelist(t, svc, repo)
+
+	if _, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userID, recruitment.UpsertScorecardRequest{}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if _, err := svc.SubmitOwnScorecard(ctx, testOrg, interview.ID, userID); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	_, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userID, recruitment.UpsertScorecardRequest{})
+	if !errors.Is(err, recruitment.ErrScorecardAlreadySubmitted) {
+		t.Fatalf("expected ErrScorecardAlreadySubmitted on edit-after-submit, got %v", err)
+	}
+}
+
+func TestUpsertOwnScorecard_NonPanelist_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, _ := seedInterviewWithPanelist(t, svc, repo)
+
+	outsider := "user_outsider"
+	repo.employeeUsers[outsider] = "emp_outsider"
+
+	_, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, outsider, recruitment.UpsertScorecardRequest{})
+	if !errors.Is(err, recruitment.ErrNotAPanelist) {
+		t.Fatalf("expected ErrNotAPanelist, got %v", err)
+	}
+}
+
+func TestUpsertOwnScorecard_NoEmployeeRecord_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, _ := seedInterviewWithPanelist(t, svc, repo)
+
+	_, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, "user_with_no_employee_row", recruitment.UpsertScorecardRequest{})
+	if !errors.Is(err, recruitment.ErrCallerHasNoEmployeeRecord) {
+		t.Fatalf("expected ErrCallerHasNoEmployeeRecord, got %v", err)
+	}
+}
+
+func TestUpsertOwnScorecard_InvalidScoreRange_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, _, userID := seedInterviewWithPanelist(t, svc, repo)
+
+	tooHigh := 6
+	_, err := svc.UpsertOwnScorecard(ctx, testOrg, interview.ID, userID, recruitment.UpsertScorecardRequest{OverallRating: &tooHigh})
+	if !errors.Is(err, recruitment.ErrInvalidScoreRange) {
+		t.Fatalf("expected ErrInvalidScoreRange, got %v", err)
+	}
+}
+
+func TestAddPanelist_Duplicate_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	interview, employeeID, _ := seedInterviewWithPanelist(t, svc, repo)
+
+	_, err := svc.AddPanelist(ctx, testOrg, interview.ID, recruitment.AddPanelistRequest{EmployeeID: employeeID})
+	if !errors.Is(err, recruitment.ErrPanelistAlreadyOnPanel) {
+		t.Fatalf("expected ErrPanelistAlreadyOnPanel, got %v", err)
+	}
+}
+
+// ============================================================
+// Offers — approval branching (mirrors requisitions)
+// ============================================================
+
+func TestSubmitOffer_NoTemplate_AutoApproves(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{defaultTemplate: nil})
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app, _, req := seedApplicationFull(t, svc, repo, pipeline)
+
+	offer, err := svc.CreateOffer(ctx, testOrg, app.ID, "user_1", recruitment.CreateOfferRequest{RequisitionID: req.ID})
+	if err != nil {
+		t.Fatalf("create offer: %v", err)
+	}
+	submitted, err := svc.SubmitOffer(ctx, testOrg, offer.ID, "user_1")
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if submitted.Status != recruitment.OfferStatusApproved {
+		t.Errorf("expected auto-approve when no template exists, got status=%q", submitted.Status)
+	}
+}
+
+func TestSubmitOffer_WithTemplate_GoesPendingApproval(t *testing.T) {
+	tmpl := &approvals.ApprovalTemplate{ID: "tmpl_1", ActionType: approvals.ActionTypeOffer}
+	svc, repo := newTestSvc(&stubApprovalsSvc{defaultTemplate: tmpl})
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app, _, req := seedApplicationFull(t, svc, repo, pipeline)
+
+	offer, err := svc.CreateOffer(ctx, testOrg, app.ID, "user_1", recruitment.CreateOfferRequest{RequisitionID: req.ID})
+	if err != nil {
+		t.Fatalf("create offer: %v", err)
+	}
+	submitted, err := svc.SubmitOffer(ctx, testOrg, offer.ID, "user_1")
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if submitted.Status != recruitment.OfferStatusPendingApproval {
+		t.Errorf("expected pending_approval when a template exists, got status=%q", submitted.Status)
+	}
+	if submitted.ApprovalInstanceID == nil {
+		t.Error("expected approval_instance_id to be set")
+	}
+}
+
+func TestHandleOfferApprovalDecision_Idempotent(t *testing.T) {
+	tmpl := &approvals.ApprovalTemplate{ID: "tmpl_1", ActionType: approvals.ActionTypeOffer}
+	svc, repo := newTestSvc(&stubApprovalsSvc{defaultTemplate: tmpl})
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app, _, req := seedApplicationFull(t, svc, repo, pipeline)
+
+	offer, _ := svc.CreateOffer(ctx, testOrg, app.ID, "user_1", recruitment.CreateOfferRequest{RequisitionID: req.ID})
+	offer, err := svc.SubmitOffer(ctx, testOrg, offer.ID, "user_1")
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	if err := svc.HandleOfferApprovalDecision(ctx, testOrg, offer.ID, true); err != nil {
+		t.Fatalf("first decision: %v", err)
+	}
+	after1, _ := svc.GetOffer(ctx, testOrg, offer.ID)
+	if after1.Status != recruitment.OfferStatusApproved {
+		t.Fatalf("expected approved, got %q", after1.Status)
+	}
+
+	// A second callback (e.g. a duplicate webhook) must be a no-op.
+	if err := svc.HandleOfferApprovalDecision(ctx, testOrg, offer.ID, false); err != nil {
+		t.Fatalf("second decision: %v", err)
+	}
+	after2, _ := svc.GetOffer(ctx, testOrg, offer.ID)
+	if after2.Status != recruitment.OfferStatusApproved {
+		t.Errorf("expected status to remain approved after a second callback, got %q", after2.Status)
+	}
+}
+
+func TestRescindOffer_AfterAccepted_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied, recruitment.StageKindHired)
+	app, _, req := seedApplicationFull(t, svc, repo, pipeline)
+
+	offer, _ := svc.CreateOffer(ctx, testOrg, app.ID, "user_1", recruitment.CreateOfferRequest{RequisitionID: req.ID})
+	offer, _ = svc.SubmitOffer(ctx, testOrg, offer.ID, "user_1") // auto-approved, no template
+	offer, _ = svc.SendOffer(ctx, testOrg, offer.ID)
+	offer, err := svc.AcceptOffer(ctx, testOrg, offer.ID)
+	if err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+
+	_, err = svc.RescindOffer(ctx, testOrg, offer.ID)
+	if !errors.Is(err, recruitment.ErrOfferWrongStatus) {
+		t.Fatalf("expected ErrOfferWrongStatus rescinding an accepted offer, got %v", err)
+	}
+}
+
+// ============================================================
+// Hire conversion
+// ============================================================
+
+func TestHireApplication_WrongStatus_Rejected(t *testing.T) {
+	svc, repo := newTestSvc(&stubApprovalsSvc{})
+	ctx := context.Background()
+	pipeline, _ := seedPipelineWithStages(t, repo, recruitment.StageKindApplied)
+	app := seedApplication(t, svc, repo, pipeline) // still "active" — never moved to a hired-kind stage
+
+	_, err := svc.HireApplication(ctx, testOrg, app.ID, "user_1", recruitment.HireApplicationRequest{})
+	if !errors.Is(err, recruitment.ErrApplicationNotHired) {
+		t.Fatalf("expected ErrApplicationNotHired, got %v", err)
+	}
+}
+
+func TestHireApplication_Success_PopulatesConvertedEmployeeAndFilledCount(t *testing.T) {
+	ec := &stubEmployeeCreator{}
+	svc, repo := newTestSvcWithEmployeeCreator(&stubApprovalsSvc{}, ec)
+	ctx := context.Background()
+	app, cand, req := seedHiredApplication(t, svc, repo)
+
+	res, err := svc.HireApplication(ctx, testOrg, app.ID, "user_1", recruitment.HireApplicationRequest{})
+	if err != nil {
+		t.Fatalf("hire: %v", err)
+	}
+	if res.EmployeeID == "" {
+		t.Fatal("expected a non-empty employee ID")
+	}
+	if res.Application.ConvertedEmployeeID == nil || *res.Application.ConvertedEmployeeID != res.EmployeeID {
+		t.Fatal("expected application.converted_employee_id to be set to the new employee ID")
+	}
+
+	updatedReq, _ := svc.GetRequisition(ctx, testOrg, req.ID)
+	if updatedReq.FilledCount != 1 {
+		t.Errorf("expected requisition filled_count incremented to 1, got %d", updatedReq.FilledCount)
+	}
+
+	if len(ec.afterHireCalls) != 1 || ec.afterHireCalls[0] != res.EmployeeID {
+		t.Errorf("expected AfterHireCommit called exactly once with the new employee ID, got %v", ec.afterHireCalls)
+	}
+	if len(ec.created) != 1 {
+		t.Fatalf("expected exactly one CreateEmployeeTx call, got %d", len(ec.created))
+	}
+	got := ec.created[0]
+	if got.FirstName != cand.FirstName || got.SourceCandidateID != cand.ID {
+		t.Errorf("expected hire request populated from the candidate (FirstName=%q SourceCandidateID=%q), got FirstName=%q SourceCandidateID=%q",
+			cand.FirstName, cand.ID, got.FirstName, got.SourceCandidateID)
+	}
+}
+
+func TestHireApplication_AlreadyHired_Rejected(t *testing.T) {
+	ec := &stubEmployeeCreator{}
+	svc, repo := newTestSvcWithEmployeeCreator(&stubApprovalsSvc{}, ec)
+	ctx := context.Background()
+	app, _, _ := seedHiredApplication(t, svc, repo)
+
+	if _, err := svc.HireApplication(ctx, testOrg, app.ID, "user_1", recruitment.HireApplicationRequest{}); err != nil {
+		t.Fatalf("first hire: %v", err)
+	}
+	_, err := svc.HireApplication(ctx, testOrg, app.ID, "user_1", recruitment.HireApplicationRequest{})
+	if !errors.Is(err, recruitment.ErrApplicationAlreadyHired) {
+		t.Fatalf("expected ErrApplicationAlreadyHired on a second hire call, got %v", err)
+	}
+}
+
+func TestHireApplication_EmployeeCreatorFails_NothingConverted(t *testing.T) {
+	ec := &stubEmployeeCreator{createErr: errors.New("boom")}
+	svc, repo := newTestSvcWithEmployeeCreator(&stubApprovalsSvc{}, ec)
+	ctx := context.Background()
+	app, _, req := seedHiredApplication(t, svc, repo)
+
+	if _, err := svc.HireApplication(ctx, testOrg, app.ID, "user_1", recruitment.HireApplicationRequest{}); err == nil {
+		t.Fatal("expected an error when the employee creator fails")
+	}
+
+	after, _ := svc.GetApplication(ctx, testOrg, app.ID)
+	if after.ConvertedEmployeeID != nil {
+		t.Error("expected converted_employee_id to remain unset when employee creation fails")
+	}
+	updatedReq, _ := svc.GetRequisition(ctx, testOrg, req.ID)
+	if updatedReq.FilledCount != 0 {
+		t.Errorf("expected filled_count to remain 0 when employee creation fails, got %d", updatedReq.FilledCount)
+	}
+	if len(ec.afterHireCalls) != 0 {
+		t.Errorf("expected AfterHireCommit not to be called when the transaction never commits, got %v", ec.afterHireCalls)
 	}
 }

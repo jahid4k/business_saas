@@ -17,6 +17,11 @@ type Service interface {
 	PipelineService
 	CandidateService
 	ApplicationService
+	InterviewService
+	ScorecardService
+	OfferService
+	ReferralService
+	HireService
 
 	// Requisitions
 	ListRequisitions(ctx context.Context, orgID string, filter RequisitionListFilter) (*RequisitionListResponse, error)
@@ -40,12 +45,13 @@ type Service interface {
 }
 
 type serviceImpl struct {
-	repo         Repository
-	approvalsSvc approvals.Service
+	repo            Repository
+	approvalsSvc    approvals.Service
+	employeeCreator EmployeeCreator
 }
 
-func NewService(repo Repository, approvalsSvc approvals.Service) Service {
-	return &serviceImpl{repo: repo, approvalsSvc: approvalsSvc}
+func NewService(repo Repository, approvalsSvc approvals.Service, employeeCreator EmployeeCreator) Service {
+	return &serviceImpl{repo: repo, approvalsSvc: approvalsSvc, employeeCreator: employeeCreator}
 }
 
 // ============================================================

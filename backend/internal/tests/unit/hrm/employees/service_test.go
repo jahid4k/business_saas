@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/hrm/employees"
 )
@@ -76,8 +78,13 @@ func (s *stubRepo) Create(ctx context.Context, e *employees.Employee) error {
 		return s.errCreate
 	}
 	e.ID = "id_" + e.FirstName
+	e.PublicID = "pub_" + e.ID
 	s.employees[e.ID] = e
 	return nil
+}
+
+func (s *stubRepo) CreateTx(ctx context.Context, tx pgx.Tx, e *employees.Employee) error {
+	return s.Create(ctx, e)
 }
 
 func (s *stubRepo) Update(ctx context.Context, e *employees.Employee) error {

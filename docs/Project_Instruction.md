@@ -1,5 +1,58 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-08-05 (r21 — HRM Extended Phase 4B shipped: Recruitment / ATS, selection and
+> close half — completes the build plan's Phase 4 minus the public `/pub/careers/*` surface, which
+> stays deferred (EMAIL SENDING and Capture Fix Pass B were re-verified still not done; see r20's
+> entry). Five tables in migration `00080`: `hrm_interviews` (`outcome` is a recommendation signal
+> only — never auto-moves the application's pipeline stage, the recruiter still calls the existing
+> `MoveApplication` explicitly), `hrm_interview_panelists`, `hrm_interview_scorecards` (fixed-shape,
+> deliberately not a form engine — Phase 5 builds the real primitive and names scorecards as
+> consumer #1; `submitted_at` is the only status field, NULL = draft, set = immutable), `hrm_offers`
+> (approval-gated exactly like requisitions — added `'offer'` to both `hrm_approval_templates
+> .action_type` and `hrm_approval_instances.entity_type` CHECK constraints, the same two-constraint
+> pattern `00049` and `00078` used, plus `hrm_employee_documents.related_type`), and `hrm_referrals`
+> (the formal bonus-program lifecycle, distinct from `hrm_candidates.referred_by_employee_id`'s
+> lightweight provenance). Plus `hrm_employees.source_candidate_id` (`ON DELETE SET NULL`) for hire
+> provenance. Migration `00081` seeds 7 permissions; `hrm.interviews.scorecard` is granted through
+> `member` (unlike every other key here) then narrowed by the service to actual assigned panelists —
+> the `platform.checklists.complete` precedent, since the route gate cannot express "is this your
+> panel assignment." Scorecard visibility ("interviewer cannot see others' scores before submitting
+> their own," named directly in the build plan) is a bespoke service-layer rule, confirmed again
+> unexpressible with Phase 1 scope tiers (`internal/hrm/scope`'s `Predicate`/`AuthorizeRecordAccess`
+> hard-code `FROM hrm_employees`, state-independent) — a panelist who hasn't submitted their own
+> scorecard sees only their own (possibly empty) draft; everyone else, including a non-panelist
+> admin auditing after the fact, sees every *submitted* scorecard, never a draft. Hire→employee
+> conversion (`recruitment.HireApplication`) mirrors `crm/leads.ConvertLead` exactly: `employees
+> .Repository.CreateTx`/`Service.CreateEmployeeTx` mirror `contacts.CreateContactTx`'s tx-scoped
+> shape, and `recruitment.EmployeeCreator` is a consumer-owned narrow interface — `recruitment`
+> declares the interface and its own `HireEmployeeRequest` type, `employees` imports `recruitment`
+> to implement it, never the reverse (`ContactCreator`/`DealCreator`'s exact shape). One design flaw
+> caught during implementation, not planning: the plan's sketch had `CreateEmployeeTx` fire the
+> onboarding checklist hook itself — wrong, because that method runs *inside* the caller's
+> transaction, before it's known whether the transaction will actually commit. Split into
+> `CreateEmployeeTx` (pure insert, zero side effects) and `AfterHireCommit` (audit log + checklist
+> hook), with the orchestrator calling the latter only after its own `tx.Commit()` succeeds. Atomic
+> for the employee insert + application's `converted_employee_id` + requisition's `filled_count`
+> (one transaction via a new `Repository.BeginTx`, the `crm/leads` precedent); onboarding
+> instantiation stays a post-commit best-effort hook, identical to plain `employees.Create`'s
+> existing behaviour — forcing it into the same transaction would require `Tx` variants throughout
+> `internal/platform/checklists` too, out of scope here. A `SELECT ... FOR UPDATE` row lock (mirrors
+> `MoveApplicationStage`) makes concurrent hire calls on the same application safe — proved live by
+> firing 5 concurrent `HireApplication` calls at one application in an integration test: exactly one
+> succeeds, exactly one employee row exists. Hire conversion reuses the existing `hrm.candidates
+> .manage` permission (an application-lifecycle action, consistent with move/reject/withdraw) —
+> no new key, to avoid permission sprawl. 16 new unit tests (34 total for the package), 5 new
+> integration tests (13 total) — including the concurrency proof above, a forced employee-insert
+> failure (bogus `department_id`, violates a real FK) proving nothing partial gets written, the
+> `source_candidate_id` FK round-tripping through `ON DELETE SET NULL` when the candidate is later
+> deleted, the scorecard panelist unique constraint firing on a raw duplicate insert, and a real
+> offer-approval decision flipping status through the actual `RegisterCallback("offer", ...)` wiring.
+> Live HTTP smoke test through the dev server exercised the full path end-to-end, including the
+> scorecard visibility rule proven over real requests (owner sees an empty list while the only
+> scorecard is a draft; sees it once the panelist submits). 25 new routes, all under existing
+> `hrm.interviews.*` / `hrm.offers.*` / `hrm.referrals.*` / `hrm.candidates.manage` gates. Migration
+> count 79 → 81, table count 93 → 98, HRM MODULE route count 252 → 277.)
+
 > Last updated: 2026-08-05 (r20 — HRM Extended Phase 4A shipped: Recruitment / ATS, intake and
 > pipeline half only. The build plan's Phase 4 names 12 tables plus a public `/pub/careers/*`
 > surface, gated on two hard prerequisites — EMAIL SENDING and Capture Fix Pass B. Both were
@@ -1034,11 +1087,11 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ---
 
-### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS (Phase 4A) added r20]
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **27 sub-modules, 252 routes** (218 as of r19 + 34 new recruitment routes, r20). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **27 sub-modules, 277 routes** (218 as of r19 + 34 recruitment routes r20 + 25 recruitment routes r21). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
-**Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20).
+**Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20) + `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/`hrm_referrals` (00080, r21).
 
 **Resource-level permissions (r18):** `view_own`/`view_team`/`view_all` scoping (`internal/hrm/scope`) layered on top of every group below plus salary's per-employee endpoints — see Section 9 → PLATFORM PRIMITIVES #3 for the primitive itself; this entry just records that it's now live across the whole module, not a config-only subset.
 
@@ -1072,15 +1125,15 @@ Reuses `hrm.employees.view`/`.update` rather than minting `hrm.onboarding.*` key
 
 **Reports:** 3 routes.
 
-**Recruitment / ATS (r20) — Phase 4A only, internal-only:** `internal/hrm/recruitment/` (34 routes), `hrm.recruitment.*` + `hrm.candidates.*` permissions. Ships the intake-and-pipeline half of the build plan's Phase 4 — requisitions (approval-gated), postings, candidates, applications, configurable pipelines/stages, and `hrm_application_stage_history` (append-only, in the first migration — `crm_deals` never got an equivalent, which is exactly why deal-velocity reporting is impossible today). Deliberately **no public `/pub/careers/*` route and no candidate email** in this phase: the build plan gates that surface on EMAIL SENDING and Capture Fix Pass B, and both were verified NOT actually done (no `RESEND_API_KEY` in any env file; no `/pub` route has rate limiting) despite other sections of this doc claiming otherwise — see the r20 changelog entry for the full audit. Phase 4B (interviews, scorecards, offers, referrals, hire→employee conversion) is designed but not built; see Section 9 → HRM EXTENDED MODULES → Recruitment / ATS.
+**Recruitment / ATS (r20 + r21) — internal-only, both sub-phases built:** `internal/hrm/recruitment/` (59 routes total: 34 from r20 + 25 from r21), `hrm.recruitment.*` + `hrm.candidates.*` + `hrm.interviews.*` + `hrm.offers.*` + `hrm.referrals.*` permissions. Phase 4A (r20) shipped the intake-and-pipeline half — requisitions (approval-gated), postings, candidates, applications, configurable pipelines/stages, and `hrm_application_stage_history` (append-only, in the first migration — `crm_deals` never got an equivalent, which is exactly why deal-velocity reporting is impossible today). Phase 4B (r21) shipped the selection-and-close half — interviews + panelists, fixed-shape interview scorecards (visibility: a panelist who hasn't submitted their own scorecard sees only their own draft; everyone else sees every *submitted* scorecard, never a draft — a bespoke service rule, not a Phase 1 scope tier, since those hard-code `FROM hrm_employees`), offers (approval-gated the same way requisitions are), referrals, and hire→employee conversion (`HireApplication` — atomic for the employee insert + application + requisition writes via a new `Repository.BeginTx`; `employees.Repository.CreateTx`/`Service.CreateEmployeeTx` mirror `contacts.CreateContactTx`; `recruitment.EmployeeCreator` is a consumer-owned narrow interface, the `crm/leads.ContactCreator`/`DealCreator` shape exactly — `employees` imports `recruitment`, never the reverse; a `SELECT ... FOR UPDATE` lock makes concurrent hire calls on the same application safe, proved live in an integration test). Deliberately **still no public `/pub/careers/*` route and no candidate email**: the build plan gates that surface on EMAIL SENDING and Capture Fix Pass B, and both were re-verified NOT actually done as of r21 — see the r20 and r21 changelog entries for the full audit.
 
 Resumes: PDF-only, content-sniffed (never trusts the file extension), stored in `backend/storage/resumes/` — **not** `./uploads`, which is served fully unauthenticated. Download is gated on its own `hrm.candidates.download_resume` permission, separate from `.view`.
 
 Deliberately **no `authz.Service.ResolveScope` calls** anywhere in this module — candidates/applications have no `employee_id`, so the Phase 1 scope tiers (`internal/hrm/scope`) are structurally inexpressible for them. Flat RBAC only; any `hrm.candidates.view` holder sees every candidate in the org.
 
-**Approval chain wiring:** callback registry on the approvals service; promotions, transfers, terminations, warnings, awards, and (r20) job requisitions each register `HandleApprovalDecision` in `main.go`.
+**Approval chain wiring:** callback registry on the approvals service; promotions, transfers, terminations, warnings, awards, (r20) job requisitions, and (r21) offers each register a decision callback in `main.go` (`HandleApprovalDecision` / `HandleOfferApprovalDecision`).
 
-**Extension surface (r15):** scoped but unbuilt — see Section 9 → HRM EXTENDED MODULES. Recruitment/ATS Phase 4A is now built (above); 4B and the rest of the extension surface remain scoped but unbuilt.
+**Extension surface (r15):** scoped but unbuilt — see Section 9 → HRM EXTENDED MODULES. Recruitment/ATS (both Phase 4A and 4B) is now built (above); the rest of the extension surface (Phases 5–11) remains scoped but unbuilt.
 
 ---
 
@@ -1121,9 +1174,13 @@ seeds `platform.checklists.view`/`.complete`/`.manage` · `00078`
 `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/
 `hrm_applications`/`_stage_history` (Phase 4A) + adds `'job_requisition'` to both approval CHECK
 constraints · `00079` seeds `hrm.recruitment.view`/`.manage`, `hrm.candidates.view`/`.manage`/
-`.download_resume`.
+`.download_resume` · `00080` `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/
+`hrm_referrals` (Phase 4B) + `hrm_employees.source_candidate_id` + adds `'offer'` to both approval
+CHECK constraints and to `hrm_employee_documents.related_type` · `00081` seeds
+`hrm.interviews.view`/`.manage`/`.scorecard`, `hrm.offers.view`/`.manage`,
+`hrm.referrals.view`/`.manage`.
 
-### Key Tables (93 total)
+### Key Tables (98 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -1145,7 +1202,7 @@ Group C (4): `hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_docume
 Group D (6): `hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
 Group E (4): `hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
 Leave (5): `hrm_leave_types` · `hrm_leave_requests` · `hrm_leave_policies` · `hrm_leave_transactions` · `hrm_leave_balances`
-Recruitment (7): `hrm_recruitment_pipelines` · `hrm_recruitment_stages` · `hrm_job_requisitions` · `hrm_job_postings` · `hrm_candidates` · `hrm_applications` · `hrm_application_stage_history`
+Recruitment (12): `hrm_recruitment_pipelines` · `hrm_recruitment_stages` · `hrm_job_requisitions` · `hrm_job_postings` · `hrm_candidates` · `hrm_applications` · `hrm_application_stage_history` · `hrm_interviews` · `hrm_interview_panelists` · `hrm_interview_scorecards` · `hrm_offers` · `hrm_referrals`
 
 ---
 
@@ -1614,10 +1671,9 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 
 **Talent acquisition & entry**
 
-- **Recruitment / ATS — 🔵 PARTIAL, Phase 4A ✅ built (r20), see Section 5 → HRM MODULE → Recruitment / ATS.** Phase 4A shipped requisitions (approval-gated), postings, candidates, applications, configurable pipeline stages, and `hrm_application_stage_history` from the first migration — the two hard structural rules (candidate ≠ application, stage lives on the application; stage history from day one, since `crm_deals` skipping this is exactly why sales velocity is blocked above) were both honoured. Internal-only: no public careers page, no candidate email — see below.
-  **Phase 4B — ⚪ NOT STARTED, designed but not built** (schema sketched in the Phase 4A plan file for continuity): interviews + panelists + scorecards (fixed-shape table, deliberately NOT a mini form engine — Phase 5's form engine names interview scorecards as consumer #1, and building a bespoke one now would pre-empt that primitive), offers (approval-gated, needs `'offer'` added to the same two approval CHECK constraints `'job_requisition'` was), referrals, and hire→employee conversion. The "interviewer cannot see others' scores before submitting" rule is **not expressible with the Phase 1 scope tiers** (`internal/hrm/scope`'s `Predicate` hard-codes `FROM hrm_employees` and every tier is state-independent) and needs a purpose-built service-level rule when built.
-  **The public careers page (`GET/POST /pub/careers/*`) and candidate email remain unbuilt**, gated on the same two prerequisites the original build plan named — confirmed NOT actually done as of r20 despite this doc elsewhere claiming EMAIL SENDING resolved: resume parsing stays a vendor bolt-on, not in scope, whenever the public phase lands.
-  Depends on: EMAIL SENDING (not optional — an ATS without candidate email is half a product; still not resolved despite doc drift claiming otherwise, see r20 changelog), resource-level permissions (scorecard bias-blocking, Phase 4B), scheduler (candidate data purge / GDPR — `hrm_candidates.purge_after` is written now, read by nothing yet).
+- **Recruitment / ATS — 🔵 PARTIAL, Phase 4A ✅ built (r20), Phase 4B ✅ built (r21), see Section 5 → HRM MODULE → Recruitment / ATS.** Phase 4A shipped requisitions (approval-gated), postings, candidates, applications, configurable pipeline stages, and `hrm_application_stage_history` from the first migration — the two hard structural rules (candidate ≠ application, stage lives on the application; stage history from day one, since `crm_deals` skipping this is exactly why sales velocity is blocked above) were both honoured. Phase 4B shipped interviews + panelists, fixed-shape interview scorecards (deliberately NOT a mini form engine — Phase 5's form engine names interview scorecards as consumer #1, and building a bespoke one now would have pre-empted that primitive), offers (approval-gated, `'offer'` added to the same two approval CHECK constraints `'job_requisition'` uses), referrals, and hire→employee conversion. The "interviewer cannot see others' scores before submitting" rule was confirmed **not expressible with the Phase 1 scope tiers** (`internal/hrm/scope`'s `Predicate` hard-codes `FROM hrm_employees` and every tier is state-independent) and shipped as a purpose-built service-level rule instead — see Section 5 for the exact reveal semantics. Only the public surface remains outstanding — see below.
+  **The public careers page (`GET/POST /pub/careers/*`) and candidate email remain unbuilt**, gated on the same two prerequisites the original build plan named — re-confirmed NOT actually done as of r21 despite this doc elsewhere claiming EMAIL SENDING resolved: resume parsing stays a vendor bolt-on, not in scope, whenever the public phase lands.
+  Depends on: EMAIL SENDING (not optional — an ATS without candidate email is half a product; still not resolved despite doc drift claiming otherwise, see r20/r21 changelogs), scheduler (candidate data purge / GDPR — `hrm_candidates.purge_after` is written now, read by nothing yet; referral bonus payout also has no scheduler job, `bonus_pending`/`bonus_paid` are set manually via `PATCH .../referrals/:id`).
 
 - **Onboarding — ✅ built (r19), see Section 5 → HRM MODULE → Group B and → PLATFORM — CHECKLISTS.** Checklist-driven, multi-owner, offset-based due dates relative to hire date. Not a table of its own — checklist engine consumer #1. Auto-instantiates the org's default onboarding template on employee creation (non-blocking — never fails employee creation), plus a manual retry endpoint. Reminders are explicitly out of scope for this build (no scheduler job, no notification dispatch) — the "Depends on: notification" line below is therefore not yet exercised.
   Depends on: checklist engine (built), notification (not yet wired — reminders deferred).

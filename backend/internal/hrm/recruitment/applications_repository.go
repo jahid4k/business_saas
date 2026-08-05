@@ -29,6 +29,14 @@ type ApplicationRepository interface {
 	MoveApplicationStage(ctx context.Context, orgID, applicationID, toStageID, toStageName string, newStatus ApplicationStatus, movedBy, note *string) (*Application, *ApplicationStageHistory, error)
 	UpdateApplicationStatus(ctx context.Context, orgID, applicationID string, status ApplicationStatus, reason *string) (*Application, error)
 	FindStageHistory(ctx context.Context, orgID, applicationID string) ([]*ApplicationStageHistory, error)
+
+	// LockApplicationForHireTx and SetApplicationConvertedEmployeeTx are used
+	// only by HireApplication, inside the transaction opened by
+	// Repository.BeginTx — the row lock re-checks preconditions
+	// (status/converted_employee_id) under the lock so two concurrent hire
+	// calls on the same application cannot both create an employee.
+	LockApplicationForHireTx(ctx context.Context, tx pgx.Tx, orgID, applicationID string) (*Application, error)
+	SetApplicationConvertedEmployeeTx(ctx context.Context, tx pgx.Tx, applicationID, employeeID string) error
 }
 
 const applicationCols = `id, public_id, org_id, candidate_id, posting_id, pipeline_id, stage_id, status,
@@ -260,6 +268,30 @@ func (r *repoImpl) UpdateApplicationStatus(ctx context.Context, orgID, applicati
 		return nil, fmt.Errorf("recruitment: UpdateApplicationStatus: %w", err)
 	}
 	return app, nil
+}
+
+func (r *repoImpl) LockApplicationForHireTx(ctx context.Context, tx pgx.Tx, orgID, applicationID string) (*Application, error) {
+	q := `SELECT ` + applicationCols + ` FROM hrm_applications WHERE id = $1 AND org_id = $2 FOR UPDATE`
+	a := &Application{}
+	err := scanApplication(tx.QueryRow(ctx, q, applicationID, orgID), a)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("recruitment: LockApplicationForHireTx: %w", err)
+	}
+	return a, nil
+}
+
+func (r *repoImpl) SetApplicationConvertedEmployeeTx(ctx context.Context, tx pgx.Tx, applicationID, employeeID string) error {
+	cmd, err := tx.Exec(ctx, `UPDATE hrm_applications SET converted_employee_id = $1, updated_at = NOW() WHERE id = $2`, employeeID, applicationID)
+	if err != nil {
+		return fmt.Errorf("recruitment: SetApplicationConvertedEmployeeTx: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrApplicationNotFound
+	}
+	return nil
 }
 
 func (r *repoImpl) FindStageHistory(ctx context.Context, orgID, applicationID string) ([]*ApplicationStageHistory, error) {

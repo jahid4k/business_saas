@@ -19,6 +19,18 @@ type Repository interface {
 	PipelineRepository
 	CandidateRepository
 	ApplicationRepository
+	InterviewRepository
+	ScorecardRepository
+	OfferRepository
+	ReferralRepository
+
+	// BeginTx opens a new database transaction for use by callers that need
+	// to span writes across sub-feature repositories — the crm/leads
+	// BeginTx precedent. HireApplication is the only current caller: it
+	// spans an application update, a requisition update, and (via
+	// EmployeeCreator.CreateEmployeeTx) an employee insert in another
+	// package, all in one commit.
+	BeginTx(ctx context.Context) (pgx.Tx, error)
 
 	// Requisitions
 	FindRequisitions(ctx context.Context, orgID string, filter RequisitionListFilter) ([]*Requisition, error)
@@ -29,6 +41,9 @@ type Repository interface {
 	SetRequisitionApprovalInstance(ctx context.Context, id, instanceID string, status RequisitionStatus) error
 	UpdateRequisitionStatus(ctx context.Context, id string, status RequisitionStatus) error
 	CloseRequisition(ctx context.Context, id string, reason string) error
+	// IncrementRequisitionFilledCountTx is called by HireApplication inside
+	// its own transaction — see BeginTx's doc comment.
+	IncrementRequisitionFilledCountTx(ctx context.Context, tx pgx.Tx, requisitionID string) error
 
 	// Postings
 	FindPostings(ctx context.Context, orgID string, filter PostingListFilter) ([]*Posting, error)
@@ -44,6 +59,14 @@ type Repository interface {
 type repoImpl struct{ db *pgxpool.Pool }
 
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
+
+func (r *repoImpl) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("recruitment: BeginTx: %w", err)
+	}
+	return tx, nil
+}
 
 // ============================================================
 // Requisitions
@@ -166,6 +189,17 @@ func (r *repoImpl) CloseRequisition(ctx context.Context, id string, reason strin
 		reason, id,
 	)
 	return err
+}
+
+func (r *repoImpl) IncrementRequisitionFilledCountTx(ctx context.Context, tx pgx.Tx, requisitionID string) error {
+	cmd, err := tx.Exec(ctx, `UPDATE hrm_job_requisitions SET filled_count = filled_count + 1, updated_at = NOW() WHERE id = $1`, requisitionID)
+	if err != nil {
+		return fmt.Errorf("recruitment: IncrementRequisitionFilledCountTx: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrRequisitionNotFound
+	}
+	return nil
 }
 
 // ============================================================

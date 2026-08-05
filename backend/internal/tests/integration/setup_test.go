@@ -126,8 +126,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmApprovalsSvc := hrmapprovals.NewService(hrmApprovalsRepo)
 
 	hrmRecruitmentRepo := hrmrecruitment.NewRepository(db)
-	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc)
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc)
 	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
 
 	return &testEnv{
 		db:                db,

@@ -203,10 +203,25 @@ offset anchor, completion %, reminders via Phase 0.3 notification.
 
 ---
 
-## PHASE 4 — Recruitment / ATS
+## PHASE 4 — Recruitment / ATS ✅ DONE (internal-only scope; see note below)
 
-**Blocked until EMAIL SENDING ships.** An ATS without candidate email is half a product;
-this is not a soft dependency.
+> **Actually shipped, 2026-08-05:** split into two sub-phases during planning (this doc's
+> undivided description below is the original plan, kept for reference). **Phase 4A** (r20):
+> `hrm_recruitment_pipelines`/`_stages`, `hrm_job_requisitions`, `hrm_job_postings`,
+> `hrm_candidates`, `hrm_applications`, `hrm_application_stage_history`. **Phase 4B** (r21):
+> `hrm_interviews`/`_panelists`, `hrm_interview_scorecards`, `hrm_offers`, `hrm_referrals`,
+> hire→employee conversion. Scorecard visibility and hire→employee conversion match this
+> section's design intent exactly (see below). **Not shipped, and NOT a soft dependency**: the
+> public `/pub/careers/*` surface and candidate email, both still blocked on EMAIL SENDING and
+> Capture Fix Pass B — verified unresolved at Phase 4A planning time and re-verified still
+> unresolved at Phase 4B completion (`RESEND_API_KEY` absent from every env file;
+> `NewPublicCaptureRateLimit` does not exist). Building an unauthenticated public apply endpoint
+> ahead of its own security prerequisites was rejected both times. See `docs/Project_Instruction.md`
+> r20/r21 changelog entries for the full audit and implementation detail.
+
+**Blocked until EMAIL SENDING ships** *(for the public surface only — see the shipped-scope note
+above; the internal-only ATS itself is not blocked on this)*. An ATS without candidate email is
+half a product; this is not a soft dependency.
 
 - `hrm_job_requisitions` (approval-gated, reuses approval engine)
 - `hrm_job_postings` — `public_slug`

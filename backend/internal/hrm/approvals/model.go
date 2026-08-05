@@ -21,6 +21,7 @@ const (
 	ActionTypeAttendanceRegularization ActionType = "attendance_regularization"
 	ActionTypeAward                    ActionType = "award"
 	ActionTypeJobRequisition           ActionType = "job_requisition"
+	ActionTypeOffer                    ActionType = "offer"
 	ActionTypeCustom                   ActionType = "custom"
 )
 
@@ -28,7 +29,7 @@ func (a ActionType) IsValid() bool {
 	switch a {
 	case ActionTypeLeave, ActionTypeResignation, ActionTypePromotion, ActionTypeTransfer,
 		ActionTypeWarning, ActionTypeDocument, ActionTypeTermination,
-		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeCustom:
+		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeOffer, ActionTypeCustom:
 		return true
 	}
 	return false

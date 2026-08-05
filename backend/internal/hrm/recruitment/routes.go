@@ -34,6 +34,19 @@ type PermissionFunc func(permission string) fiber.Handler
 //	              GET              .../applications/:applicationId
 //	              GET              .../applications/:applicationId/history
 //	              POST             .../applications/:applicationId/{move,reject,withdraw}
+//	              POST             .../applications/:applicationId/hire        (hrm.candidates.manage)
+//	Interviews    GET/POST         .../applications/:applicationId/interviews
+//	              GET/PATCH/DELETE .../interviews/:interviewId
+//	              GET/POST         .../interviews/:interviewId/panelists
+//	              DELETE           .../interviews/:interviewId/panelists/:employeeId
+//	Scorecards    GET              .../interviews/:interviewId/scorecards      (hrm.interviews.view; narrowed in service)
+//	              POST             .../interviews/:interviewId/scorecard       (hrm.interviews.scorecard; narrowed to panelists)
+//	              POST             .../interviews/:interviewId/scorecard/submit
+//	Offers        GET/POST         .../applications/:applicationId/offers
+//	              GET/PATCH        .../offers/:offerId
+//	              POST             .../offers/:offerId/{submit,send,accept,decline,rescind}
+//	Referrals     GET/POST         .../referrals
+//	              GET/PATCH        .../referrals/:referralId
 func RegisterRoutes(
 	router fiber.Router,
 	handler *Handler,
@@ -99,4 +112,52 @@ func RegisterRoutes(
 	applications.Post("/:applicationId/move", permFn("hrm.candidates.manage"), handler.MoveApplication)
 	applications.Post("/:applicationId/reject", permFn("hrm.candidates.manage"), handler.RejectApplication)
 	applications.Post("/:applicationId/withdraw", permFn("hrm.candidates.manage"), handler.WithdrawApplication)
+	// Hire conversion reuses hrm.candidates.manage — an application-lifecycle
+	// action, consistent with move/reject/withdraw already being gated by it
+	// (see migration 00081's header for why no new permission key was added).
+	applications.Post("/:applicationId/hire", permFn("hrm.candidates.manage"), handler.HireApplication)
+
+	// ── Interviews + panelists ──────────────────────────────────────────
+	applications.Get("/:applicationId/interviews", permFn("hrm.interviews.view"), handler.ListInterviews)
+	applications.Post("/:applicationId/interviews", permFn("hrm.interviews.manage"), handler.CreateInterview)
+
+	interviews := base.Group("/interviews")
+	interviews.Get("/:interviewId", permFn("hrm.interviews.view"), handler.GetInterview)
+	interviews.Patch("/:interviewId", permFn("hrm.interviews.manage"), handler.UpdateInterview)
+	interviews.Delete("/:interviewId", permFn("hrm.interviews.manage"), handler.DeleteInterview)
+
+	interviews.Get("/:interviewId/panelists", permFn("hrm.interviews.view"), handler.ListPanelists)
+	interviews.Post("/:interviewId/panelists", permFn("hrm.interviews.manage"), handler.AddPanelist)
+	interviews.Delete("/:interviewId/panelists/:employeeId", permFn("hrm.interviews.manage"), handler.RemovePanelist)
+
+	// ── Scorecards ──────────────────────────────────────────────────────
+	// hrm.interviews.scorecard is granted broadly (owner/admin/manager/
+	// member — see migration 00081's header) then narrowed by the service to
+	// actual assigned panelists; the route gate alone cannot express "is
+	// this your panel assignment". List uses hrm.interviews.view — its own
+	// service-side visibility rule (own draft only, or all once submitted)
+	// is separate from the RBAC gate.
+	interviews.Get("/:interviewId/scorecards", permFn("hrm.interviews.view"), handler.ListScorecards)
+	interviews.Post("/:interviewId/scorecard", permFn("hrm.interviews.scorecard"), handler.UpsertOwnScorecard)
+	interviews.Post("/:interviewId/scorecard/submit", permFn("hrm.interviews.scorecard"), handler.SubmitOwnScorecard)
+
+	// ── Offers ──────────────────────────────────────────────────────────
+	applications.Get("/:applicationId/offers", permFn("hrm.offers.view"), handler.ListOffers)
+	applications.Post("/:applicationId/offers", permFn("hrm.offers.manage"), handler.CreateOffer)
+
+	offers := base.Group("/offers")
+	offers.Get("/:offerId", permFn("hrm.offers.view"), handler.GetOffer)
+	offers.Patch("/:offerId", permFn("hrm.offers.manage"), handler.UpdateOffer)
+	offers.Post("/:offerId/submit", permFn("hrm.offers.manage"), handler.SubmitOffer)
+	offers.Post("/:offerId/send", permFn("hrm.offers.manage"), handler.SendOffer)
+	offers.Post("/:offerId/accept", permFn("hrm.offers.manage"), handler.AcceptOffer)
+	offers.Post("/:offerId/decline", permFn("hrm.offers.manage"), handler.DeclineOffer)
+	offers.Post("/:offerId/rescind", permFn("hrm.offers.manage"), handler.RescindOffer)
+
+	// ── Referrals ───────────────────────────────────────────────────────
+	referrals := base.Group("/referrals")
+	referrals.Get("", permFn("hrm.referrals.view"), handler.ListReferrals)
+	referrals.Post("", permFn("hrm.referrals.manage"), handler.CreateReferral)
+	referrals.Get("/:referralId", permFn("hrm.referrals.view"), handler.GetReferral)
+	referrals.Patch("/:referralId", permFn("hrm.referrals.manage"), handler.UpdateReferral)
 }
