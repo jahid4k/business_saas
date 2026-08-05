@@ -131,3 +131,7 @@ frontend/coverage/
 # disk/volume per environment, never in git
 # ----------------------------------------------------------
 backend/uploads/
+backend/storage/
+# go test's CWD is the package directory, not backend/ — resume uploads in
+# internal/tests/integration land in a storage/ dir there, not backend/storage/
+backend/**/storage/

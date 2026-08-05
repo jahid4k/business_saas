@@ -18,8 +18,10 @@ import (
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
+	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
@@ -30,16 +32,18 @@ import (
 
 // testEnv holds fully-wired services for integration tests.
 type testEnv struct {
-	db               *pgxpool.Pool
-	redis            *redis.Client
-	authSvc          auth.Service
-	userSvc          user.Service
-	authzSvc         authz.Service
-	orgSvc           organizations.Service
-	taskSvc          task.Service
-	checklistsSvc    checklists.Service
-	hrmOnboardingSvc hrmonboarding.Service
-	hrmEmpSvc        hrmemployees.Service
+	db                *pgxpool.Pool
+	redis             *redis.Client
+	authSvc           auth.Service
+	userSvc           user.Service
+	authzSvc          authz.Service
+	orgSvc            organizations.Service
+	taskSvc           task.Service
+	checklistsSvc     checklists.Service
+	hrmOnboardingSvc  hrmonboarding.Service
+	hrmEmpSvc         hrmemployees.Service
+	hrmApprovalsSvc   hrmapprovals.Service
+	hrmRecruitmentSvc hrmrecruitment.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -118,17 +122,26 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmEmpRepo := hrmemployees.NewRepository(db)
 	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc, hrmOnboardingSvc)
 
+	hrmApprovalsRepo := hrmapprovals.NewRepository(db)
+	hrmApprovalsSvc := hrmapprovals.NewService(hrmApprovalsRepo)
+
+	hrmRecruitmentRepo := hrmrecruitment.NewRepository(db)
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc)
+	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
+
 	return &testEnv{
-		db:               db,
-		redis:            rdb,
-		authSvc:          auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
-		userSvc:          user.NewService(userRepo),
-		authzSvc:         authzSvc,
-		orgSvc:           organizations.NewService(orgRepo, authzRepo, jwtMgr),
-		taskSvc:          task.NewService(taskRepo, auditSvc),
-		checklistsSvc:    checklistsSvc,
-		hrmOnboardingSvc: hrmOnboardingSvc,
-		hrmEmpSvc:        hrmEmpSvc,
+		db:                db,
+		redis:             rdb,
+		authSvc:           auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
+		userSvc:           user.NewService(userRepo),
+		authzSvc:          authzSvc,
+		orgSvc:            organizations.NewService(orgRepo, authzRepo, jwtMgr),
+		taskSvc:           task.NewService(taskRepo, auditSvc),
+		checklistsSvc:     checklistsSvc,
+		hrmOnboardingSvc:  hrmOnboardingSvc,
+		hrmEmpSvc:         hrmEmpSvc,
+		hrmApprovalsSvc:   hrmApprovalsSvc,
+		hrmRecruitmentSvc: hrmRecruitmentSvc,
 	}
 }
 

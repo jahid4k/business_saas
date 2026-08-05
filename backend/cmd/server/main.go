@@ -109,6 +109,7 @@ import (
 
 	// ── Internal — HRM Group B (Core Employee Lifecycle) ─────────────────────
 	hrmpromotions "github.com/mridha/businesssaas/internal/hrm/promotions"
+	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	hrmtransfers "github.com/mridha/businesssaas/internal/hrm/transfers"
@@ -275,6 +276,9 @@ func main() {
 	hrmCalRepo := hrmcalendar.NewRepository(pgPool)
 	hrmMilestonesRepo := hrmmilestones.NewRepository(pgPool)
 
+	// ── HRM Extended Phase 4A — Recruitment / ATS (migration 00078) ───────────
+	hrmRecruitmentRepo := hrmrecruitment.NewRepository(pgPool)
+
 	// ═════════════════════════════════════════════════════════════════════════
 	// 7. SERVICES   (dependency order: leaf → composite)
 	// ═════════════════════════════════════════════════════════════════════════
@@ -374,8 +378,14 @@ func main() {
 	hrmCalSvc := hrmcalendar.NewService(hrmCalRepo, pgPool)
 	hrmMilestonesSvc := hrmmilestones.NewService(hrmMilestonesRepo, pgPool)
 
-	// Wire approval-instance completion back into each of the five workflow
-	// modules. Must run after all five services above exist. entityType here
+	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
+	// Requisitions are approval-gated the same way promotions/transfers/etc.
+	// are — takes hrmApprovalsSvc so SubmitRequisition() can route into an
+	// approval chain when one is configured.
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc)
+
+	// Wire approval-instance completion back into each of the six workflow
+	// modules. Must run after all six services above exist. entityType here
 	// must match the EntityType string each Submit()/Issue() uses when calling
 	// approvalsSvc.CreateInstance — see each module's service.go.
 	hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
@@ -383,6 +393,7 @@ func main() {
 	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS
@@ -458,6 +469,9 @@ func main() {
 	hrmAnnsHandler := hrmannouncements.NewHandler(hrmAnnsSvc)
 	hrmCalHandler := hrmcalendar.NewHandler(hrmCalSvc)
 	hrmMilestonesHandler := hrmmilestones.NewHandler(hrmMilestonesSvc)
+
+	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
+	hrmRecruitmentHandler := hrmrecruitment.NewHandler(hrmRecruitmentSvc)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 9. FIBER
@@ -598,6 +612,13 @@ func main() {
 	hrmannouncements.RegisterRoutes(api, hrmAnnsHandler, permFn, requireAuth, requireOrgMatch)
 	hrmcalendar.RegisterRoutes(api, hrmCalHandler, permFn, requireAuth, requireOrgMatch)
 	hrmmilestones.RegisterRoutes(api, hrmMilestonesHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
+	// Internal-only: no /pub/careers/* route in this phase (blocked on Capture
+	// Fix Pass B rate limiting + real email sending — see
+	// docs/HrmExtendedBuildPlan.md PHASE 4 and Project_Instruction.md Section 5
+	// → HRM MODULE → Recruitment / ATS).
+	hrmrecruitment.RegisterRoutes(api, hrmRecruitmentHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── 404 fallback — must be registered last ────────────────────────────────
 	app.Use(func(c fiber.Ctx) error {

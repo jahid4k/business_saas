@@ -11,23 +11,24 @@ import (
 type ActionType string
 
 const (
-	ActionTypeLeave                  ActionType = "leave"
-	ActionTypeResignation            ActionType = "resignation"
-	ActionTypePromotion              ActionType = "promotion"
-	ActionTypeTransfer               ActionType = "transfer"
-	ActionTypeWarning                ActionType = "warning"
-	ActionTypeDocument               ActionType = "document"
-	ActionTypeTermination            ActionType = "termination"
+	ActionTypeLeave                    ActionType = "leave"
+	ActionTypeResignation              ActionType = "resignation"
+	ActionTypePromotion                ActionType = "promotion"
+	ActionTypeTransfer                 ActionType = "transfer"
+	ActionTypeWarning                  ActionType = "warning"
+	ActionTypeDocument                 ActionType = "document"
+	ActionTypeTermination              ActionType = "termination"
 	ActionTypeAttendanceRegularization ActionType = "attendance_regularization"
-	ActionTypeAward                  ActionType = "award"
-	ActionTypeCustom                 ActionType = "custom"
+	ActionTypeAward                    ActionType = "award"
+	ActionTypeJobRequisition           ActionType = "job_requisition"
+	ActionTypeCustom                   ActionType = "custom"
 )
 
 func (a ActionType) IsValid() bool {
 	switch a {
 	case ActionTypeLeave, ActionTypeResignation, ActionTypePromotion, ActionTypeTransfer,
 		ActionTypeWarning, ActionTypeDocument, ActionTypeTermination,
-		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeCustom:
+		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeCustom:
 		return true
 	}
 	return false
@@ -87,14 +88,14 @@ type ApprovalTemplate struct {
 
 // ApprovalTemplateLevel is one sequential level within a template.
 type ApprovalTemplateLevel struct {
-	ID              string          `db:"id"               json:"id"`
-	TemplateID      string          `db:"template_id"      json:"template_id"`
-	Level           int             `db:"level"            json:"level"`
-	ApproverType    ApproverType    `db:"approver_type"    json:"approver_type"`
-	ApproverRole    *string         `db:"approver_role"    json:"approver_role,omitempty"`
-	ApproverUserID  *string         `db:"approver_user_id" json:"approver_user_id,omitempty"`
-	SLAHours        int             `db:"sla_hours"        json:"sla_hours"`
-	OnSLABreach     SLABreachAction `db:"on_sla_breach"    json:"on_sla_breach"`
+	ID             string          `db:"id"               json:"id"`
+	TemplateID     string          `db:"template_id"      json:"template_id"`
+	Level          int             `db:"level"            json:"level"`
+	ApproverType   ApproverType    `db:"approver_type"    json:"approver_type"`
+	ApproverRole   *string         `db:"approver_role"    json:"approver_role,omitempty"`
+	ApproverUserID *string         `db:"approver_user_id" json:"approver_user_id,omitempty"`
+	SLAHours       int             `db:"sla_hours"        json:"sla_hours"`
+	OnSLABreach    SLABreachAction `db:"on_sla_breach"    json:"on_sla_breach"`
 }
 
 // ApprovalInstance is a runtime approval workflow for a specific entity.
@@ -113,8 +114,8 @@ type ApprovalInstance struct {
 	UpdatedAt        time.Time      `db:"updated_at"        json:"updated_at"`
 	CompletedAt      *time.Time     `db:"completed_at"      json:"completed_at,omitempty"`
 
-	Snapshot []*ApprovalTemplateLevel `db:"-" json:"snapshot,omitempty"`
-	Decisions []*ApprovalDecision     `db:"-" json:"decisions,omitempty"`
+	Snapshot  []*ApprovalTemplateLevel `db:"-" json:"snapshot,omitempty"`
+	Decisions []*ApprovalDecision      `db:"-" json:"decisions,omitempty"`
 }
 
 func (a *ApprovalInstance) ParseSnapshot() error {
@@ -139,12 +140,12 @@ type ApprovalDecision struct {
 // ── Request types ──
 
 type CreateTemplateRequest struct {
-	Name                string                        `json:"name"`
-	Description         *string                       `json:"description"`
-	ActionType          ActionType                    `json:"action_type"`
-	ConditionExpression *string                       `json:"condition_expression"`
-	IsDefault           bool                          `json:"is_default"`
-	Levels              []CreateTemplateLevelRequest  `json:"levels"`
+	Name                string                       `json:"name"`
+	Description         *string                      `json:"description"`
+	ActionType          ActionType                   `json:"action_type"`
+	ConditionExpression *string                      `json:"condition_expression"`
+	IsDefault           bool                         `json:"is_default"`
+	Levels              []CreateTemplateLevelRequest `json:"levels"`
 }
 
 type CreateTemplateLevelRequest struct {
@@ -167,9 +168,9 @@ type UpdateTemplateRequest struct {
 // CreateInstanceRequest is called by other services (not directly by HTTP —
 // the handler is for internal use by leave, promotion, etc.).
 type CreateInstanceRequest struct {
-	TemplateID string
-	EntityType string
-	EntityID   string
+	TemplateID  string
+	EntityType  string
+	EntityID    string
 	RequestedBy string
 }
 
@@ -193,13 +194,13 @@ type InstanceListResponse struct {
 // ── Sentinel errors ──
 
 var (
-	ErrTemplateNotFound  = errors.New("approval template not found")
-	ErrInstanceNotFound  = errors.New("approval instance not found")
-	ErrNameRequired      = errors.New("name is required")
-	ErrInvalidActionType = errors.New("invalid action_type")
-	ErrNoLevels          = errors.New("at least one level is required")
-	ErrInvalidLevel      = errors.New("level must be >= 1 and sequential")
+	ErrTemplateNotFound    = errors.New("approval template not found")
+	ErrInstanceNotFound    = errors.New("approval instance not found")
+	ErrNameRequired        = errors.New("name is required")
+	ErrInvalidActionType   = errors.New("invalid action_type")
+	ErrNoLevels            = errors.New("at least one level is required")
+	ErrInvalidLevel        = errors.New("level must be >= 1 and sequential")
 	ErrInvalidApproverType = errors.New("invalid approver_type")
-	ErrAlreadyCompleted  = errors.New("approval instance is already completed")
-	ErrNotCurrentLevel   = errors.New("action does not apply to the current approval level")
+	ErrAlreadyCompleted    = errors.New("approval instance is already completed")
+	ErrNotCurrentLevel     = errors.New("action does not apply to the current approval level")
 )
