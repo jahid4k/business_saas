@@ -334,7 +334,44 @@ both read it.
 
 ---
 
-## PHASE 6 — Learning & Development
+## PHASE 6 — Learning & Development ✅ DONE (2026-08-10)
+
+> **Sliced two ways, both shipped.** **6A LMS core ✅ DONE** (migrations `00092`/`00093`,
+> `internal/hrm/learning/`, 29 routes, 8 tables). **6B certifications + skills + expiry sweep
+> ✅ DONE** (migrations `00094`/`00095`, `internal/hrm/certifications/` 9 routes and
+> `internal/hrm/skills/` 9 routes, 5 tables).
+>
+> **Three clauses below were corrected or declined during implementation** — recorded here as
+> decisions rather than drift, per rule 3. Full detail in `docs/Project_Instruction.md` r24:
+>
+>   • *"Assessments reuse Phase 5's form engine. Separate DTOs: `QuestionForAttempt` never carries
+>     the correct answer."* The DTO shipped as specified, but the premise did not hold:
+>     `platform_form_questions` has **no correct-answer column and no pass mark**, and
+>     `computeScore` produces a weighted RATING, not a mark. The key therefore lives in a Phase
+>     6-owned `hrm_quiz_answer_keys`, which keeps the platform engine free of assessment semantics
+>     AND makes the no-leak rule structural — the attempt read path never joins the key table.
+>     A consequence the plan could not have anticipated: because
+>     `platform_form_responses.question_id` is `ON DELETE SET NULL`, grading must happen ONCE at
+>     submit and be stored, never re-derived.
+>
+>   • *"`hrm_skills` / `hrm_position_skills` / `hrm_employee_skills` — shared taxonomy, consumed by
+>     Phases 4, 5 and 10."* **`hrm_position_skills` was NOT built.** Recruitment and performance
+>     were grepped and contain zero skills fields, so there is nothing to retrofit; its only reader
+>     is Phase 10, four phases out. Building it now is the speculative primitive rule 1 forbids.
+>     The other two shipped, justified by a real in-phase consumer (issuing a certification that
+>     carries a skill records it). The "not an LMS-internal table" instruction is honoured at the
+>     package level: `internal/hrm/skills` is standalone and Phase 10 imports it directly.
+>
+>   • **Instructor-led sessions and training requests + budgets** are not built. They appear in
+>     `Project_Instruction.md`'s Section 9 scoping paragraph but never in this plan's Phase 6 line
+>     items, and neither has a consumer today. A training budget belongs next to Phase 7
+>     compensation, where it would actually be spent.
+>
+> **Two pre-existing defects surfaced while verifying this phase, neither caused by it:**
+> `scope.Predicate`'s `ScopeOwn` uses `= (SELECT …)` against a NON-unique `idx_hrm_emp_user_id`, so
+> an org with one user on two employee rows makes every `view_own` list in all six scope-tiered
+> modules fail SQLSTATE 21000; and the scheduler's manual-trigger route has no `:orgId` while its
+> permission gate requires one, returning 400 for every job including pre-existing ones.
 
 - `hrm_courses` + **`hrm_course_versions`** — enrollment pins `version_id`, not just `course_id`
 - `hrm_course_modules` / `_lessons` — external link + PDF + mark-complete + quiz.

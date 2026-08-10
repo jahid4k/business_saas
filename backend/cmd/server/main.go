@@ -109,12 +109,15 @@ import (
 	hrmwarntypes "github.com/mridha/businesssaas/internal/hrm/warningtypes"
 
 	// ── Internal — HRM Group B (Core Employee Lifecycle) ─────────────────────
+	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
 	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
 	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
 	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmpromotions "github.com/mridha/businesssaas/internal/hrm/promotions"
 	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
+	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	hrmtransfers "github.com/mridha/businesssaas/internal/hrm/transfers"
 
@@ -285,6 +288,9 @@ func main() {
 	hrmRecruitmentRepo := hrmrecruitment.NewRepository(pgPool)
 	hrmPerformanceRepo := hrmperformance.NewRepository(pgPool)
 	hrmFeedbackRepo := hrmfeedback.NewRepository(pgPool)
+	hrmLearningRepo := hrmlearning.NewRepository(pgPool)
+	hrmSkillsRepo := hrmskills.NewRepository(pgPool)
+	hrmCertificationsRepo := hrmcertifications.NewRepository(pgPool)
 	hrmPipRepo := hrmpip.NewRepository(pgPool)
 
 	// ═════════════════════════════════════════════════════════════════════════
@@ -423,6 +429,21 @@ func main() {
 	// termination endpoints, behind the approval chain.
 	hrmPipSvc := hrmpip.NewService(hrmPipRepo, hrmScopeResolver, hrmTerminationsSvc)
 
+	// ── HRM Extended Phase 6A — Learning & Development ─────────────────────────
+	// formsSvc satisfies learning.FormEngine structurally. Quizzes are form
+	// instances, but the CORRECT ANSWERS live in hrm_quiz_answer_keys, owned by
+	// the learning package — platform/forms has no concept of a correct answer,
+	// and appraisals and 360 feedback carry no assessment columns as a result.
+	hrmLearningSvc := hrmlearning.NewService(hrmLearningRepo, hrmScopeResolver, formsSvc)
+
+	// ── HRM Extended Phase 6B — Certifications + the skills taxonomy ───────────
+	// hrmSkillsSvc satisfies certifications.SkillGranter structurally, so
+	// issuing a credential that carries a skill records that skill too. The
+	// import runs certifications → skills and never the reverse: skills is a
+	// SHARED taxonomy, and Phase 10 succession will consume it the same way.
+	hrmSkillsSvc := hrmskills.NewService(hrmSkillsRepo, hrmScopeResolver)
+	hrmCertificationsSvc := hrmcertifications.NewService(hrmCertificationsRepo, hrmScopeResolver, hrmSkillsSvc)
+
 	// Wire approval-instance completion back into each of the seven workflow
 	// modules. Must run after all seven services above exist. entityType here
 	// must match the EntityType string each Submit()/Issue() uses when calling
@@ -516,6 +537,9 @@ func main() {
 	hrmPerformanceHandler := hrmperformance.NewHandler(hrmPerformanceSvc, authzSvc)
 	hrmFeedbackHandler := hrmfeedback.NewHandler(hrmFeedbackSvc, authzSvc)
 	hrmPipHandler := hrmpip.NewHandler(hrmPipSvc, authzSvc)
+	hrmLearningHandler := hrmlearning.NewHandler(hrmLearningSvc, authzSvc)
+	hrmSkillsHandler := hrmskills.NewHandler(hrmSkillsSvc, authzSvc)
+	hrmCertificationsHandler := hrmcertifications.NewHandler(hrmCertificationsSvc, authzSvc)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 9. FIBER
@@ -667,6 +691,9 @@ func main() {
 	hrmperformance.RegisterRoutes(api, hrmPerformanceHandler, permFn, requireAuth, requireOrgMatch)
 	hrmfeedback.RegisterRoutes(api, hrmFeedbackHandler, permFn, requireAuth, requireOrgMatch)
 	hrmpip.RegisterRoutes(api, hrmPipHandler, permFn, requireAuth, requireOrgMatch)
+	hrmlearning.RegisterRoutes(api, hrmLearningHandler, permFn, requireAuth, requireOrgMatch)
+	hrmskills.RegisterRoutes(api, hrmSkillsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcertifications.RegisterRoutes(api, hrmCertificationsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── 404 fallback — must be registered last ────────────────────────────────
 	app.Use(func(c fiber.Ctx) error {
@@ -771,6 +798,22 @@ func main() {
 	// excess of a policy's carry_forward_cap. Its Dec-31-dated forfeiture is
 	// picked up by the next accrual run's snapshot window — ordering is
 	// enforced only by this cron gap, not an explicit call chain.
+	// The build plan calls this the highest-value feature in Phase 6. It runs
+	// instance-wide rather than per-org — the sweep queries an indexed slice of
+	// hrm_employee_certifications directly, so there is no org loop to write.
+	//
+	// 04:00, after the leave jobs, so a night's writes are spread out rather
+	// than contending on the same connection pool.
+	schedulerSvc.Register("certifications.expiry_sweep", "0 4 * * *", func(jCtx context.Context) (int, error) {
+		res, err := hrmCertificationsSvc.SweepExpiries(jCtx)
+		if err != nil {
+			// The partial count is still reported: the expiring pass may have
+			// committed before the expired pass failed.
+			return res.Total(), fmt.Errorf("certification expiry sweep: %w", err)
+		}
+		return res.Total(), nil
+	})
+
 	schedulerSvc.Register("leave.year_end_carry_forward", "30 2 1 1 *", func(jCtx context.Context) (int, error) {
 		orgIDs, err := businessSvc.FindAllIDs(jCtx)
 		if err != nil {

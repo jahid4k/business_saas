@@ -1,6 +1,95 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-08-08 (r23 — **HRM Extended Phase 5 COMPLETE.** Phases 5B and 5C shipped,
+> Last updated: 2026-08-10 (r24 — **HRM Extended Phase 6 COMPLETE: Learning & Development.**
+> Sliced two ways and both shipped: 6A the LMS core, 6B certifications + the shared skills
+> taxonomy + the expiry sweep. Migrations `00092`–`00095`, three new packages
+> (`internal/hrm/learning`, `internal/hrm/skills`, `internal/hrm/certifications`), 47 new routes.
+>
+> **The build plan was wrong on one load-bearing point, and it reshaped the phase.** It says
+> *"assessments reuse Phase 5's form engine — separate DTOs: `QuestionForAttempt` never carries the
+> correct answer"*, but `platform_form_questions` has **no correct-answer column and no pass mark**.
+> The engine's `computeScore` normalises each answer 0-1 against its own scale and weights it: a
+> RATING score ("how highly did you rate this"), not an ASSESSMENT score ("did you get it right").
+> The correct answer had nowhere to live.
+>
+> Resolved with a Phase 6-owned `hrm_quiz_answer_keys` keyed on `platform_form_questions.id`.
+> `internal/platform/forms` keeps zero assessment semantics, so appraisals and 360 feedback never
+> carry a `correct_answer` column they do not read — and the "never leak the answer" rule becomes
+> **structural rather than disciplinary**: the attempt read path does not join the key table, so
+> there is no field to forget to strip. Exactly the shape 5C used for 360 anonymity.
+>
+> **Consequence: grade once at submit, store the result, never re-derive.**
+> `platform_form_responses.question_id` is `ON DELETE SET NULL` (documented in `00084` as
+> "provenance only, never joined for display" — the question snapshot lives on the response row),
+> and `hrm_quiz_answer_keys.question_id` is `ON DELETE CASCADE`. So deleting a question destroys
+> the key AND severs the response's link to it; a re-grade would silently score zero. An
+> integration test deletes a question after grading and asserts the stored score does not move.
+>
+> **6A — the LMS core.** `internal/hrm/learning/` (29 routes), eight tables. Content hangs off
+> `hrm_course_versions`, not the course, and `hrm_enrollments` **pins `version_id`** with a
+> RESTRICT FK: publishing a new version leaves an existing learner on the content they actually
+> took, and the pinned version cannot be deleted from under them. Only a DRAFT version is
+> editable — every content write passes one `assertEditableVersion` gate, because the one place
+> that check gets forgotten is the one that corrupts a published version. Completion percentage is
+> COMPUTED from `hrm_lesson_progress` on every read (the `00076` rule); an integration test
+> introspects `information_schema` to assert no percentage column exists to drift. A quiz lesson is
+> completed by PASSING an attempt, never by asserting completion — otherwise the assessment is
+> optional, which is the same as absent. Grading has its own arithmetic (32 unit tests written
+> before any dependent layer): multi-select partial credit is `(hits − misses) / expected` floored
+> at zero, so selecting every option scores zero rather than full marks.
+>
+> **6B — certifications, skills, and the sweep.** `internal/hrm/certifications/` (9 routes) and
+> `internal/hrm/skills/` (9 routes), five tables. Separate packages because `learning`'s composite
+> Repository hit 53 methods in 6A against the ~60 split threshold Phase 5A recorded, and because
+> skills is explicitly a SHARED taxonomy — Phase 10 succession imports it directly rather than
+> reaching through an LMS dependency.
+>
+> The **expiry sweep** is what the build plan calls the highest-value feature in the phase. It is a
+> `scheduler.Register("certifications.expiry_sweep", "0 4 * * *", …)` job, instance-wide like the
+> leave and absence sweeps. Two passes in a fixed order — mark `expiring` within 30 days, THEN mark
+> `expired` — because reversing them would flag something that has already lapsed as a warning. The
+> boundary is strict: `expires_at < CURRENT_DATE`, so a credential expiring TODAY is still valid
+> today; `<=` would cut somebody off a day early, which for a safety certification is a real
+> operational error. `expiry_notified_at` stops the job re-flagging the same credential nightly.
+> All three properties are pinned by integration tests.
+>
+> **`hrm_position_skills` was deliberately NOT built**, against the build plan's own list. Skills a
+> POSITION requires has no reader until Phase 10, and recruitment and performance were both grepped
+> and contain zero skills fields — there is nothing to retrofit into. Building it now is precisely
+> the speculative primitive rule 1 exists to prevent. `hrm_skills` and `hrm_employee_skills` DO
+> earn their place, via a real in-phase consumer: issuing a certification that carries a skill
+> records that skill, with `source='certification'` and a pointer back to the credential.
+>
+> `hrm_acknowledgements.acknowledgeable_type` gained `'course_completion'` — the same sanctioned
+> widening 5B made for `'appraisal'`, and one the build plan scheduled by name.
+>
+> **Verification:** 55 new unit tests (32 grading + 23 service), 19 new integration tests, all six
+> architecture guards green, migration reversibility proved down→zero tables / zero permission rows
+> / **zero role-array grants** / ack CHECK reverted→re-up, and two live HTTP smoke runs (22-step
+> 6A, 13-step 6B) with test data cleaned up afterwards. Full integration suite: **112 tests**.
+>
+> **⚠ Two defects found during this phase, NEITHER caused by it, both still open:**
+>
+> 1. **`scope.Predicate`'s `ScopeOwn` breaks if one user has two employee records in an org.** It
+>    emits `employee_id = (SELECT id FROM hrm_employees WHERE org_id=$1 AND user_id=$2)`, and
+>    `idx_hrm_emp_user_id` is **not unique** — two rows make the subquery fail with SQLSTATE 21000
+>    ("more than one row returned by a subquery used as an expression"). Every `view_own` list in
+>    all SIX scope-tiered modules (goals, appraisals, feedback, PIPs, enrollments, certifications,
+>    skills) 500s for that org. Found by accidentally creating the state in a test. The fix is
+>    one character — `=` → `IN` — but it touches a file five prior phases depend on, so it is
+>    reported rather than changed here.
+> 2. **The scheduler's manual-trigger endpoint is unusable for every job.**
+>    `POST /platform/scheduler/jobs/:name/run` carries no `:orgId`, but its `permFn` gate requires
+>    one, so it returns 400 `NO_BUSINESS_CONTEXT`. Verified against a PRE-EXISTING job
+>    (`leave.accrue_and_snapshot`), so this is not new. `internal/platform/checklists/routes.go`
+>    already flags the no-`:orgId` scheduler shape as a pattern not to copy.
+>
+> Also still open from r23: a fresh API-created org has no `hrm_employee_statuses`, so
+> `POST /hrm/employees` 500s until one is created by hand.
+>
+> ---
+>
+> r23 — **HRM Extended Phase 5 COMPLETE.** Phases 5B and 5C shipped,
 > closing the three-way slice recorded in r22: 5A Goals/OKR (r22), 5B form engine + appraisal
 > cycles, 5C 360 feedback + PIP. Migrations `00084`–`00091`, three new packages
 > (`internal/platform/forms`, `internal/hrm/feedback`, `internal/hrm/pip`), 78 new routes.
@@ -1299,7 +1388,7 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21; Performance/Goals Phase 5A added r22; appraisals 5B + 360 feedback/PIP 5C added r23]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **31 route-bearing sub-modules, 341 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount). Counts re-grepped from `internal/hrm/*/routes.go` at r23 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **34 route-bearing sub-modules, 388 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount + 29 learning r24 + 9 skills r24 + 9 certifications r24). Counts re-grepped from `internal/hrm/*/routes.go` at r23 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20) + `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/`hrm_referrals` (00080, r21).
 
@@ -1415,6 +1504,79 @@ does not erase the PIP's record of having failed.
 a partial unique index enforcing one open plan per employee — proved under 6 concurrent creates,
 since the service pre-check alone loses that race.
 
+**Learning & Development (r24) — Phase 6A of 2:** `internal/hrm/learning/` (29 routes),
+`hrm.courses.*` + `hrm.enrollments.*` permissions, eight tables (`00092`/`00093`).
+
+**Content hangs off a VERSION, not the course.** `hrm_course_modules` references
+`hrm_course_versions`, and `hrm_enrollments` pins `version_id` with a **RESTRICT** FK. Publishing a
+new version leaves an existing learner on the content they actually took, and the pinned version
+cannot be deleted from under them — both proved by integration test. Only a `draft` version is
+editable; every content write (module, lesson, version metadata) passes a single
+`assertEditableVersion` gate rather than repeating the check six times, because the one place it
+gets forgotten is the one that corrupts a published version.
+
+**The form engine could not do assessments, and that reshaped the design.**
+`platform_form_questions` has no correct-answer column and no pass mark — `computeScore` produces a
+weighted RATING, not a mark. So `hrm_quiz_answer_keys` is owned here, keyed on
+`platform_form_questions.id`. Three consequences worth knowing:
+
+- `platform/forms` keeps **zero** assessment semantics, so appraisals and 360 feedback carry no
+  `correct_answer` column they never read.
+- The protection is **structural**: `hydrateAttempt` fetches the form instance and maps each
+  response to `QuestionForAttempt` (a distinct type with no correct-answer field) and never calls
+  `FindAnswerKeysForTemplate`. There is no key in scope to forget to strip — the 5C anonymity shape.
+- **Grading happens once, at submit, and the result is stored.** It is never re-derived, because
+  `platform_form_responses.question_id` is `ON DELETE SET NULL` and the key is `ON DELETE CASCADE`:
+  deleting a question would make a re-grade silently score zero. `pass_mark_snapshot` is frozen on
+  the attempt for the same reason — raising a lesson's pass mark must not retroactively fail
+  somebody.
+
+`GET .../lessons/:lessonId/answer-keys` is the ONE endpoint returning correct answers and gates on
+`hrm.enrollments.grade` — a key `manager` deliberately does not hold, since a manager who can read
+the answers to a quiz they are assigning has defeated it. The WRITE side gates on
+`hrm.courses.manage` instead: authoring and marking are different jobs.
+
+Completion is **computed** from `hrm_lesson_progress`, never stored (the `00076` rule); an
+integration test introspects `information_schema` to assert no percentage column exists. A quiz
+lesson is completed by PASSING an attempt, never by asserting completion. Grading arithmetic has
+32 unit tests written before any dependent layer: multi-select partial credit is
+`(hits − misses) / expected` floored at zero, so selecting every option scores **zero**, not full
+marks — the failure mode a naive "count the hits" implementation ships.
+
+**Certifications + Skills (r24) — Phase 6B of 2:** `internal/hrm/certifications/` (9 routes) and
+`internal/hrm/skills/` (9 routes), `hrm.certifications.*` + `hrm.skills.*` permissions, five tables
+(`00094`/`00095`).
+
+Separate packages from `learning` for two reasons that agreed: its composite Repository hit 53
+methods in 6A against the ~60 split threshold Phase 5A recorded, and skills is explicitly a
+**shared taxonomy** — Phase 10 succession imports `internal/hrm/skills` directly rather than
+reaching through an LMS dependency it has no other use for.
+
+**The expiry sweep** is the phase's highest-value feature, registered as
+`scheduler.Register("certifications.expiry_sweep", "0 4 * * *", …)` and running instance-wide like
+the leave and absence sweeps. Three properties, each with an integration test:
+
+- **Order is fixed** — mark `expiring` (within 30 days) first, THEN `expired`. Reversed, something
+  that already lapsed gets flagged as an upcoming warning.
+- **The boundary is strict**: `expires_at < CURRENT_DATE`. A credential expiring TODAY is still
+  valid today; `<=` cuts somebody off a day early, which for a safety certification is a real
+  operational error.
+- **`expiry_notified_at` stops re-notification**, so the job does not re-flag the same credential
+  every night for a month until the reminder becomes noise.
+
+`expires_at` is derived from `validity_months` via `AddDate` (months are not a fixed number of
+hours) and **frozen at issue** — changing the catalogue's validity never moves an issued
+credential. A NULL validity means "never expires", which stays distinguishable from "expires
+today". Revoking frees the employee for re-issue, which is what makes
+`uq_hrm_ecrt_employee_cert_live` partial rather than absolute.
+
+**`hrm_position_skills` is deliberately NOT built**, against the build plan's own list — see
+Section 9 → HRM Extended → Learning & Development for why. Issuing a certification that carries a
+`skill_id` records that skill with `source='certification'` and a pointer back to the credential;
+that is the in-phase consumer justifying the taxonomy now. The grant is best-effort: a credential
+that issued must not roll back because the derived skill record failed, so the handler reports the
+partial success rather than an error.
+
 The weight rule is `≤ cycle.weight_target` at write time and `== target` only at lock. Enforcement is in the repository, not the service: `CreateGoalGuarded` locks the **employee row** inside its transaction, because locking sibling goals cannot stop a competing INSERT that was in neither locked set. Phase 5B (form engine + appraisal cycles) and 5C (360 feedback + PIP) are designed but unbuilt — see Section 9 → HRM EXTENDED MODULES → Performance Management.
 
 Resumes: PDF-only, content-sniffed (never trusts the file extension), stored in `backend/storage/resumes/` — **not** `./uploads`, which is served fully unauthenticated. Download is gated on its own `hrm.candidates.download_resume` permission, separate from `.view`.
@@ -1444,7 +1606,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 91
+### Migration Count: 95
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -1480,9 +1642,21 @@ CHECK constraints and to `hrm_employee_documents.related_type` · `00082`
 scope tiers + `hrm.rating_scales.view`/`.manage` · `00088` `hrm_feedback_cycles`/
 `hrm_feedback_requests` (Phase 5C) · `00089` seeds `hrm.feedback.view`/`.manage`/`.coordinate`/
 `.respond` + the three mandatory scope tiers · `00090` `hrm_pips`/`hrm_pip_checkins` (Phase 5C) ·
-`00091` seeds `hrm.pips.view`/`.manage`/`.close` + the three mandatory scope tiers.
+`00091` seeds `hrm.pips.view`/`.manage`/`.close` + the three mandatory scope tiers ·
+`00092` `hrm_courses`/`_versions`/`_modules`/`_lessons`/`hrm_enrollments`/`hrm_lesson_progress`/
+`hrm_quiz_attempts`/`hrm_quiz_answer_keys` (Phase 6A) · `00093` seeds `hrm.courses.view`/`.manage`
++ `hrm.enrollments.view`/`.manage`/`.enroll_self`/`.attempt`/`.grade` + the three mandatory scope
+tiers · `00094` `hrm_skills`/`hrm_certifications`/`hrm_employee_certifications`/
+`hrm_employee_skills`/`hrm_enrollment_rules` (Phase 6B) + widens
+`hrm_acknowledgements.acknowledgeable_type` with `'course_completion'` · `00095` seeds
+`hrm.certifications.*` and `hrm.skills.*` + two sets of the three mandatory scope tiers.
 
-### Key Tables (117 total)
+⚠ `00094` creates `hrm_skills` BEFORE `hrm_certifications` (the latter has a `skill_id` FK), and
+its Down block drops them in the opposite order — certifications first, skills last. Reordering
+either into "logical" order breaks the migration; the drop-order half was caught only by actually
+running the rollback, which is why reversibility is proved rather than assumed.
+
+### Key Tables (130 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -1871,7 +2045,9 @@ First real consumer: HRM onboarding (`internal/hrm/onboarding/`, Section 5 → H
 `internal/platform/forms/` (17 routes): templates → sections → typed questions → typed responses → scoring → aggregate. Definition snapshotted onto each instance as **real columns, never JSONB** — migration `00076`'s rule is that JSONB is for opaque config read as a whole, and form responses get aggregated, so they are rows. A response row per question is created at instantiation, so answering is an UPDATE rather than an insert-or-update.
 Follows the `internal/platform/checklists/` template exactly, including both of its structural rules: **polymorphic subject with no FK** (`subject_type` CHECK + `subject_id`) so `platform/forms` never references `hrm_*`, and **no generic instantiate route** — a generic endpoint would have to trust a client-supplied subject id and respondent id, which is an impersonation vector, and a form response is attributable evidence about a person. Consumers instantiate from their own endpoints having resolved the subject from their own domain.
 `SubjectContext` keeps `SubjectID` (who it is about) and `RespondentUserID` (who fills it in) as separate fields — the split appraisals and 360 both depend on, and the one that files every response under the wrong person if collapsed.
-Real consumers today: appraisal self/manager forms (r23, consumer #1) and 360 feedback (r23, consumer #2). Still unbuilt: LMS assessments, exit interviews, potential-criteria assessment, employee surveys.
+Real consumers today: appraisal self/manager forms (r23, consumer #1), 360 feedback (r23, consumer #2) and LMS quizzes (r24, consumer #3). Still unbuilt: exit interviews, potential-criteria assessment, employee surveys.
+
+⚠ **The engine does NOT know what a correct answer is, and deliberately still does not after r24.** Phase 6's quizzes needed one; rather than adding `correct_answer` + `pass_mark` here — which appraisals and 360 would then carry and never read — the answer key lives in `hrm_quiz_answer_keys`, owned by `internal/hrm/learning`. `computeScore` remains a weighted RATING (0-1 normalised per question scale), which is the right thing for an appraisal and the wrong thing for a quiz; Phase 6 has its own `Grade()`. If a fourth consumer needs marking, it should own its key too.
 
 **⚠️ `hrm_interview_scorecards` was NOT migrated onto this engine, and that is a decision, not an omission.** r21 shipped it as a deliberately fixed-shape table and described it as the engine's "consumer #1"; that framing is **superseded**. When the engine's real shape became concrete in 5B, the migration was reconsidered and declined: scorecards carry a bespoke reveal rule (a panelist who has not submitted their own sees only their own draft; everyone else sees every *submitted* scorecard, never a draft) that is a service-level rule the generic engine has no concept of, and the fixed shape is what makes that rule cheap to express. Revisit only if a second interview-form shape is genuinely needed.
 
@@ -1990,7 +2166,13 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
   One scope item from the original plan was **not** built and is deliberately deferred: **continuous (non-cycle-bound) 360 feedback**. 5C shipped the formal cycle-bound half only. Continuous feedback has no cycle to hang a suppression threshold on, which is the entire anonymity mechanism here — it needs its own design (rolling windows, or per-subject rather than per-cycle thresholds), not a nullable `cycle_id`.
   Depends on: form engine, resource-level permissions (draft leakage is the failure mode), notification, scheduler, `hrm_employees.manager_id` (exists — see PREP MIGRATIONS).
 
-- **Learning & Development** — courses with mandatory version pinning on enrollment, modules/lessons, assessments, instructor-led sessions, certifications with expiry, skills taxonomy, training requests + budgets. No SCORM player, no video hosting — external links, PDFs via the Files module, mark-complete, quiz. Certification expiry sweep is the highest-value feature and is entirely scheduler-dependent. `hrm_skills` is consumed by recruitment, performance, and succession — treat it as shared taxonomy, not an LMS-internal table.
+- **Learning & Development — ✅ DONE (r24), see Section 5 → HRM MODULE → Learning & Development and Certifications + Skills.** Both slices shipped. **6A** the LMS core: courses with content hanging off versions, enrollment pinning `version_id` (RESTRICT), modules/lessons, lesson progress, and quiz attempts graded against a Phase 6-owned answer key. **6B** certifications with the nightly expiry sweep, plus `hrm_skills`/`hrm_employee_skills` as a shared org taxonomy. No SCORM player, no video hosting — external links, PDF/text content, mark-complete, quiz, as scoped.
+
+  Three deviations from the original scope, each deliberate and recorded:
+
+  1. **The form engine could not do assessments as the build plan assumed** — it has no correct-answer column and no pass mark, only a weighted rating. `hrm_quiz_answer_keys` is owned by Phase 6 instead, which keeps `platform/forms` free of assessment semantics AND makes the "never leak the answer" rule structural. See the r24 changelog entry.
+  2. **`hrm_position_skills` was NOT built.** Skills a POSITION requires has no reader until Phase 10's succession and gap analysis; recruitment and performance were both grepped and contain zero skills fields, so there is nothing to retrofit into. Building it now would be the speculative primitive rule 1 exists to prevent. `hrm_skills` and `hrm_employee_skills` DO ship, justified by a real in-phase consumer — issuing a certification that carries a skill records it. The build plan's "shared taxonomy, not an LMS-internal table" note is honoured at the PACKAGE level too: `internal/hrm/skills` is standalone, and Phase 10 imports it directly.
+  3. **Instructor-led sessions and training requests + budgets are NOT built** and were never in the build plan's Phase 6 line item — they appear only in this scoping paragraph. They need a scheduling surface and a budget model respectively; neither has a consumer today. Revisit alongside Phase 7 compensation, which is where a training budget would actually be spent.
   Depends on: scheduler, form engine, reuses `hrm_acknowledgements` for compliance evidence.
 
 **Compensation & benefits**

@@ -19,14 +19,17 @@ import (
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
+	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
 	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
 	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
 	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
 	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
+	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
@@ -54,6 +57,9 @@ type testEnv struct {
 	hrmTerminationSvc hrmterminations.Service
 	hrmPerformanceSvc hrmperformance.Service
 	hrmFeedbackSvc    hrmfeedback.Service
+	hrmLearningSvc    hrmlearning.Service
+	hrmSkillsSvc      hrmskills.Service
+	hrmCertSvc        hrmcertifications.Service
 	hrmPipSvc         hrmpip.Service
 	hrmScopeResolver  *hrmscope.Resolver
 	formsSvc          forms.Service
@@ -162,6 +168,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	// the failed-PIP handoff is only proved by a draft actually landing in
 	// hrm_terminations.
 	hrmPipSvc := hrmpip.NewService(hrmpip.NewRepository(db), hrmScopeResolver, hrmTerminationSvc)
+	hrmLearningSvc := hrmlearning.NewService(hrmlearning.NewRepository(db), hrmScopeResolver, formsSvc)
+	// hrmSkillsSvc satisfies certifications.SkillGranter structurally, as in main.go.
+	hrmSkillsSvc := hrmskills.NewService(hrmskills.NewRepository(db), hrmScopeResolver)
+	hrmCertSvc := hrmcertifications.NewService(hrmcertifications.NewRepository(db), hrmScopeResolver, hrmSkillsSvc)
 
 	return &testEnv{
 		db:                db,
@@ -180,6 +190,9 @@ func newTestEnv(t *testing.T) *testEnv {
 		hrmResignationSvc: hrmResignationSvc,
 		hrmPerformanceSvc: hrmPerformanceSvc,
 		hrmFeedbackSvc:    hrmFeedbackSvc,
+		hrmLearningSvc:    hrmLearningSvc,
+		hrmSkillsSvc:      hrmSkillsSvc,
+		hrmCertSvc:        hrmCertSvc,
 		hrmPipSvc:         hrmPipSvc,
 		hrmScopeResolver:  hrmScopeResolver,
 		formsSvc:          formsSvc,
