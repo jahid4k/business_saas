@@ -253,7 +253,63 @@ Candidate purge job uses Phase 0.2.
 
 ---
 
-## PHASE 5 — Form engine + Performance Management
+## PHASE 5 — Form engine + Performance Management ✅ DONE (2026-08-08)
+
+> **Sliced three ways, 2026-08-06. All three shipped by 2026-08-08.** At ~18-19 tables this phase
+> is roughly 2.5× Phase 4A and could not ship as one.
+> **5A Goals/OKR ✅ DONE** (migrations `00082`/`00083`, `internal/hrm/performance/`, 19 routes).
+> **5B form engine + appraisal cycles ✅ DONE** (migrations `00084`–`00087`,
+> `internal/platform/forms/` 17 routes + 21 more routes in `internal/hrm/performance/`).
+> **5C 360 feedback + PIP ✅ DONE** (migrations `00088`–`00091`, `internal/hrm/feedback/` 12 routes,
+> `internal/hrm/pip/` 9 routes).
+>
+> **Three clauses below were revised or declined during 5B/5C implementation** — recorded here so
+> they read as decisions rather than drift, per this plan's rule 3. Full detail in
+> `docs/Project_Instruction.md` r23:
+>
+>   • *"anonymity stripped at the repository layer"* was implemented as **two separate repository
+>     methods returning two separate types that share no field** (coordination: identity, no
+>     answers; content: relationship + form instance, no identity), plus the policy being DERIVED
+>     from `Relationship.IsAnonymous()` rather than stored. A stored flag is what
+>     `hrm_complaints.is_anonymous` already is, and nothing in the codebase branches on it. The
+>     third leg — never handing a subject a form instance id — is the leak that lives outside the
+>     module, since `platform_form_instances` stores `respondent_user_id`.
+>
+>   • *"minimum-response threshold"* is enforced **per relationship group, not cycle-wide**. Five
+>     responses of which exactly one is a direct report still identify that direct report the
+>     moment their breakdown renders, so a cycle-wide total would satisfy the threshold while
+>     leaking the individual. `self` and `manager` are exempt and attributed by nature: there is
+>     exactly one manager, and suppressing them below a threshold they can never reach adds no
+>     privacy while making the cycle's most actionable feedback unreadable.
+>
+>   • **Interview scorecards were NOT migrated onto the form engine.** r21 shipped
+>     `hrm_interview_scorecards` fixed-shape and called it the engine's "consumer #1"; the r22 plan
+>     deferred the migration decision to "when the engine's real shape is known". It is now known,
+>     and the migration is declined: scorecards carry a bespoke reveal-after-own-submit rule the
+>     generic engine has no concept of, and the fixed shape is what makes that rule cheap. Revisit
+>     only if a second interview-form shape is genuinely needed.
+>
+> **One scope item deliberately deferred:** *continuous (non-cycle-bound) 360 feedback*. 5C shipped
+> the formal cycle-bound half only. Continuous feedback has no cycle to hang a suppression
+> threshold on — which is the entire anonymity mechanism — so it needs its own design (rolling
+> windows, or per-subject rather than per-cycle thresholds), not a nullable `cycle_id`.
+>
+> Goals went first even though the prose below lists the form engine first, because Goals/OKR is
+> the only sub-system with **no form-engine dependency** — goals are structured numeric data, not
+> questionnaires. Building the engine first would have shipped a primitive with zero consumers,
+> contradicting this plan's own rule 1 ("nothing speculative — a primitive gets built when its
+> first real consumer is queued next"). The engine lands in 5B with appraisals, its first real
+> consumer, mirroring Phase 3's checklist-engine-plus-onboarding shape.
+>
+> Two clauses below were revised during 5A implementation, both recorded in
+> `docs/Project_Instruction.md` r22:
+>   • *"`parent_goal_id` self-FK cascade"* was read as the OKR domain term (cascading alignment),
+>     NOT `ON DELETE CASCADE` — the same sentence demands check-in history "from day one", and
+>     CASCADE destroys the most of it. Shipped as `ON DELETE SET NULL`.
+>   • *"weight-sum validation in service layer"* is not achievable in the service alone: a
+>     read-then-write loses to concurrent requests, and `FOR UPDATE` on sibling goals does not
+>     close the window. The rule stays in the service; enforcement moved into the repository
+>     transaction, locking the employee row.
 
 Second and third consumers of the form pattern arrive together, so the primitive gets built now.
 

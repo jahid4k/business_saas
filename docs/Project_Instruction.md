@@ -1,5 +1,168 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+> Last updated: 2026-08-08 (r23 — **HRM Extended Phase 5 COMPLETE.** Phases 5B and 5C shipped,
+> closing the three-way slice recorded in r22: 5A Goals/OKR (r22), 5B form engine + appraisal
+> cycles, 5C 360 feedback + PIP. Migrations `00084`–`00091`, three new packages
+> (`internal/platform/forms`, `internal/hrm/feedback`, `internal/hrm/pip`), 78 new routes.
+>
+> **5B — the form engine plus its first consumer.** `internal/platform/forms/` (17 routes) follows
+> the `internal/platform/checklists/` template exactly: polymorphic subject with no FK so the
+> platform never references `hrm_*`, definition snapshotted onto each instance as REAL COLUMNS not
+> JSONB (migration `00076`'s rule: rows that get aggregated are rows), a response row per question
+> created at instantiation so answering is an UPDATE, and **no generic instantiate route** — a
+> generic route would have to trust a client-supplied subject id, which is an impersonation vector.
+> Appraisals (`00086`/`00087`, 21 routes inside `internal/hrm/performance/`) are its first real
+> consumer, shipped in the same phase so the primitive is never speculative.
+>
+> The appraisal phase machine (`draft → self_review → manager_review → calibration → published →
+> acknowledged`) is **the first explicit transition map in this codebase**, and that was a decision,
+> not drift: every other state machine here is inline `if x.Status != Expected` guards, but 6 phases
+> with per-transition guards would have accumulated ~15 of them. `allowedPhaseTransitions` is the
+> single source of truth and `IsTerminal()` is derived from it, so the two can never disagree. Two
+> transitions deliberately run BACKWARD (`manager_review → self_review`, `calibration →
+> manager_review`) to make a rejected review recoverable without cancelling it — and the
+> send-back must NOT re-demand the self form, which is why the precondition checks
+> `a.Phase == PhaseSelfReview` rather than only the target.
+>
+> `final_rating` is a structured queryable FK (`final_rating_level_id → hrm_rating_scale_levels`)
+> **and** a `label`+`value` snapshot. Not redundancy: the FK gives Phase 7's merit matrix and Phase
+> 10's 9-box something to query, the snapshot survives a level being renamed or deleted (`ON DELETE
+> SET NULL`, proved by integration test). Publish **snapshots** the self/manager scores and goal
+> attainment rather than recomputing them — an immutable record whose numbers derive from mutable
+> sources is not immutable, and Phase 5A goals stay editable forever.
+>
+> **5C — 360 feedback + PIP, in their own packages.** The 5A package doc set a split threshold of
+> ~60 methods on `performance`'s composite Repository; it reached 58 after 5B, so 5C went to
+> `internal/hrm/feedback/` (12 routes) and `internal/hrm/pip/` (9 routes) rather than becoming a
+> sixth and seventh quartet.
+>
+> **The 360 anonymity contract is the part worth reading.** This codebase already contains one
+> cautionary example of anonymity documented but never implemented: `hrm_complaints.is_anonymous`
+> is a stored boolean carrying a `COMMENT` that promises identity hiding, which nothing in the
+> codebase branches on — grep it. Three structural decisions keep 5C from becoming the second:
+> (a) anonymity is **derived**, not stored — `Relationship.IsAnonymous()` is the single source of
+> truth, so there is no column to set to a value that lies; (b) identity and content are returned
+> by **different repository methods with different types sharing no field** — the coordination query
+> selects no answer column, the content query selects no identity column, and neither type is the
+> other with fields blanked; (c) a form instance id is **never** handed to a subject, because
+> `platform_form_instances` stores `respondent_user_id` and an id plus `GET /forms/instances/:id`
+> defeats everything else. That third one is the leak that lives outside the module.
+>
+> Two corollaries that look like oversights and are not. **`self` and `manager` feedback is
+> attributed by nature** — a subject knows what they wrote and knows who their manager is; there is
+> exactly one manager, so "anonymous manager feedback" identifies them with certainty while
+> pretending otherwise, and suppressing it below a threshold it can never reach would only make the
+> most actionable feedback in the cycle unreadable. **Suppression is per relationship group, not
+> cycle-wide** — five responses of which one is a direct report still identify that direct report
+> the moment their breakdown renders. A suppressed group reports only that it is suppressed, not its
+> count, and `TotalResponses` excludes it so the hidden size cannot be recovered by subtraction.
+> Suppression applies to **every** tier including `view_all`: a promise of anonymity that is false
+> for one role is false.
+>
+> **PIP hands off to terminations and stops.** A `failed` outcome creates a **DRAFT** termination
+> and nothing more — `hrm_terminations` already owns a `draft → pending_approval → approved →
+> applied` lifecycle with an approval chain, and a PIP that advanced past draft would route around
+> the control that exists specifically to gate dismissals. Proved live: the integration test asserts
+> the row is at status `draft` AND that zero approval instances exist. The seam is
+> `pip.TerminationCreator`, declared in `internal/hrm/pip` with `terminations` importing `pip` — the
+> consumer-owned narrow interface direction, matching `recruitment.EmployeeCreator` exactly. The
+> close is deliberately NOT atomic with the handoff: the PIP commits first, and a handoff failure
+> returns the closed plan alongside `ErrTerminationHandoff` rather than a bare error, because the
+> opposite ordering risks a dismissal document with no process behind it.
+>
+> `hrm.pips.close` is a separate permission from `hrm.pips.manage` and `manager` holds only the
+> latter — closing as `failed` is the moment the instrument stops being developmental, the same
+> reasoning that keeps `hrm.appraisals.publish` away from `manager`. Same shape in feedback:
+> `.coordinate` (who was asked) and `.view` (what was said) are separate keys and **no role holds a
+> key yielding both**.
+>
+> **Verification:** 45 new unit tests (34 appraisal, 19 feedback, 21 pip — counted across both 5B
+> and 5C), 24 new integration tests against real Postgres, all six architecture guards green,
+> migration reversibility proved down×4 → zero tables / zero permission rows / **zero role-array
+> grants** (the residue easiest to miss) → re-up, and two live HTTP smoke runs (22-step 5B, 18-step
+> 5C) with test data cleaned up afterwards.
+>
+> **Two pre-existing defects surfaced by the smoke runs, neither caused by Phase 5, both still
+> open:** (1) a fresh API-created org has NO `hrm_employee_statuses` rows, so `POST /hrm/employees`
+> returns a bare 500 (`fetch default status: no rows in result set`) until a status is created by
+> hand — the same seeding gap the r22 exit-path fix had to work around; (2) `authz
+> .GetUserPermissions` surfaces a malformed org id as a 500 (`invalid input syntax for type uuid`)
+> rather than a 400.
+>
+> ---
+>
+> r22 — HRM Extended Phase 5A shipped: Performance Management / Goals &
+> OKR, plus a standalone fix for two broken employee-exit paths. **Phase 5 as written in the build
+> plan bundles a form engine plus four sub-systems (~18-19 tables, ~2.5× Phase 4A) and was sliced
+> three ways: 5A Goals/OKR, 5B form engine + appraisal cycles, 5C 360 feedback + PIP.** Goals went
+> first specifically because it is the ONLY sub-system with no form-engine dependency — goals are
+> structured numeric data, not questionnaires — so the primitive is not built speculatively. It
+> lands in 5B alongside appraisals, its first real consumer, exactly as Phase 3's checklist engine
+> shipped with onboarding rather than ahead of it. This honours the build plan's own governing rule
+> ("nothing speculative — a primitive gets built when its first real consumer is queued next")
+> against its own prose ordering, which lists the engine first.
+>
+> **Bug fix first (independent of Phase 5, found while checking a 5C dependency):** `terminations
+> .Apply` AND `resignations.Accept` both wrote `hrm_employees.status`, a column migration `00053`
+> dropped when it replaced the text status with a `status_id` FK. Both failed outright with
+> SQLSTATE 42703 and rolled back, so applying a termination or accepting a resignation silently did
+> nothing — in two modules marked ✅ DONE. No test caught it because both use raw SQL through
+> `s.db.Begin(ctx)`, bypassing the `Repository` interface the stub-repo unit tests mock — precisely
+> the gap `leave/balances_service_test.go` already documents. The naive fix would have been silently
+> wrong: `GetDefaultStatusID` resolves by category with `ORDER BY created_at ASC`, and `00053` seeds
+> TWO rows in the `terminated` category ('Resigned' before 'Terminated'), so a termination would
+> have labelled the employee resigned. Both paths now resolve by name-within-category with a
+> fallback, inline in each service's own transaction, raising `ErrNoTerminatedStatus` /
+> `ErrNoResignedStatus` **inside** the transaction so a missing status rolls the whole operation
+> back. 4 integration tests (`hrm_employee_exit_test.go`), verified in both directions — stashing
+> only the two `service.go` files confirmed all four fail against the original code with the exact
+> 42703.
+>
+> **Phase 5A itself:** migration `00082` adds `hrm_goal_cycles`, `hrm_goals`, `hrm_goal_checkins`;
+> `00083` seeds 8 permission keys. New package `internal/hrm/performance/` (19 routes,
+> recruitment-shaped quartets so 5B's appraisals land as more files, not a new package). Six
+> decisions worth recording:
+> **(1)** `parent_goal_id` is `ON DELETE SET NULL`, not `CASCADE` — the build plan says "self-FK
+> cascade", but that is the OKR domain term (cascading alignment), not DDL: the same sentence
+> demands check-in history "from day one", and CASCADE is the one choice that destroys the most of
+> it. `hrm_departments.parent_department_id` (00021) is the existing SET NULL precedent.
+> **(2)** `parent_goal_id` means alignment ONLY — no progress roll-up into a parent's stored value.
+> Beyond being the denormalized drifting counter `00076` forbids, roll-up would break 5B: appraisals
+> are publish-immutable, so a subordinate back-dating a check-in would mutate the inputs of an
+> already-published appraisal.
+> **(3)** The weight rule is `≤ target` at write time (requiring `== target` would make creating the
+> first goal impossible); `== target` is enforced only at cycle lock. **Enforcement lives in the
+> repository, not the service**, correcting the build plan's "weight-sum validation in service
+> layer" as literally written — a service read-then-write loses to two concurrent requests, and
+> `FOR UPDATE` on sibling goals does NOT help because the competing transaction INSERTs a row that
+> was in neither locked set. `CreateGoalGuarded` locks the **employee row** instead, then issues the
+> SUM as a separate statement so it takes a fresh READ COMMITTED snapshot. (`SELECT SUM(...) FOR
+> UPDATE` is not even legal Postgres.) Proved with 8 concurrent goroutines in integration.
+> **(4)** `hrm_goal_cycles` is its own table and is NOT merged with 5B's appraisal cycles — the
+> lifecycles differ, cardinality is not 1:1, and 5B snapshots a rating scale a goal cycle has no use
+> for. `hrm_attendance_periods` is the precedent for a period with a lock lifecycle.
+> **(5)** An out-of-scope alignment parent returns a title-only `GoalRef` — **a distinct type, never
+> a trimmed `*Goal`**, so no column added in 5B or 5C can leak a parent owner's performance data
+> through a reference. Hydrated only on the detail endpoint; a unit test asserts the type's shape.
+> **(6)** Objective vs key result is discriminated by `goal_level` + `weight IS NULL`, **not** by
+> `parent_goal_id IS NULL` — real OKR trees run company → department → individual → key results, so
+> a null-parent test misclassifies every intermediate level.
+> Progress is computed, never stored on `hrm_goals` (it IS stored on check-ins, which is different:
+> an immutable historical value, the `hrm_leave_balances` snapshot distinction). One formula covers
+> every measurement type because `start_value` makes it direction-agnostic — `direction` validates
+> and drives UI but is deliberately NOT an input to the arithmetic, which is how the obvious
+> implementation gets a decrease goal's sign wrong. `RawProgressPercent` is unclamped (overshoot is
+> real); `ProgressPercent` clamps to [0,100] so one 130% goal cannot push 5B's weighted attainment
+> off the top of the rating scale.
+> Goals carry `employee_id`, so unlike recruitment they DO use the Phase 1 scope tiers — which makes
+> the three tier keys mandatory, since `TestPermissions_ScopeTiersSeeded` is all-or-nothing.
+> `hrm.goals.manage` never appears in a `permFn(...)` call: the route gate cannot express "is this
+> your own goal", so writes are gated on `set_own` and the service narrows — own goal needs nothing
+> more, another's needs manage AND passing `AuthorizeRecordAccess` (the easily-omitted half that
+> stops a `view_team` manager editing outside their reporting line).
+> 22 unit tests + 9 integration tests + a 10-step live HTTP smoke test. Migration count 81 → 83,
+> table count 98 → 101, HRM MODULE route count 277 → 296.)
+
 > Last updated: 2026-08-05 (r21 — HRM Extended Phase 4B shipped: Recruitment / ATS, selection and
 > close half — completes the build plan's Phase 4 minus the public `/pub/careers/*` surface, which
 > stays deferred (EMAIL SENDING and Capture Fix Pass B were re-verified still not done; see r20's
@@ -921,6 +1084,53 @@ flag a broken reference, but the underlying fragility is accepted, not fixed, in
 
 ---
 
+### PLATFORM — FORMS [✅ DONE — built 2026-08-07]
+
+Generic form/question engine in `internal/platform/forms/`: templates → sections → typed questions
+→ instances → one typed response row per question → scoring → aggregate. Migrations `00084`
+(schema) / `00085` (permissions). Supersedes the PLATFORM PRIMITIVES §5 scoping entry in Section 9
+— built, not just scoped, and built **with** its first real consumer (appraisals) rather than ahead
+of one, the same shape as the checklist engine shipping with onboarding.
+
+Follows the `internal/platform/checklists/` template exactly, including both structural rules:
+
+- **Polymorphic subject with no FK** (`subject_type` CHECK + `subject_id`), so `platform/forms`
+  never references `hrm_*`. Zero `internal/*` imports except `internal/middleware`.
+- **No generic instantiate route.** A generic endpoint would have to trust a client-supplied
+  `subject_id` and `respondent_user_id` — an impersonation vector, and a form response is
+  attributable evidence about a person. Consumers instantiate service-side from their own
+  endpoints having resolved the subject from their own domain. Today: appraisals
+  (`internal/hrm/performance`) and 360 feedback (`internal/hrm/feedback`).
+
+**Definition is snapshotted onto each instance as REAL COLUMNS, never JSONB.** Migration `00076`
+states the rule directly — JSONB is for opaque ordered config read as a whole, real columns are
+required whenever rows are individually mutated or aggregated. Form responses are aggregated, so
+they are rows: `answer_text` / `answer_number` / `answer_boolean` / `answer_date` /
+`answer_options`, one populated per response selected by question type. A response row per question
+is created at instantiation, so answering is an UPDATE.
+
+`SubjectContext` keeps **`SubjectID` (who it is about) separate from `RespondentUserID` (who fills
+it in)**. This is the split appraisals depend on for self-vs-manager forms and 360 depends on for
+every respondent; collapsing them files every response under the wrong person. A nil respondent is
+legitimate — an employee with no manager, or a respondent with no platform account — and means the
+form exists and is completable by a `platform.forms.manage` holder, which is different from the
+form not existing.
+
+`computeScore` normalises each answer to 0-1 against **its own scale** before weighting, so a 1-5
+scale question and a 1-10 one can share a template without the second silently dominating.
+
+Routes (17, all under `/organizations/:orgId/forms/`): templates + nested section create, sections
++ nested question create, questions, and instances (`/instances/mine` registered **before**
+`/instances/:instanceId` — a literal segment loses to a param when registered after it).
+Permissions (`00085`): `platform.forms.view`, `.respond` (reaching `member`, narrowed by the
+service to the instance's own respondent, since the route gate cannot express "is this YOUR form"),
+`.manage` (owner/admin).
+
+**`hrm_interview_scorecards` is deliberately NOT on this engine** — see Section 9 → PLATFORM
+PRIMITIVES §5 for why the r21 "consumer #1" framing was superseded.
+
+---
+
 ### CRM — LEADS [✅ DONE — extended r11]
 
 Routes:
@@ -1087,9 +1297,9 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ---
 
-### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21]
+### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21; Performance/Goals Phase 5A added r22; appraisals 5B + 360 feedback/PIP 5C added r23]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **27 sub-modules, 277 routes** (218 as of r19 + 34 recruitment routes r20 + 25 recruitment routes r21). This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **31 route-bearing sub-modules, 341 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount). Counts re-grepped from `internal/hrm/*/routes.go` at r23 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20) + `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/`hrm_referrals` (00080, r21).
 
@@ -1127,6 +1337,86 @@ Reuses `hrm.employees.view`/`.update` rather than minting `hrm.onboarding.*` key
 
 **Recruitment / ATS (r20 + r21) — internal-only, both sub-phases built:** `internal/hrm/recruitment/` (59 routes total: 34 from r20 + 25 from r21), `hrm.recruitment.*` + `hrm.candidates.*` + `hrm.interviews.*` + `hrm.offers.*` + `hrm.referrals.*` permissions. Phase 4A (r20) shipped the intake-and-pipeline half — requisitions (approval-gated), postings, candidates, applications, configurable pipelines/stages, and `hrm_application_stage_history` (append-only, in the first migration — `crm_deals` never got an equivalent, which is exactly why deal-velocity reporting is impossible today). Phase 4B (r21) shipped the selection-and-close half — interviews + panelists, fixed-shape interview scorecards (visibility: a panelist who hasn't submitted their own scorecard sees only their own draft; everyone else sees every *submitted* scorecard, never a draft — a bespoke service rule, not a Phase 1 scope tier, since those hard-code `FROM hrm_employees`), offers (approval-gated the same way requisitions are), referrals, and hire→employee conversion (`HireApplication` — atomic for the employee insert + application + requisition writes via a new `Repository.BeginTx`; `employees.Repository.CreateTx`/`Service.CreateEmployeeTx` mirror `contacts.CreateContactTx`; `recruitment.EmployeeCreator` is a consumer-owned narrow interface, the `crm/leads.ContactCreator`/`DealCreator` shape exactly — `employees` imports `recruitment`, never the reverse; a `SELECT ... FOR UPDATE` lock makes concurrent hire calls on the same application safe, proved live in an integration test). Deliberately **still no public `/pub/careers/*` route and no candidate email**: the build plan gates that surface on EMAIL SENDING and Capture Fix Pass B, and both were re-verified NOT actually done as of r21 — see the r20 and r21 changelog entries for the full audit.
 
+**Performance / Goals & OKR (r22) — Phase 5A of 3:** `internal/hrm/performance/` (19 routes), `hrm.goals.*` + `hrm.goal_cycles.*` permissions. Goal cycles (`draft → active → locked → closed`, the `hrm_attendance_periods` lifecycle shape), goals with alignment, and append-only check-ins.
+
+Unlike recruitment, goals rows carry an `employee_id`, so this module **does** use the Phase 1 scope tiers — which makes seeding all three (`view_own`/`view_team`/`view_all`) mandatory rather than optional, since `TestPermissions_ScopeTiersSeeded` is all-or-nothing. Writes are gated on `hrm.goals.set_own` (granted through `member`) and narrowed in the service: your own goal needs nothing more, someone else's additionally requires `hrm.goals.manage` **and** passing `AuthorizeRecordAccess` — `manage` is unscoped at the route, so only that second check stops a `view_team` manager editing outside their reporting line. `hrm.goals.manage` therefore never appears in a `permFn(...)` call.
+
+Three properties worth knowing before touching this module: **progress is computed, never stored** on `hrm_goals` (one direction-agnostic formula; `direction` validates but is deliberately not an input to the arithmetic); **`current_value` moves only through a check-in**, which is what guarantees the history has no holes; and **`locked` is two-axis** — it freezes goal definitions while check-ins keep landing, the normal in-flight state for a quarter.
+
+**Performance / Appraisal cycles (r23) — Phase 5B of 3:** 21 more routes in the same
+`internal/hrm/performance/` package (rating scales, levels, appraisal cycles, appraisals),
+`hrm.appraisals.*` + `hrm.rating_scales.*` permissions. Built as more sub-feature quartets rather
+than a new package so appraisals read goal attainment through a plain method call — `goalAttainment()`
+is the 5A→5B tie-in, computing Σ(weight × clamped progress) / Σ(weight) over the appraisee's OWN
+goals only.
+
+The **6-phase transition map** is the first explicit one in this codebase (`allowedPhaseTransitions`,
+with `IsTerminal()` derived from it so they cannot disagree) — a deliberate deviation from the
+house's inline-guard style, justified by 6 phases × per-transition guards ≈ 15 scattered checks.
+Two transitions run backward so a rejected review is recoverable without cancelling it, and the
+`manager_review → self_review` send-back must NOT re-demand the self form.
+
+**`final_rating` is both a FK and a snapshot**, deliberately: `final_rating_level_id →
+hrm_rating_scale_levels` is what Phase 7's merit matrix and Phase 10's 9-box query;
+`final_rating_label` + `final_rating_value` survive the level being renamed or deleted (`ON DELETE
+SET NULL`). **Publish snapshots** the self/manager scores and goal attainment rather than
+recomputing them — 5A goals stay editable forever, so an immutable record recomputing from them
+would not actually be immutable. Both properties are pinned by integration tests.
+
+Scope tiers are mandatory here for the same reason as goals, and this is the module Section 9's
+primitive note singles out: an unpublished appraisal is the most sensitive employee record the
+system holds. `calibrate` and `publish` carry their own permissions that `manager` does not hold —
+calibration exists precisely to adjust manager ratings.
+
+**360 Feedback (r23) — Phase 5C part 1:** `internal/hrm/feedback/` (12 routes), `hrm.feedback.*`
+permissions. Its own package because `performance`'s composite Repository hit 58 methods, against
+the ~60 split threshold 5A recorded.
+
+The anonymity contract is the whole point of the module and is structural, not documentary — the
+codebase's one prior anonymity feature (`hrm_complaints.is_anonymous`) is a stored boolean nothing
+branches on, and this module is built specifically not to repeat it:
+
+- **Derived, never stored.** `Relationship.IsAnonymous()` is the single source of truth. No column
+  exists that could be set to a value the system does not honour.
+- **Two read paths, two types, no shared field.** `FindRequestSummaries` (identity, no answers)
+  and `FindSubmittedForSubject` (relationship + form instance only, no identity) are separate
+  queries; `RequestSummary` and `AnonymousResponse` are separate types, neither being the other
+  with fields blanked. `hrm.feedback.coordinate` and `hrm.feedback.view` are separate keys and no
+  role holds both paths' output together.
+- **No form instance id ever reaches a subject.** `platform_form_instances` stores
+  `respondent_user_id`, so an id plus `GET /forms/instances/:id` defeats everything above. The
+  service reads instances server-side; `SubmittedRef.FormInstanceID` carries `json:"-"` as a
+  second line of defence. This is the one leak living outside the module.
+
+Two rules that look like oversights and are not. **`self` and `manager` are attributed by nature** —
+there is exactly one manager, so anonymising them identifies them with certainty while pretending
+otherwise, and a threshold they can never reach would make the cycle's most actionable feedback
+permanently unreadable. **Suppression is per relationship group** (`min_responses` on the cycle,
+default 3) — five responses of which one is a direct report still identify that direct report. A
+suppressed group reports neither its count nor its score, and `TotalResponses` excludes it so the
+hidden size cannot be recovered by subtraction. Suppression applies to `view_all` too.
+
+**PIP (r23) — Phase 5C part 2:** `internal/hrm/pip/` (9 routes), `hrm.pips.*` permissions.
+
+A `failed` outcome creates a **DRAFT** `hrm_terminations` row and stops — no submit, no approval
+instance, no application. `hrm_terminations` owns its own approval-gated lifecycle, and a PIP that
+advanced past draft would bypass the control that exists to gate dismissals; the integration test
+asserts both the `draft` status and zero approval instances. The seam is `pip.TerminationCreator`,
+declared in `internal/hrm/pip` with `terminations` importing `pip` — consumer-owned narrow
+interface, the `recruitment.EmployeeCreator` direction exactly. The close is **not** atomic with
+the handoff: the plan commits first and a handoff failure returns the closed plan alongside
+`ErrTerminationHandoff`, because the reverse ordering risks a dismissal document with no process
+behind it. `termination_id` is `ON DELETE SET NULL` so deleting a mistaken draft is not blocked and
+does not erase the PIP's record of having failed.
+
+`hrm.pips.close` is separate from `.manage` and `manager` holds only `.manage`. `end_date` moves
+**only** through `/extend`, which writes the new date and its mandatory reason in one transaction;
+`original_end_date` is frozen at creation so extensions stay legible. `uq_hrm_pip_employee_open` is
+a partial unique index enforcing one open plan per employee — proved under 6 concurrent creates,
+since the service pre-check alone loses that race.
+
+The weight rule is `≤ cycle.weight_target` at write time and `== target` only at lock. Enforcement is in the repository, not the service: `CreateGoalGuarded` locks the **employee row** inside its transaction, because locking sibling goals cannot stop a competing INSERT that was in neither locked set. Phase 5B (form engine + appraisal cycles) and 5C (360 feedback + PIP) are designed but unbuilt — see Section 9 → HRM EXTENDED MODULES → Performance Management.
+
 Resumes: PDF-only, content-sniffed (never trusts the file extension), stored in `backend/storage/resumes/` — **not** `./uploads`, which is served fully unauthenticated. Download is gated on its own `hrm.candidates.download_resume` permission, separate from `.view`.
 
 Deliberately **no `authz.Service.ResolveScope` calls** anywhere in this module — candidates/applications have no `employee_id`, so the Phase 1 scope tiers (`internal/hrm/scope`) are structurally inexpressible for them. Flat RBAC only; any `hrm.candidates.view` holder sees every candidate in the org.
@@ -1154,7 +1444,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 79
+### Migration Count: 91
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -1176,11 +1466,23 @@ seeds `platform.checklists.view`/`.complete`/`.manage` · `00078`
 constraints · `00079` seeds `hrm.recruitment.view`/`.manage`, `hrm.candidates.view`/`.manage`/
 `.download_resume` · `00080` `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/
 `hrm_referrals` (Phase 4B) + `hrm_employees.source_candidate_id` + adds `'offer'` to both approval
-CHECK constraints and to `hrm_employee_documents.related_type` · `00081` seeds
+CHECK constraints and to `hrm_employee_documents.related_type` · `00082`
+`hrm_goal_cycles`/`hrm_goals`/`hrm_goal_checkins` (Phase 5A) · `00083` seeds
+`hrm.goals.view`/`.manage`/`.set_own` + the three mandatory scope tiers +
+`hrm.goal_cycles.view`/`.manage` · `00081` seeds
 `hrm.interviews.view`/`.manage`/`.scorecard`, `hrm.offers.view`/`.manage`,
-`hrm.referrals.view`/`.manage`.
+`hrm.referrals.view`/`.manage` · `00084` `platform_form_templates`/`_sections`/`_questions`/
+`_instances`/`_responses` (the form engine, Phase 5B) · `00085` seeds `platform.forms.view`/
+`.respond`/`.manage` · `00086` `hrm_rating_scales`/`_levels`/`hrm_appraisal_cycles`/
+`hrm_appraisals`/`hrm_appraisal_phase_history` (Phase 5B) + widens
+`hrm_acknowledgements.acknowledgeable_type` with `'appraisal'` · `00087` seeds
+`hrm.appraisals.view`/`.manage`/`.respond`/`.review`/`.calibrate`/`.publish` + the three mandatory
+scope tiers + `hrm.rating_scales.view`/`.manage` · `00088` `hrm_feedback_cycles`/
+`hrm_feedback_requests` (Phase 5C) · `00089` seeds `hrm.feedback.view`/`.manage`/`.coordinate`/
+`.respond` + the three mandatory scope tiers · `00090` `hrm_pips`/`hrm_pip_checkins` (Phase 5C) ·
+`00091` seeds `hrm.pips.view`/`.manage`/`.close` + the three mandatory scope tiers.
 
-### Key Tables (98 total)
+### Key Tables (117 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -1202,6 +1504,7 @@ Group C (4): `hrm_employee_warnings` · `hrm_complaints` · `hrm_employee_docume
 Group D (6): `hrm_attendance_periods` · `hrm_attendance_records` · `hrm_employee_salary_records` · `hrm_payslip_runs` · `hrm_payslips` · `hrm_payslip_lines`
 Group E (4): `hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hrm_employee_milestones`
 Leave (5): `hrm_leave_types` · `hrm_leave_requests` · `hrm_leave_policies` · `hrm_leave_transactions` · `hrm_leave_balances`
+Performance (3): `hrm_goal_cycles` · `hrm_goals` · `hrm_goal_checkins`
 Recruitment (12): `hrm_recruitment_pipelines` · `hrm_recruitment_stages` · `hrm_job_requisitions` · `hrm_job_postings` · `hrm_candidates` · `hrm_applications` · `hrm_application_stage_history` · `hrm_interviews` · `hrm_interview_panelists` · `hrm_interview_scorecards` · `hrm_offers` · `hrm_referrals`
 
 ---
@@ -1541,9 +1844,9 @@ PLATFORM PRIMITIVES and PREP MIGRATIONS sit first because most entries below ref
 
 ---
 
-### PLATFORM PRIMITIVES [🔵 PARTIAL — #1–#4 built, see Section 5; #5 ⚪ NOT STARTED]
+### PLATFORM PRIMITIVES [✅ DONE — all five built, see Section 5; #5 shipped r23 with its first two real consumers]
 
-Five buildable pieces of shared infrastructure that multiple modules need. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
+Five pieces of shared infrastructure that multiple modules need, all now built. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
 
 Two of these (notification, scheduler) were previously named only inside the CRM Advanced Functionality Pass entry below, as a parenthetical dependency. That mention is now superseded by this entry — one fact, one owner. The CRM entry keeps the dependency note but not the description.
 
@@ -1564,11 +1867,13 @@ Template + typed items + `owner_type` → assignee resolution at instantiation +
 One engine with a `checklist_type` discriminator, not one per consumer — all four values (`onboarding`/`offboarding`/`probation_confirmation`/`transfer_handover`) seeded now, only `onboarding` has a consumer.
 First real consumer: HRM onboarding (`internal/hrm/onboarding/`, Section 5 → HRM MODULE → Group B). Still-unbuilt consumers: exit clearance (F&F, consumer #2 — needs `blocking_amount` added as a pure ALTER), probation confirmation, transfer handover.
 
-**5. Form / question engine**
-Configurable sections → typed questions → typed responses → scoring → aggregate, with definition snapshotting so historical records render as they were authored.
-Known consumers (all unbuilt): interview scorecards, appraisal forms, LMS assessments, exit interviews, potential-criteria assessment, employee surveys.
+**5. Form / question engine — ✅ built (r23), see Section 5 → PLATFORM — FORMS**
+`internal/platform/forms/` (17 routes): templates → sections → typed questions → typed responses → scoring → aggregate. Definition snapshotted onto each instance as **real columns, never JSONB** — migration `00076`'s rule is that JSONB is for opaque config read as a whole, and form responses get aggregated, so they are rows. A response row per question is created at instantiation, so answering is an UPDATE rather than an insert-or-update.
+Follows the `internal/platform/checklists/` template exactly, including both of its structural rules: **polymorphic subject with no FK** (`subject_type` CHECK + `subject_id`) so `platform/forms` never references `hrm_*`, and **no generic instantiate route** — a generic endpoint would have to trust a client-supplied subject id and respondent id, which is an impersonation vector, and a form response is attributable evidence about a person. Consumers instantiate from their own endpoints having resolved the subject from their own domain.
+`SubjectContext` keeps `SubjectID` (who it is about) and `RespondentUserID` (who fills it in) as separate fields — the split appraisals and 360 both depend on, and the one that files every response under the wrong person if collapsed.
+Real consumers today: appraisal self/manager forms (r23, consumer #1) and 360 feedback (r23, consumer #2). Still unbuilt: LMS assessments, exit interviews, potential-criteria assessment, employee surveys.
 
-⚠️ Build order note: #1–#4 have real consumers in already-shipped or already-planned work and are genuinely blocking. #5 has **zero current consumers** — every module that would use it is unbuilt. It is documented here because the pattern was identified across five independent designs, not because it should be built speculatively. Build it when the first real consumer arrives, and only if the second one is already visible.
+**⚠️ `hrm_interview_scorecards` was NOT migrated onto this engine, and that is a decision, not an omission.** r21 shipped it as a deliberately fixed-shape table and described it as the engine's "consumer #1"; that framing is **superseded**. When the engine's real shape became concrete in 5B, the migration was reconsidered and declined: scorecards carry a bespoke reveal rule (a panelist who has not submitted their own sees only their own draft; everyone else sees every *submitted* scorecard, never a draft) that is a service-level rule the generic engine has no concept of, and the fixed shape is what makes that rule cheap to express. Revisit only if a second interview-form shape is genuinely needed.
 
 ---
 
@@ -1680,7 +1985,9 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 
 **Growth & development**
 
-- **Performance Management** — four sub-systems: goals/OKR with cascading parent-child and check-in history; appraisal cycles (configurable rating scales, template + scale snapshotted onto each instance, publish-immutable, phase state machine, `manager_id_snapshot` frozen at instantiation); 360 feedback (formal cycle-bound + continuous) with anonymity enforced at the repository layer plus a minimum-response threshold; PIP feeding into existing terminations. `final_rating` must be structured and queryable — compensation and succession both read it.
+- **Performance Management — ✅ DONE (r23), see Section 5 → HRM MODULE → Performance, Appraisals, 360 Feedback, PIP.** All three sub-phases shipped. **5A (r22)** goals/OKR: goal cycles, alignment via `parent_goal_id` (`ON DELETE SET NULL`, and alignment-only — no progress roll-up, because roll-up would let a back-dated subordinate check-in mutate an already-published appraisal), append-only check-ins, concurrency-safe weight guard. **5B (r23)** the form engine (`internal/platform/forms`, now Platform Primitive #5) plus appraisal cycles: configurable rating scales, 6-phase transition map, `manager_employee_id_snapshot` frozen at instantiation, publish-immutable via snapshotted scores, and `final_rating` as a structured queryable FK **plus** a label/value snapshot — Phase 7's merit matrix and Phase 10's 9-box query the FK, the snapshot survives a level being renamed or deleted. **5C (r23)** 360 feedback with anonymity enforced structurally at the repository layer (two read paths, two types sharing no field; policy derived from `Relationship.IsAnonymous()` rather than stored; per-relationship-group suppression threshold that applies to `view_all` too) and PIP handing a `failed` outcome to `hrm_terminations` as a **draft only**, via the consumer-owned `pip.TerminationCreator` seam.
+
+  One scope item from the original plan was **not** built and is deliberately deferred: **continuous (non-cycle-bound) 360 feedback**. 5C shipped the formal cycle-bound half only. Continuous feedback has no cycle to hang a suppression threshold on, which is the entire anonymity mechanism here — it needs its own design (rolling windows, or per-subject rather than per-cycle thresholds), not a nullable `cycle_id`.
   Depends on: form engine, resource-level permissions (draft leakage is the failure mode), notification, scheduler, `hrm_employees.manager_id` (exists — see PREP MIGRATIONS).
 
 - **Learning & Development** — courses with mandatory version pinning on enrollment, modules/lessons, assessments, instructor-led sessions, certifications with expiry, skills taxonomy, training requests + budgets. No SCORM player, no video hosting — external links, PDFs via the Files module, mark-complete, quiz. Certification expiry sweep is the highest-value feature and is entirely scheduler-dependent. `hrm_skills` is consumed by recruitment, performance, and succession — treat it as shared taxonomy, not an LMS-internal table.

@@ -20,10 +20,17 @@ import (
 	"github.com/mridha/businesssaas/internal/config"
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
+	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
+	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
+	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
+	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
+	"github.com/mridha/businesssaas/internal/platform/forms"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
@@ -44,6 +51,13 @@ type testEnv struct {
 	hrmEmpSvc         hrmemployees.Service
 	hrmApprovalsSvc   hrmapprovals.Service
 	hrmRecruitmentSvc hrmrecruitment.Service
+	hrmTerminationSvc hrmterminations.Service
+	hrmPerformanceSvc hrmperformance.Service
+	hrmFeedbackSvc    hrmfeedback.Service
+	hrmPipSvc         hrmpip.Service
+	hrmScopeResolver  *hrmscope.Resolver
+	formsSvc          forms.Service
+	hrmResignationSvc hrmresignations.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -130,6 +144,25 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
 
+	hrmTerminationSvc := hrmterminations.NewService(hrmterminations.NewRepository(db), db, hrmApprovalsSvc)
+	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationSvc.HandleApprovalDecision)
+	hrmResignationSvc := hrmresignations.NewService(hrmresignations.NewRepository(db), db)
+
+	// authzSvc satisfies forms.AccessDirectory structurally, mirroring main.go.
+	formsSvc := forms.NewService(forms.NewRepository(db), authzSvc)
+
+	// *hrmscope.Resolver satisfies performance.RecordAuthorizer structurally,
+	// mirroring main.go — no adapter.
+	hrmScopeResolver := hrmscope.NewResolver(db)
+	hrmPerformanceSvc := hrmperformance.NewService(hrmperformance.NewRepository(db), hrmScopeResolver, formsSvc)
+	hrmFeedbackSvc := hrmfeedback.NewService(hrmfeedback.NewRepository(db), hrmScopeResolver, formsSvc)
+
+	// hrmTerminationSvc satisfies pip.TerminationCreator structurally, exactly
+	// as in main.go. Wiring the REAL service rather than a stub is the point:
+	// the failed-PIP handoff is only proved by a draft actually landing in
+	// hrm_terminations.
+	hrmPipSvc := hrmpip.NewService(hrmpip.NewRepository(db), hrmScopeResolver, hrmTerminationSvc)
+
 	return &testEnv{
 		db:                db,
 		redis:             rdb,
@@ -143,6 +176,13 @@ func newTestEnv(t *testing.T) *testEnv {
 		hrmEmpSvc:         hrmEmpSvc,
 		hrmApprovalsSvc:   hrmApprovalsSvc,
 		hrmRecruitmentSvc: hrmRecruitmentSvc,
+		hrmTerminationSvc: hrmTerminationSvc,
+		hrmResignationSvc: hrmResignationSvc,
+		hrmPerformanceSvc: hrmPerformanceSvc,
+		hrmFeedbackSvc:    hrmFeedbackSvc,
+		hrmPipSvc:         hrmPipSvc,
+		hrmScopeResolver:  hrmScopeResolver,
+		formsSvc:          formsSvc,
 	}
 }
 

@@ -71,6 +71,7 @@ import (
 	"github.com/mridha/businesssaas/internal/platform/checklists"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
+	"github.com/mridha/businesssaas/internal/platform/forms"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
 	"github.com/mridha/businesssaas/internal/platform/scheduler"
 
@@ -108,6 +109,9 @@ import (
 	hrmwarntypes "github.com/mridha/businesssaas/internal/hrm/warningtypes"
 
 	// ── Internal — HRM Group B (Core Employee Lifecycle) ─────────────────────
+	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
+	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmpromotions "github.com/mridha/businesssaas/internal/hrm/promotions"
 	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
@@ -216,6 +220,7 @@ func main() {
 
 	// ── Platform ──────────────────────────────────────────────────────────────
 	checklistsRepo := checklists.NewRepository(pgPool)
+	formsRepo := forms.NewRepository(pgPool)
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
 	schedulerRepo := scheduler.NewRepository(pgPool)
@@ -278,6 +283,9 @@ func main() {
 
 	// ── HRM Extended Phase 4A — Recruitment / ATS (migration 00078) ───────────
 	hrmRecruitmentRepo := hrmrecruitment.NewRepository(pgPool)
+	hrmPerformanceRepo := hrmperformance.NewRepository(pgPool)
+	hrmFeedbackRepo := hrmfeedback.NewRepository(pgPool)
+	hrmPipRepo := hrmpip.NewRepository(pgPool)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 7. SERVICES   (dependency order: leaf → composite)
@@ -304,6 +312,9 @@ func main() {
 	// checklistsSvc takes authzSvc directly as its AccessDirectory — authz.Service
 	// satisfies that narrow interface structurally, so no adapter is needed.
 	checklistsSvc := checklists.NewService(checklistsRepo, authzSvc)
+	// authzSvc satisfies forms.AccessDirectory structurally, exactly as it
+	// does checklists.AccessDirectory — no adapter needed.
+	formsSvc := forms.NewService(formsRepo, authzSvc)
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
 	schedulerSvc := scheduler.NewService(schedulerRepo, redisClient)
@@ -387,6 +398,31 @@ func main() {
 	// materialize an employee record from a hired application.
 	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc)
 
+	// ── HRM Extended Phase 5A — Performance / Goals ────────────────────────────
+	// hrmScopeResolver satisfies performance.RecordAuthorizer structurally, so
+	// it is passed directly with no adapter — the same shape as authzSvc
+	// satisfying checklists.AccessDirectory. The service takes no authz.Service
+	// of its own: the handler resolves the caller's scope tier and manage
+	// permission and hands both over on a Caller value.
+	// formsSvc (Platform block above) satisfies performance.FormEngine
+	// structurally — appraisals instantiate self/manager forms through it.
+	hrmPerformanceSvc := hrmperformance.NewService(hrmPerformanceRepo, hrmScopeResolver, formsSvc)
+
+	// ── HRM Extended Phase 5C — 360 feedback + PIP ─────────────────────────────
+	// formsSvc satisfies feedback.FormReader structurally. The feedback service
+	// reads form instances SERVER-SIDE through it and strips identity before
+	// returning anything, which is why no form instance id ever reaches a
+	// subject — see internal/hrm/feedback/model.go's anonymity contract.
+	hrmFeedbackSvc := hrmfeedback.NewService(hrmFeedbackRepo, hrmScopeResolver, formsSvc)
+
+	// hrmTerminationsSvc satisfies pip.TerminationCreator structurally, via
+	// CreateDraftFromPIP. The interface is declared in internal/hrm/pip and
+	// terminations imports pip, not the reverse — the consumer-owned narrow
+	// interface direction, matching recruitment.EmployeeCreator. A failed PIP
+	// creates a DRAFT termination and stops; Submit and Apply stay on the
+	// termination endpoints, behind the approval chain.
+	hrmPipSvc := hrmpip.NewService(hrmPipRepo, hrmScopeResolver, hrmTerminationsSvc)
+
 	// Wire approval-instance completion back into each of the seven workflow
 	// modules. Must run after all seven services above exist. entityType here
 	// must match the EntityType string each Submit()/Issue() uses when calling
@@ -414,6 +450,7 @@ func main() {
 
 	// ── Platform ──────────────────────────────────────────────────────────────
 	checklistsHandler := checklists.NewHandler(checklistsSvc)
+	formsHandler := forms.NewHandler(formsSvc)
 	contactsHandler := contacts.NewHandler(contactsSvc)
 	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
@@ -476,6 +513,9 @@ func main() {
 
 	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
 	hrmRecruitmentHandler := hrmrecruitment.NewHandler(hrmRecruitmentSvc)
+	hrmPerformanceHandler := hrmperformance.NewHandler(hrmPerformanceSvc, authzSvc)
+	hrmFeedbackHandler := hrmfeedback.NewHandler(hrmFeedbackSvc, authzSvc)
+	hrmPipHandler := hrmpip.NewHandler(hrmPipSvc, authzSvc)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 9. FIBER
@@ -546,6 +586,7 @@ func main() {
 
 	// ── Platform (shared layer — CRM and future modules) ──────────────────────
 	checklists.RegisterRoutes(api, checklistsHandler, permFn, requireAuth, requireOrgMatch)
+	forms.RegisterRoutes(api, formsHandler, permFn, requireAuth, requireOrgMatch)
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
 	scheduler.RegisterRoutes(api, schedulerHandler, requireAuth, permFn)
@@ -623,6 +664,9 @@ func main() {
 	// docs/HrmExtendedBuildPlan.md PHASE 4 and Project_Instruction.md Section 5
 	// → HRM MODULE → Recruitment / ATS).
 	hrmrecruitment.RegisterRoutes(api, hrmRecruitmentHandler, permFn, requireAuth, requireOrgMatch)
+	hrmperformance.RegisterRoutes(api, hrmPerformanceHandler, permFn, requireAuth, requireOrgMatch)
+	hrmfeedback.RegisterRoutes(api, hrmFeedbackHandler, permFn, requireAuth, requireOrgMatch)
+	hrmpip.RegisterRoutes(api, hrmPipHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── 404 fallback — must be registered last ────────────────────────────────
 	app.Use(func(c fiber.Ctx) error {

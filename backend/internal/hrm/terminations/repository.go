@@ -50,8 +50,12 @@ func scanTerm(row pgx.Row) (*Termination, error) {
 		&t.IsRehireEligible, &t.ExitClearanceCompleted,
 		&t.Status, &t.AppliedAt, &t.AppliedBy, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
@@ -80,12 +84,16 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter Termination
 	q := fmt.Sprintf(`SELECT %s FROM hrm_terminations WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("terminations: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("terminations: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Termination, 0)
 	for rows.Next() {
 		t, err := scanTerm(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, t)
 	}
 	return list, rows.Err()
@@ -103,7 +111,10 @@ func (r *repoImpl) Count(ctx context.Context, orgID string, filter TerminationLi
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Termination, error) {
 	q := `SELECT ` + sel + ` FROM hrm_terminations WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanTerm(r.db.QueryRow(ctx, q, args...))
 }
 

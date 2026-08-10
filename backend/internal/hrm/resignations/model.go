@@ -9,6 +9,7 @@ import (
 )
 
 type ResignationStatus string
+
 const (
 	StatusSubmitted ResignationStatus = "submitted"
 	StatusAccepted  ResignationStatus = "accepted"
@@ -17,6 +18,7 @@ const (
 )
 
 type ReasonCategory string
+
 const (
 	ReasonPersonal          ReasonCategory = "personal"
 	ReasonCareerGrowth      ReasonCategory = "career_growth"
@@ -63,12 +65,12 @@ type Resignation struct {
 }
 
 type SubmitResignationRequest struct {
-	ResignationDate  string         `json:"resignation_date"`
-	ReasonCategory   ReasonCategory `json:"reason_category"`
-	ReasonRemarks    *string        `json:"reason_remarks"`
+	ResignationDate string         `json:"resignation_date"`
+	ReasonCategory  ReasonCategory `json:"reason_category"`
+	ReasonRemarks   *string        `json:"reason_remarks"`
 	// Optional — if not set, computed from active contract notice_period_days
-	LastWorkingDate  *string        `json:"last_working_date"`
-	IsNoticeWaived   bool           `json:"is_notice_waived"`
+	LastWorkingDate *string `json:"last_working_date"`
+	IsNoticeWaived  bool    `json:"is_notice_waived"`
 }
 
 type UpdateResignationRequest struct {
@@ -124,4 +126,10 @@ var (
 	ErrInvalidReasonCategory = errors.New("invalid reason_category")
 	ErrWrongStatus           = errors.New("action not allowed in current resignation status")
 	ErrAlreadyAccepted       = errors.New("resignation has already been accepted")
+	// ErrNoResignedStatus means the org has no employee status in the
+	// 'terminated' category, so there is nothing to move the employee to.
+	// Organizations created through the API are seeded no statuses at all —
+	// only migration 00053's backfill and POST /hrm/employee-statuses create
+	// them — so this is reachable, not defensive.
+	ErrNoResignedStatus = errors.New("organization has no employee status to mark a resignation — create one before accepting")
 )
