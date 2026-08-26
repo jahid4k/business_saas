@@ -38,11 +38,34 @@ func TestPredicate_ScopeOwn_PlaceholderNumberingAtOffset(t *testing.T) {
 	if strings.Contains(frag, "$1") || strings.Contains(frag, "$2") || strings.Contains(frag, "$3") {
 		t.Errorf("fragment must not reuse placeholders below argOffset+1, got: %s", frag)
 	}
-	if !strings.Contains(frag, "employee_id =") {
+	if !strings.Contains(frag, "employee_id IN") {
 		t.Errorf("expected the predicate to filter on the given column name, got: %s", frag)
 	}
 	if len(args) != 2 || args[0] != "org-1" || args[1] != "user-1" {
 		t.Errorf("expected args [org-1, user-1], got %v", args)
+	}
+}
+
+// TestPredicate_ScopeOwn_UsesInNotEquals pins the fix directly: the fragment
+// must be a set membership test, not a scalar equality.
+//
+// idx_hrm_emp_user_id is NOT unique — nothing in the schema stops one user
+// from ending up on two hrm_employees rows in the same org. A scalar
+// "column = (SELECT ...)" against a subquery that can return more than one
+// row fails outright with SQLSTATE 21000 ("more than one row returned by a
+// subquery used as an expression"), which would 500 every ScopeOwn list in
+// every scope-tiered module for that org. IN degrades gracefully: it still
+// returns exactly this caller's own record(s). The integration test proves
+// this against a real duplicate row; this test proves the SQL shape a
+// reviewer can't miss by reading the string.
+func TestPredicate_ScopeOwn_UsesInNotEquals(t *testing.T) {
+	frag, _ := scope.Predicate(authz.ScopeOwn, "employee_id", 0, "org-1", "user-1", scope.DefaultMaxDepth)
+	if strings.Contains(frag, "employee_id =") {
+		t.Errorf("ScopeOwn must not use scalar '=' against a subquery that can return more than one "+
+			"row (idx_hrm_emp_user_id is not unique) — got: %s", frag)
+	}
+	if !strings.Contains(frag, "employee_id IN (SELECT id FROM hrm_employees") {
+		t.Errorf("expected an IN-based set membership predicate, got: %s", frag)
 	}
 }
 
@@ -83,7 +106,7 @@ func TestPredicate_ScopeTeam_IsInclusiveOfOwn(t *testing.T) {
 
 func TestPredicate_ColumnNameIsRespected(t *testing.T) {
 	frag, _ := scope.Predicate(authz.ScopeOwn, "id", 0, "org-1", "user-1", scope.DefaultMaxDepth)
-	if !strings.HasPrefix(frag, "id =") {
+	if !strings.HasPrefix(frag, "id IN") {
 		t.Errorf("expected fragment to filter on column %q for the employees table itself, got: %s", "id", frag)
 	}
 }

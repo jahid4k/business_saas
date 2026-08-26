@@ -103,10 +103,16 @@ func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status EventStat
 func (r *repoImpl) GetTargetEmployeeIDs(ctx context.Context, orgID string, scopeType ScopeType, scopeIDs []string) ([]string, error) {
 	var q string; var args []any
 	switch scopeType {
+	// Active employees resolve through hrm_employee_statuses.category. There is
+	// no hrm_employees.status column — migration 00053 replaced it with
+	// status_id, and querying the dropped column failed 42703, taking the whole
+	// audience resolution with it.
 	case ScopeOrganization:
-		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND status='active'`; args = []any{orgID}
+		q = `SELECT e.id::text FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id=e.status_id WHERE e.org_id=$1 AND es.category='active'`
+		args = []any{orgID}
 	case ScopeDepartment:
-		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND status='active' AND department_id=ANY($2::uuid[])`; args = []any{orgID, scopeIDs}
+		q = `SELECT e.id::text FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id=e.status_id WHERE e.org_id=$1 AND es.category='active' AND e.department_id=ANY($2::uuid[])`
+		args = []any{orgID, scopeIDs}
 	default:
 		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND id::text=ANY($2)`; args = []any{orgID, scopeIDs}
 	}

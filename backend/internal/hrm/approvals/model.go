@@ -23,13 +23,23 @@ const (
 	ActionTypeJobRequisition           ActionType = "job_requisition"
 	ActionTypeOffer                    ActionType = "offer"
 	ActionTypeCustom                   ActionType = "custom"
+	// ActionTypeSalaryRevision and ActionTypeBonus back Phase 7B — see
+	// migration 00098's header on why the template (short form) and instance
+	// (long form) CHECKs are separate and both had to be widened.
+	ActionTypeSalaryRevision ActionType = "salary_revision"
+	ActionTypeBonus          ActionType = "bonus"
+	// ActionTypeLoan and ActionTypeReimbursement back Phase 7C — same
+	// two-CHECK widening, see migration 00100's header.
+	ActionTypeLoan          ActionType = "loan"
+	ActionTypeReimbursement ActionType = "reimbursement"
 )
 
 func (a ActionType) IsValid() bool {
 	switch a {
 	case ActionTypeLeave, ActionTypeResignation, ActionTypePromotion, ActionTypeTransfer,
 		ActionTypeWarning, ActionTypeDocument, ActionTypeTermination,
-		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeOffer, ActionTypeCustom:
+		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeOffer, ActionTypeCustom,
+		ActionTypeSalaryRevision, ActionTypeBonus, ActionTypeLoan, ActionTypeReimbursement:
 		return true
 	}
 	return false

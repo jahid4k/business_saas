@@ -19,17 +19,23 @@ import (
 	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/config"
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
+	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
 	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
+	hrmcompensation "github.com/mridha/businesssaas/internal/hrm/compensation"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
 	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
 	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
+	hrmloans "github.com/mridha/businesssaas/internal/hrm/loans"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
 	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
 	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
+	hrmreimbursements "github.com/mridha/businesssaas/internal/hrm/reimbursements"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
 	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
 	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
+	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
@@ -42,28 +48,34 @@ import (
 
 // testEnv holds fully-wired services for integration tests.
 type testEnv struct {
-	db                *pgxpool.Pool
-	redis             *redis.Client
-	authSvc           auth.Service
-	userSvc           user.Service
-	authzSvc          authz.Service
-	orgSvc            organizations.Service
-	taskSvc           task.Service
-	checklistsSvc     checklists.Service
-	hrmOnboardingSvc  hrmonboarding.Service
-	hrmEmpSvc         hrmemployees.Service
-	hrmApprovalsSvc   hrmapprovals.Service
-	hrmRecruitmentSvc hrmrecruitment.Service
-	hrmTerminationSvc hrmterminations.Service
-	hrmPerformanceSvc hrmperformance.Service
-	hrmFeedbackSvc    hrmfeedback.Service
-	hrmLearningSvc    hrmlearning.Service
-	hrmSkillsSvc      hrmskills.Service
-	hrmCertSvc        hrmcertifications.Service
-	hrmPipSvc         hrmpip.Service
-	hrmScopeResolver  *hrmscope.Resolver
-	formsSvc          forms.Service
-	hrmResignationSvc hrmresignations.Service
+	db                   *pgxpool.Pool
+	redis                *redis.Client
+	authSvc              auth.Service
+	userSvc              user.Service
+	authzSvc             authz.Service
+	orgSvc               organizations.Service
+	taskSvc              task.Service
+	checklistsSvc        checklists.Service
+	hrmOnboardingSvc     hrmonboarding.Service
+	hrmEmpSvc            hrmemployees.Service
+	hrmApprovalsSvc      hrmapprovals.Service
+	hrmRecruitmentSvc    hrmrecruitment.Service
+	hrmTerminationSvc    hrmterminations.Service
+	hrmPerformanceSvc    hrmperformance.Service
+	hrmFeedbackSvc       hrmfeedback.Service
+	hrmLearningSvc       hrmlearning.Service
+	hrmSkillsSvc         hrmskills.Service
+	hrmCertSvc           hrmcertifications.Service
+	hrmPayslipsSvc       hrmpayslips.Service
+	hrmCompensationSvc   hrmcompensation.Service
+	hrmLoansSvc          hrmloans.Service
+	hrmReimbursementsSvc hrmreimbursements.Service
+	hrmStatutorySvc      hrmstatutory.Service
+	hrmBenefitsSvc       hrmbenefits.Service
+	hrmPipSvc            hrmpip.Service
+	hrmScopeResolver     *hrmscope.Resolver
+	formsSvc             forms.Service
+	hrmResignationSvc    hrmresignations.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -173,29 +185,55 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmSkillsSvc := hrmskills.NewService(hrmskills.NewRepository(db), hrmScopeResolver)
 	hrmCertSvc := hrmcertifications.NewService(hrmcertifications.NewRepository(db), hrmScopeResolver, hrmSkillsSvc)
 
+	// hrmCompensationSvc/hrmLoansSvc/hrmReimbursementsSvc satisfy
+	// payslips.BonusSource/LoanSource/ReimbursementSource structurally,
+	// exactly as in main.go — constructed first so they can be wired into
+	// payslips.
+	hrmCompensationSvc := hrmcompensation.NewService(hrmcompensation.NewRepository(db), db, hrmApprovalsSvc)
+	hrmLoansSvc := hrmloans.NewService(hrmloans.NewRepository(db), db, hrmApprovalsSvc)
+	hrmReimbursementsSvc := hrmreimbursements.NewService(hrmreimbursements.NewRepository(db), db, hrmApprovalsSvc)
+	// hrmStatutorySvc/hrmBenefitsSvc satisfy payslips.StatutorySource/
+	// BenefitsSource structurally, exactly as in main.go.
+	hrmStatutorySvc := hrmstatutory.NewService(hrmstatutory.NewRepository(db), hrmstatutory.NewRegistry(hrmstatutory.SlabProvider{}))
+	hrmBenefitsSvc := hrmbenefits.NewService(hrmbenefits.NewRepository(db))
+	hrmPayslipsSvc := hrmpayslips.NewService(
+		hrmpayslips.NewRepository(db), db, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
+		hrmStatutorySvc, hrmBenefitsSvc,
+	)
+	hrmApprovalsSvc.RegisterCallback("salary_revision", hrmCompensationSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("reimbursement", hrmReimbursementsSvc.HandleApprovalDecision)
+
 	return &testEnv{
-		db:                db,
-		redis:             rdb,
-		authSvc:           auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
-		userSvc:           user.NewService(userRepo),
-		authzSvc:          authzSvc,
-		orgSvc:            organizations.NewService(orgRepo, authzRepo, jwtMgr),
-		taskSvc:           task.NewService(taskRepo, auditSvc),
-		checklistsSvc:     checklistsSvc,
-		hrmOnboardingSvc:  hrmOnboardingSvc,
-		hrmEmpSvc:         hrmEmpSvc,
-		hrmApprovalsSvc:   hrmApprovalsSvc,
-		hrmRecruitmentSvc: hrmRecruitmentSvc,
-		hrmTerminationSvc: hrmTerminationSvc,
-		hrmResignationSvc: hrmResignationSvc,
-		hrmPerformanceSvc: hrmPerformanceSvc,
-		hrmFeedbackSvc:    hrmFeedbackSvc,
-		hrmLearningSvc:    hrmLearningSvc,
-		hrmSkillsSvc:      hrmSkillsSvc,
-		hrmCertSvc:        hrmCertSvc,
-		hrmPipSvc:         hrmPipSvc,
-		hrmScopeResolver:  hrmScopeResolver,
-		formsSvc:          formsSvc,
+		db:                   db,
+		redis:                rdb,
+		authSvc:              auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
+		userSvc:              user.NewService(userRepo),
+		authzSvc:             authzSvc,
+		orgSvc:               organizations.NewService(orgRepo, authzRepo, jwtMgr),
+		taskSvc:              task.NewService(taskRepo, auditSvc),
+		checklistsSvc:        checklistsSvc,
+		hrmOnboardingSvc:     hrmOnboardingSvc,
+		hrmEmpSvc:            hrmEmpSvc,
+		hrmApprovalsSvc:      hrmApprovalsSvc,
+		hrmRecruitmentSvc:    hrmRecruitmentSvc,
+		hrmTerminationSvc:    hrmTerminationSvc,
+		hrmResignationSvc:    hrmResignationSvc,
+		hrmPerformanceSvc:    hrmPerformanceSvc,
+		hrmFeedbackSvc:       hrmFeedbackSvc,
+		hrmLearningSvc:       hrmLearningSvc,
+		hrmSkillsSvc:         hrmSkillsSvc,
+		hrmCertSvc:           hrmCertSvc,
+		hrmPayslipsSvc:       hrmPayslipsSvc,
+		hrmCompensationSvc:   hrmCompensationSvc,
+		hrmLoansSvc:          hrmLoansSvc,
+		hrmReimbursementsSvc: hrmReimbursementsSvc,
+		hrmStatutorySvc:      hrmStatutorySvc,
+		hrmBenefitsSvc:       hrmBenefitsSvc,
+		hrmPipSvc:            hrmPipSvc,
+		hrmScopeResolver:     hrmScopeResolver,
+		formsSvc:             formsSvc,
 	}
 }
 

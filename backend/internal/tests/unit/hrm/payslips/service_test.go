@@ -2,6 +2,7 @@ package payslips_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,15 @@ type mockPayslipsRepo struct {
 	runs     map[string]*payslips.PayslipRun
 	payslips map[string]*payslips.Payslip
 	lines    map[string][]*payslips.PayslipLine
+	// negativeNets lets a test drive the negative-net guard in ApproveRun.
+	// The guard is on the Repository precisely so it is reachable from here.
+	negativeNets map[string]int
+
+	// deletedRuns records which runs abortCompute cleaned up, and
+	// deleteByRunErr makes that cleanup fail so the joined-error path is
+	// reachable.
+	deletedRuns    []string
+	deleteByRunErr error
 }
 
 func newMockPayslipsRepo() *mockPayslipsRepo {
@@ -20,7 +30,26 @@ func newMockPayslipsRepo() *mockPayslipsRepo {
 		runs:     make(map[string]*payslips.PayslipRun),
 		payslips: make(map[string]*payslips.Payslip),
 		lines:    make(map[string][]*payslips.PayslipLine),
+
+		negativeNets: make(map[string]int),
 	}
+}
+
+func (m *mockPayslipsRepo) CountNegativeNetPayslips(_ context.Context, runID string) (int, error) {
+	return m.negativeNets[runID], nil
+}
+
+func (m *mockPayslipsRepo) DeletePayslipsByRun(_ context.Context, runID string) error {
+	if m.deleteByRunErr != nil {
+		return m.deleteByRunErr
+	}
+	for id, p := range m.payslips {
+		if p.PayslipRunID == runID {
+			delete(m.payslips, id)
+		}
+	}
+	m.deletedRuns = append(m.deletedRuns, runID)
+	return nil
 }
 
 func (m *mockPayslipsRepo) FindRuns(ctx context.Context, orgID string) ([]*payslips.PayslipRun, error) {
@@ -42,9 +71,9 @@ func (m *mockPayslipsRepo) FindRunByRef(ctx context.Context, orgID, ref string) 
 	return nil, nil
 }
 
-func (m *mockPayslipsRepo) FindRunByPeriod(ctx context.Context, orgID string, year, month int) (*payslips.PayslipRun, error) {
+func (m *mockPayslipsRepo) FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType payslips.RunType) (*payslips.PayslipRun, error) {
 	for _, r := range m.runs {
-		if r.OrgID == orgID && r.PeriodYear == year && r.PeriodMonth == month {
+		if r.OrgID == orgID && r.PeriodYear == year && r.PeriodMonth == month && r.RunType == runType {
 			return r, nil
 		}
 	}
@@ -116,7 +145,7 @@ func (m *mockPayslipsRepo) LoadPayslipLines(ctx context.Context, payslipID strin
 
 func TestPayslipsService(t *testing.T) {
 	repo := newMockPayslipsRepo()
-	svc := payslips.NewService(repo, nil)
+	svc := payslips.NewService(repo, nil, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	orgID := "org1"
@@ -157,6 +186,18 @@ func TestPayslipsService(t *testing.T) {
 		run.Status = payslips.RunComputed
 		repo.UpdateRun(ctx, run)
 
+		// A run holding a negative payslip must not be approvable. ComputeRun
+		// records the true net rather than clamping it to zero, so approval is
+		// where that honesty has to stop.
+		repo.negativeNets[run.ID] = 1
+		if _, err := svc.ApproveRun(ctx, orgID, run.ID, createdBy); !errors.Is(err, payslips.ErrNegativeNetPay) {
+			t.Fatalf("expected ErrNegativeNetPay, got %v", err)
+		}
+		if reread, _ := svc.GetRun(ctx, orgID, run.ID); reread.Status != payslips.RunComputed {
+			t.Errorf("a blocked approval must leave the run computed, got %v", reread.Status)
+		}
+
+		repo.negativeNets[run.ID] = 0
 		approvedRun, err := svc.ApproveRun(ctx, orgID, run.ID, createdBy)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -209,7 +250,7 @@ func TestPayslipsService(t *testing.T) {
 			t.Errorf("expected 1 payslip, got %d", res.Total)
 		}
 	})
-	
+
 	t.Run("Cross-Org Isolation", func(t *testing.T) {
 		runs, _ := svc.ListRuns(ctx, orgID)
 		run := runs.Runs[0]

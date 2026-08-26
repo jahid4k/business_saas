@@ -131,6 +131,17 @@ import (
 	hrmattendance "github.com/mridha/businesssaas/internal/hrm/attendance"
 	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
 
+	// ── Internal — HRM Extended Phase 7B (Compensation) ───────────────────────
+	hrmcompensation "github.com/mridha/businesssaas/internal/hrm/compensation"
+
+	// ── Internal — HRM Extended Phase 7C (Loans + Reimbursements) ─────────────
+	hrmloans "github.com/mridha/businesssaas/internal/hrm/loans"
+	hrmreimbursements "github.com/mridha/businesssaas/internal/hrm/reimbursements"
+
+	// ── Internal — HRM Extended Phase 7D (Statutory + Benefits) ───────────────
+	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
+	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
+
 	// ── Internal — HRM Group E (Recognition and Communication) ───────────────
 	hrmannouncements "github.com/mridha/businesssaas/internal/hrm/announcements"
 	hrmawards "github.com/mridha/businesssaas/internal/hrm/awards"
@@ -278,6 +289,17 @@ func main() {
 	hrmAttendanceRepo := hrmattendance.NewRepository(pgPool)
 	hrmPayslipsRepo := hrmpayslips.NewRepository(pgPool)
 
+	// ── HRM Extended Phase 7B — Compensation (migrations 00098–00099) ─────────
+	hrmCompensationRepo := hrmcompensation.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 7C — Loans + Reimbursements (migrations 00100–00101) ─
+	hrmLoansRepo := hrmloans.NewRepository(pgPool)
+	hrmReimbursementsRepo := hrmreimbursements.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 7D — Statutory + Benefits (migrations 00102–00105) ──
+	hrmStatutoryRepo := hrmstatutory.NewRepository(pgPool)
+	hrmBenefitsRepo := hrmbenefits.NewRepository(pgPool)
+
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	hrmAwardsRepo := hrmawards.NewRepository(pgPool)
 	hrmAnnsRepo := hrmannouncements.NewRepository(pgPool)
@@ -378,11 +400,44 @@ func main() {
 	hrmEmpDocsSvc := hrmemployeedocs.NewService(hrmEmpDocsRepo, pgPool)
 	hrmAcksSvc := hrmacks.NewService(hrmAcksRepo, pgPool)
 
+	// ── HRM Extended Phase 7B — Compensation ───────────────────────────────────
+	// Constructed before Group D so it can be wired into payslips as its
+	// BonusSource below — payslips is the CONSUMER of that narrow interface
+	// (see payslips.BonusSource's doc comment), so compensation must exist
+	// first. compensation imports payslips (not the reverse) to reference
+	// payslips.PendingBonus/PaidBonusLine — the recruitment.EmployeeCreator /
+	// pip.TerminationCreator direction.
+	hrmCompensationSvc := hrmcompensation.NewService(hrmCompensationRepo, pgPool, hrmApprovalsSvc)
+
+	// ── HRM Extended Phase 7C — Loans + Reimbursements ─────────────────────────
+	// Same reasoning and same construction-order requirement as compensation
+	// above — payslips is the CONSUMER of LoanSource/ReimbursementSource, so
+	// both must exist before hrmPayslipsSvc is constructed.
+	hrmLoansSvc := hrmloans.NewService(hrmLoansRepo, pgPool, hrmApprovalsSvc)
+	hrmReimbursementsSvc := hrmreimbursements.NewService(hrmReimbursementsRepo, pgPool, hrmApprovalsSvc)
+
+	// ── HRM Extended Phase 7D — Statutory + Benefits ───────────────────────────
+	// Same construction-order requirement — payslips is the CONSUMER of
+	// StatutorySource/BenefitsSource. hrmStatutoryRegistry ships with
+	// SlabProvider as the fallback for every country_code; a real
+	// country-specific Provider (proration rules, eligibility thresholds a
+	// slab table cannot express) registers here later without a schema
+	// change — see internal/hrm/statutory/provider.go's doc comment.
+	hrmStatutoryRegistry := hrmstatutory.NewRegistry(hrmstatutory.SlabProvider{})
+	hrmStatutorySvc := hrmstatutory.NewService(hrmStatutoryRepo, hrmStatutoryRegistry)
+	hrmBenefitsSvc := hrmbenefits.NewService(hrmBenefitsRepo)
+
 	// ── HRM Group D — time and compensation ───────────────────────────────────
 	// D1 attendance: pgPool for shift resolution queries
 	// D2 payslips:   pgPool for formula engine (employee+salary+attendance queries)
+	//                bonusSource = hrmCompensationSvc, feeding run_type='bonus' runs.
+	//                loanSource / reimbursementSource / statutorySource /
+	//                benefitsSource feed every OTHER run type.
 	hrmAttendanceSvc := hrmattendance.NewService(hrmAttendanceRepo, pgPool)
-	hrmPayslipsSvc := hrmpayslips.NewService(hrmPayslipsRepo, pgPool)
+	hrmPayslipsSvc := hrmpayslips.NewService(
+		hrmPayslipsRepo, pgPool, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
+		hrmStatutorySvc, hrmBenefitsSvc,
+	)
 
 	// ── HRM Group E — recognition and communication ───────────────────────────
 	// E1 awards:         pgPool for auto-creating E2 announcement on Issue()
@@ -455,6 +510,10 @@ func main() {
 	hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("salary_revision", hrmCompensationSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("reimbursement", hrmReimbursementsSvc.HandleApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS
@@ -525,6 +584,11 @@ func main() {
 	// ── HRM Group D ───────────────────────────────────────────────────────────
 	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc, authzSvc, hrmScopeResolver)
 	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc, authzSvc, hrmScopeResolver)
+	hrmCompensationHandler := hrmcompensation.NewHandler(hrmCompensationSvc, authzSvc, hrmScopeResolver)
+	hrmLoansHandler := hrmloans.NewHandler(hrmLoansSvc, authzSvc, hrmScopeResolver)
+	hrmReimbursementsHandler := hrmreimbursements.NewHandler(hrmReimbursementsSvc, authzSvc, hrmScopeResolver)
+	hrmStatutoryHandler := hrmstatutory.NewHandler(hrmStatutorySvc)
+	hrmBenefitsHandler := hrmbenefits.NewHandler(hrmBenefitsSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group E ───────────────────────────────────────────────────────────
 	hrmAwardsHandler := hrmawards.NewHandler(hrmAwardsSvc)
@@ -672,6 +736,11 @@ func main() {
 	// D2 ComputeRun() checks D1 period is finalized before running formulas.
 	hrmattendance.RegisterRoutes(api, hrmAttendanceHandler, permFn, requireAuth, requireOrgMatch)
 	hrmpayslips.RegisterRoutes(api, hrmPayslipsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcompensation.RegisterRoutes(api, hrmCompensationHandler, permFn, requireAuth, requireOrgMatch)
+	hrmloans.RegisterRoutes(api, hrmLoansHandler, permFn, requireAuth, requireOrgMatch)
+	hrmreimbursements.RegisterRoutes(api, hrmReimbursementsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmstatutory.RegisterRoutes(api, hrmStatutoryHandler, permFn, requireAuth, requireOrgMatch)
+	hrmbenefits.RegisterRoutes(api, hrmBenefitsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	// Awards (E1), Announcements (E2), HR Calendar (E3), Employee Milestones (E4)
@@ -830,6 +899,20 @@ func main() {
 			total += n
 		}
 		return total, nil
+	})
+
+	// benefits.activate_pending_enrollments — instance-wide, the
+	// attendance.absence_sweep / certifications.expiry_sweep shape (r24):
+	// flips every 'pending' enrollment whose effective_date has arrived to
+	// 'active', so a benefit signed up for ahead of its start date actually
+	// begins deducting once that date arrives, without a human having to
+	// notice and flip it manually.
+	schedulerSvc.Register("benefits.activate_pending_enrollments", "0 5 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmBenefitsSvc.ActivatePendingEnrollments(jCtx)
+		if err != nil {
+			return n, fmt.Errorf("benefits enrollment activation sweep: %w", err)
+		}
+		return n, nil
 	})
 
 	<-quit

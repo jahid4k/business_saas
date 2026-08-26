@@ -31,8 +31,14 @@ func Predicate(tier authz.Scope, column string, argOffset int, orgID, callerUser
 
 	case authz.ScopeOwn:
 		a, b := argOffset+1, argOffset+2
+		// IN, not =: idx_hrm_emp_user_id is NOT unique, so a caller who ended
+		// up with two employee rows in one org (a data-entry mistake, but a
+		// reachable one — nothing in this schema prevents it) would make a
+		// scalar "= (SELECT ...)" fail SQLSTATE 21000 on every ScopeOwn query
+		// for that org, not just misbehave. IN tolerates the extra row and
+		// still returns exactly this caller's own records.
 		frag := fmt.Sprintf(
-			"%s = (SELECT id FROM hrm_employees WHERE org_id = $%d AND user_id = $%d)",
+			"%s IN (SELECT id FROM hrm_employees WHERE org_id = $%d AND user_id = $%d)",
 			column, a, b,
 		)
 		return frag, []any{orgID, callerUserID}

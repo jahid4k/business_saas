@@ -284,3 +284,55 @@ func TestIntegration_HRMScope_AuthorizeRecordAccess_OwnTier(t *testing.T) {
 		t.Errorf("expected ScopeNone to deny even the caller's own record, got ok=%v err=%v", ok, err)
 	}
 }
+
+// TestIntegration_HRMScope_ScopeOwn_DuplicateEmployeeRowDoesNotError is the
+// regression test for the bug fixed alongside it: idx_hrm_emp_user_id is NOT
+// unique, so nothing in the schema stops one platform user from ending up on
+// two hrm_employees rows in the same org (a data-entry duplicate, but a
+// reachable one). Predicate's ScopeOwn used to emit a scalar
+// "column = (SELECT ... WHERE user_id = $2)", which fails outright with
+// SQLSTATE 21000 ("more than one row returned by a subquery used as an
+// expression") the moment that subquery matches more than one row — meaning
+// every ScopeOwn list in every scope-tiered module would 500 for that org,
+// not just misbehave.
+//
+// AuthorizeRecordAccess (the get-by-id half of the same control) is exercised
+// too, since it is built on the identical fragment and would fail the same
+// way.
+func TestIntegration_HRMScope_ScopeOwn_DuplicateEmployeeRowDoesNotError(t *testing.T) {
+	env := newTestEnv(t)
+	orgID, statusID, ownerID := seedScopeTestOrg(t, env)
+
+	dupEmail := uniqueEmail("scope-dup")
+	dup, err := env.authSvc.Signup(context.Background(), auth.SignupRequest{Email: dupEmail, Password: "DupPass123!"})
+	if err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	t.Cleanup(func() { cleanupUser(t, env, dup.ID) })
+
+	// The reachable duplicate: the same user_id linked to two employee rows,
+	// e.g. a re-hire recorded as a new row instead of reactivating the old one.
+	firstID := seedEmployee(t, env, orgID, statusID, ownerID, dup.ID, "Dup First", nil)
+	secondID := seedEmployee(t, env, orgID, statusID, ownerID, dup.ID, "Dup Second", nil)
+	strangerID := seedEmployee(t, env, orgID, statusID, ownerID, "", "Stranger", nil)
+
+	got := fetchScopedIDs(t, env, authz.ScopeOwn, orgID, dup.ID, scope.DefaultMaxDepth)
+	if !containsExactly(got, firstID, secondID) {
+		t.Fatalf("expected ScopeOwn to return exactly the caller's two rows %v, got %v",
+			[]string{firstID, secondID}, got)
+	}
+	if containsExactly(got, strangerID) {
+		t.Error("SECURITY: ScopeOwn returned a stranger's row for a caller with a duplicate employee record")
+	}
+
+	resolver := scope.NewResolver(env.db)
+	if ok, err := resolver.AuthorizeRecordAccess(context.Background(), authz.ScopeOwn, orgID, dup.ID, firstID); err != nil || !ok {
+		t.Errorf("expected access to the first duplicate row to be authorized, got ok=%v err=%v", ok, err)
+	}
+	if ok, err := resolver.AuthorizeRecordAccess(context.Background(), authz.ScopeOwn, orgID, dup.ID, secondID); err != nil || !ok {
+		t.Errorf("expected access to the second duplicate row to be authorized, got ok=%v err=%v", ok, err)
+	}
+	if ok, err := resolver.AuthorizeRecordAccess(context.Background(), authz.ScopeOwn, orgID, dup.ID, strangerID); err != nil || ok {
+		t.Errorf("SECURITY: ScopeOwn must not authorize a stranger's record, got ok=%v err=%v", ok, err)
+	}
+}

@@ -22,6 +22,9 @@ func RegisterRoutes(router fiber.Router, handler *Handler, permFn PermissionFunc
 	pr.Get("/runs",                  permFn("hrm.payroll.view"),    handler.ListRuns)
 	pr.Post("/runs",                 permFn("hrm.payroll.manage"),  handler.CreateRun)
 	pr.Post("/runs/:runId/compute",  permFn("hrm.payroll.compute"), handler.ComputeRun)
+	// The dry run. Its own permission because it persists nothing — safe to
+	// grant to reviewers who must never be able to commit a run.
+	pr.Post("/runs/:runId/preview",  permFn("hrm.payroll.preview"), handler.PreviewRun)
 	pr.Post("/runs/:runId/approve",  permFn("hrm.payroll.approve"), handler.ApproveRun)
 	pr.Post("/runs/:runId/pay",      permFn("hrm.payroll.pay"),     handler.MarkPaid)
 	pr.Post("/runs/:runId/cancel",   permFn("hrm.payroll.manage"),  handler.CancelRun)

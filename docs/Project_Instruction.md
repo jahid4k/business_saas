@@ -1,6 +1,373 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-08-10 (r24 — **HRM Extended Phase 6 COMPLETE: Learning & Development.**
+> Last updated: 2026-08-24 (r28 — **HRM Extended Phase 7D: statutory compliance + benefits
+> administration — the final slice of Phase 7. Phase 7 (Compensation depth + Benefits) is now
+> ✅ COMPLETE.** Two new packages, `internal/hrm/statutory` (country-pluggable `Provider` +
+> `Registry`, one shipped data-driven `SlabProvider`) and `internal/hrm/benefits` (plans, tiers,
+> enrollments, dependents), migrations `00102`–`00105`, 6 new tables, 18 new routes (7 statutory + 11
+> benefits), one new scheduler consumer (`benefits.activate_pending_enrollments`).
+>
+> **The build plan's "no country implementation yet" scope note is NOT a bare interface.** Shipping
+> a `Provider` interface with zero implementations would be exactly the speculative primitive rule
+> 1 forbids — nothing would ever call it. Resolved with `SlabProvider`, ONE real, DATA-DRIVEN
+> provider that reads `hrm_statutory_slabs` (effective-dated bracket rows) and evaluates them via
+> `payslips.ComputeSlab` — the SAME function `hrm_salary_components`' own slab calc_method already
+> uses (00023), reused rather than reimplemented. `Registry` routes each RULE (not each org) to a
+> provider by `country_code`, falling back to `SlabProvider` when no country-specific override is
+> registered — so a future India-specific provider (proration, eligibility thresholds a slab table
+> cannot express, per the build plan's own words) can override just one rule type while every
+> other rule in the same org still falls through to the generic evaluator, with zero schema change.
+>
+> **`TAXABLE_GROSS` did not exist in the payroll engine before this slice, and adding it required
+> touching the already-carefully-tuned `computePayslips` loop a fifth time this phase.** `is_taxable`
+> has existed on `hrm_salary_components` since `00023`, but nothing ever read it — Stage 1/2 now
+> accumulate a `taxableGross` alongside `gross`, summing only earning components flagged taxable.
+> `GrossPay` still means gross salary; `TAXABLE_GROSS` is what statutory rules actually read, kept
+> deliberately separate so a non-taxable allowance cannot inflate what gets withheld. Proved live
+> against real seeded payroll data with a genuine mix of taxable/non-taxable components: a 15%
+> bracket over a 5000 threshold, against a 7500 taxable base (not the employee's full 8100 gross),
+> produced exactly 375 — confirmed by hand against the actual `hrm_payslip_lines` rows.
+>
+> **Statutory and benefits both integrate into the EXISTING per-employee loop, not a dedicated
+> branch** — the 7C loan/reimbursement shape, not 7B's bonus shape. Order, deliberately NOT the
+> build plan's literal prose ("earnings → gross → statutory base → statutory → other deductions →
+> loan recovery → net"): statutory runs AFTER the salary-structure deduction stage here, not before
+> it, because statutory reads a wholly separate table and feeds nothing that stage needs — reordering
+> the salary-structure stage itself (already covered by r25's reordering-safety tests) was not
+> worth the risk for a placement that produces an identical total either way. It still lands before
+> reimbursements/loan recovery, honoring "statutory sits between other deductions and loan_recovery"
+> from r27. An employer-contribution statutory line is recorded but affects neither gross nor the
+> employee's deductions — proved live and by test.
+>
+> **Benefit tier costs are mutable catalog data; what an employee actually pays is frozen at
+> enrollment** — `employee_cost_snapshot`/`employer_cost_snapshot` — the `hrm_compensation_bands`
+> (00098) pattern applied to benefits. Proved by test: repricing a tier directly at the DB layer
+> after enrollment left the already-enrolled employee's payslip deduction unchanged. The employer's
+> share is tracked but produces NO payslip line — no consumer reads one today, and adding one ahead
+> of a real reader would be the speculative-primitive trap again; the column exists for the
+> employer-cost reporting surface Section 9 already names as a future consumer.
+>
+> **`EnrollSelf` resolves the caller's own `employeeID` from `userID` inside the SERVICE, not the
+> handler** — `hrm.benefit_enrollments.enroll_self` cannot express "for yourself only" (the
+> `hrm.goals.set_own` precedent), so `benefits.Repository` grew its own `FindEmployeeIDByUserID`,
+> mirroring `compensation.Repository`'s method of the same name and purpose rather than inventing a
+> cross-package resolver interface — an earlier draft of this slice tried exactly that
+> (`EmployeeIDResolver` satisfied by `hrm/employees.Service`) before discovering `employees.Service`
+> has no such method; every prior "resolve my own employee id" need in this codebase solves it
+> on the CALLER's own repository, not a shared service method, and this slice now follows that
+> precedent instead of being the first exception.
+>
+> **`benefits.activate_pending_enrollments` is the phase's scheduler consumer** — instance-wide,
+> the `attendance.absence_sweep`/`certifications.expiry_sweep` shape (r24): flips every `pending`
+> enrollment whose `effective_date` has arrived to `active`. "Enrollment windows" per the build
+> plan means the three named TYPES an enrollment is made under (`open`/`new_hire`/
+> `qualifying_event`), modelled as a column on the enrollment itself — no separate
+> org-configurable window-definition table was built, since the build plan asks for none and one
+> would be exactly the speculative primitive this phase has repeatedly declined to build.
+>
+> **Verification:** every architecture guard green, 4 new unit tests (`SlabProvider.Compute` +
+> `Registry` fallback routing — pure, no DB, the `ComputeSlab`/`ApplyIncrease`/`Amortize`
+> precedent), 8 new integration tests (151 total, up from 143) covering progressive tax, the
+> MANDATORY effective-dating guarantee ("a rule change dated next month must not alter this
+> month's computed run" — proved non-vacuous by breaking the date-grouping query and watching a
+> future 50% rate leak into the current month before restoring it), taxable-vs-non-taxable
+> earnings, employer-contribution non-effect, benefits payroll deduction, tier-repricing
+> immutability, the scheduler sweep (a due enrollment activates, a far-future one does not), and
+> dependent verification. Migration reversibility proved down×4 (one per migration)/re-up with
+> zero tables/permissions/role-grants. A live HTTP smoke run against dev with real, pre-existing
+> seeded payroll data — not synthetic — confirmed the exact expected figures by hand, all created
+> records cleaned up afterward.
+>
+> **Phase 7 is now fully shipped, end to end, across all four slices (7A payroll engine / 7B
+> compensation / 7C loans+reimbursements / 7D statutory+benefits) — still entirely UNCOMMITTED,
+> per standing instruction that the user commits manually.**
+>
+> ---
+>
+> r27 — **HRM Extended Phase 7C: employee loans with amortization +
+> reimbursement payout.** Two new packages, `internal/hrm/loans` (amortization + schedule +
+> recovery ledger) and `internal/hrm/reimbursements` (payout only), migrations `00100`–`00101`, 4
+> new tables — `hrm_loans`, `hrm_loan_schedules`, `hrm_loan_recovery_events`,
+> `hrm_reimbursements` — 12 new routes (7 loans + 5 reimbursements).
+>
+> **The amortization schedule is generated ONCE, at disbursement, and never recomputed by
+> payroll** — the same immutability reasoning 5B's published appraisals and 6A's frozen quiz
+> grades established. `Amortize` (pure, no DB) computes a reducing-balance schedule via decimal
+> arithmetic throughout — `(1+r)^n` by a multiplication loop rather than any float pass-through —
+> and the LAST installment absorbs whatever principal/rounding remainder is left, the
+> `payslips.ComputeSlab` boundary-handling shape applied to loans. Tested BEFORE anything that
+> calls it: 6 unit tests prove the schedule always sums to exactly the principal, interest strictly
+> decreases installment to installment (reducing-balance, not flat-rate), and a pathological
+> rate/tenure combination never drives the balance negative.
+>
+> **A single installment can be recovered across MULTIPLE payroll runs, and that forced a real
+> schema decision.** The build plan's zero-net-pay rule — recovery must not push net negative —
+> means a due installment may only be PARTIALLY recovered in any one run. `hrm_loan_schedules`
+> tracks `recovered_amount` separately from the frozen `total_amount`
+> (`pending`/`partially_recovered`/`recovered`/`foreclosed`), and a single FK from a schedule row to
+> "the line that recovered it" cannot represent a three-run partial history — so
+> `hrm_loan_recovery_events` exists as an append-only ledger, one row per actual recovery event,
+> the `hrm_application_stage_history` (00078) shape.
+>
+> **The zero-net-pay cap, precisely:** inside `computePayslips`' existing per-employee loop (NOT
+> a dedicated run_type branch — loan recovery and reimbursements integrate into whatever a
+> regular/off_cycle/arrears/fnf run already computes for that employee, unlike 7B's bonus branch
+> which replaces computation entirely), `headroom := gross - deductions + reimbursements`; each
+> pending installment (oldest due first, catching up any backlog) takes `min(amount owed,
+> headroom)`. A shortfall is not written off — the schedule row stays `partially_recovered` and is
+> picked up again next run. Proved live and by test: a 1000 installment against 300 of headroom
+> recovers exactly 300, net lands at exactly 0.00 (never negative), and the remaining 700 is
+> caught up in the following run.
+>
+> **Reimbursements are additive but deliberately NOT folded into `GrossPay`.** A reimbursement
+> repays money the employee already spent — not earned income — so it must not inflate the figure
+> a future statutory (7D) engine would treat as taxable. It lands directly in `NetPay` instead:
+> `net = gross - deductions + reimbursements - loanRecovery`. `TotalDeductions` DOES include loan
+> recovery, though (unlike reimbursements' gross exclusion) — an employee reading their payslip
+> needs to see it reflected as a real deduction. Proved live: gross stayed exactly 8100 across a
+> run that paid out a 250 reimbursement; net absorbed the 250 directly.
+>
+> **`hrm_reimbursements` has no `calculation_snapshot`**, unlike `hrm_salary_revisions`/
+> `hrm_bonuses` (00098). That column is mandatory specifically because it audits a
+> CompensationContext-driven FORMULA. "Payout only" (the build plan's own words) means a flat
+> HR-entered amount with no formula to snapshot — manufacturing one would be a JSONB blob nobody
+> reads. Claims tracking (receipts, itemization) stays explicitly out of scope.
+>
+> **Loan recovery lines correlate back to their source WITHOUT the index-array mechanism 7B's
+> bonus lines use.** Bonus payslips contain ONLY bonus lines (one dedicated run_type branch), so a
+> parallel `SourceBonusIDs` slice matched by position was simplest there. Here a loan/reimbursement
+> line sits among ordinary salary-structure lines in the SAME slice, so `PayslipLine` grew two
+> unexported, unpersisted fields (`sourceLoanScheduleID`, `sourceReimbursementID`) — set at
+> compute time, read directly off the same pointer once `CreatePayslipLines` assigns the real
+> database ID. No index bookkeeping, no ordering assumption. Package-private by construction: only
+> `computePayslips` and `ComputeRun`, in the same package, ever touch them.
+>
+> **The "resignation" edge case the build plan names, resolved narrowly and stated honestly.**
+> Auto-foreclosing a loan at termination — attempting full recovery even at the cost of negative
+> net — would require redesigning `ApproveRun`'s negative-net guard to know THAT negative net is
+> legitimate, and effectively building part of the still-unbuilt F&F consolidation module (Section
+> 9). Out of proportion for one loans edge case. What's built and tested instead: an employee who
+> has fully left the org (their termination_date predates the run's period) is simply not in that
+> period's eligible-employee set — no payslip, so no recovery attempt — and their remaining
+> schedule rows stay `pending`, a receivable the org must settle out of band (via `ForecloseLoan`),
+> never silently recovered NOR silently written off. Proved live and by test with a three-month
+> loan: installment 1 (the exit month, a partial period) recovers normally; installment 3 (after
+> the employee is fully gone) shows `run.TotalEmployees == 0` and the schedule row untouched.
+>
+> **Foreclosure never deletes schedule rows** — it flips the loan and every remaining
+> `pending`/`partially_recovered` row to `foreclosed`, preserving the amortization as history
+> (migration 00100's header). A subsequent payroll run finds nothing to recover: proved live.
+>
+> **Verification:** every architecture guard green, 6 new unit tests (the amortization math), 6
+> new integration tests (143 total, up from 137) covering the full loan lifecycle, the zero-net-pay
+> cap AND its carry-forward, foreclosure, the resignation edge case, reimbursement payout, and both
+> coexisting in one run — the zero-net-pay cap proved non-vacuous by removing it and watching net
+> go negative before restoring it. Migration reversibility proved down×2/re-up with zero tables /
+> permission rows / role grants, correctly restoring to the exact r26 CHECK-constraint state (not
+> further). Two live HTTP smoke runs against dev with real seeded payroll data (not synthetic —
+> the recovery math had to coexist correctly with the employee's actual pre-existing salary
+> components), all test data cleaned up afterward.
+>
+> **Not built, staying open for 7D:** statutory withholding on any payout, and benefits
+> enrollment deductions — 7A's `line_type` ordering (`statutory` sits between `other deductions`
+> and `loan_recovery`) exists specifically so 7D slots in without touching this run's arithmetic
+> again.
+>
+> ---
+>
+> r26 — **HRM Extended Phase 7B: salary revision cycles + the bonus
+> engine.** New package `internal/hrm/compensation` (15 files), migrations `00098`–`00099`, no
+> new tables in payslips — 5 new tables here: `hrm_compensation_bands`, `hrm_merit_matrix_cells`,
+> `hrm_salary_revision_cycles`, `hrm_salary_revisions`, `hrm_bonuses`. 20 new routes.
+>
+> **Bands are mutable catalog data, deliberately not append-only.** Unlike
+> `hrm_employee_salary_records` (00023), editing a band tomorrow must not rewrite a decision made
+> against today's numbers — so the compa-ratio a cycle computed is frozen into
+> `calculation_snapshot` (mandatory, NOT NULL, no empty default) rather than re-derived from a
+> band that can drift. Same reasoning gave `hrm_merit_matrix_cells` real, queryable rows instead
+> of JSONB — computing a cycle means MATCHING a rating level and a compa-ratio against ranges,
+> which is exactly the "slabs move from code into effective-dated rows" instruction Phase 7D's
+> statutory engine will follow, applied here first.
+>
+> **A cycle carries ONE approval instance for the whole batch**, matching the build plan's
+> "batch-approved" — an approver decides every proposed revision in one action, not a chain per
+> employee. `HandleApprovalDecision` only flips `approved`/`rejected`; a separate `ApplyCycle`
+> writes the `hrm_employee_salary_records` rows. That split is the
+> `promotions.Apply`/`HandleApprovalDecision` precedent verbatim: a decision and the money
+> movement it authorizes are never the same call.
+>
+> **Two CHECK constraints needed widening for `salary_revision`/`bonus`, not one, and they use
+> different vocabularies.** `hrm_approval_templates.action_type` uses the short form
+> (`'leave'`, `'promotion'`) while `hrm_approval_instances.entity_type` uses the long form
+> (`'leave_request'`). Missing the template-side widening was caught immediately — reversibility
+> testing rebuilt the migration before either DB kept the half-widened state.
+>
+> **`hrm_bonuses` gets a real consumer inside this same slice, not a future one.** The build plan
+> names only compensation bands/cycles/bonuses for 7B, and payroll wiring only explicitly for
+> loans in 7C — but an approved bonus nothing ever pays is the same defect shape as the dropped
+> `hrm_employees.status` column (r25): a written record nothing reads, and this codebase has
+> already found that class of bug three times. Resolved with `payslips.BonusSource` — a
+> consumer-owned narrow interface (the `recruitment.EmployeeCreator` / `pip.TerminationCreator`
+> shape: payslips is the CONSUMER and declares it; `hrm/compensation` imports `hrm/payslips`, and
+> not the reverse, to satisfy it) — plus a new branch in `computePayslips`:
+> `run_type='bonus'` skips the normal salary-structure computation entirely (which would
+> double-pay basic salary alongside the bonus) and instead builds one payslip per employee holding
+> approved-but-unpaid bonuses, one earning line each. `ComputeRun` marks the underlying bonuses
+> `paid` — atomically, in one transaction across the whole batch — only after every payslip and
+> line in the run has actually persisted, and a failure there aborts the whole run exactly like a
+> failed payslip write (r25's `abortCompute`), rather than leaving payslips committed with their
+> bonuses still `approved` and payable a second time by the next run. **Deduction-free by design,
+> not omission**: statutory withholding on a bonus payout is Phase 7D scope, which does not exist
+> yet — paying a bonus net-of-nothing today is an honest description of what this run type does
+> pending that engine, the same distinction r25's negative-net fix drew between a real zero and a
+> masked one.
+>
+> **A real bug found by the integration tests, not by inspection**: `SubmitCycle` and `ApplyCycle`
+> each built a bare `ListFilter{Limit: N}` to check/enumerate a cycle's own revisions. `ListFilter`
+> zero-values `Scope` to `authz.ScopeNone` (documented on the type: "means no rows"), so both
+> internal existence/aggregate checks silently saw ZERO revisions regardless of how many existed —
+> `SubmitCycle` refused every real cycle with `ErrCycleHasNoRevisions`, and had it not, `ApplyCycle`
+> would have looped over nothing and written no salary records at all, succeeding while doing
+> nothing. Fixed by setting `Scope: authz.ScopeAll` explicitly on both — an internal aggregate
+> operation is not a caller-scoped read. Caught because the integration tests exercise the full
+> `CreateCycle → ComputeCycle → SubmitCycle → ApplyCycle` path end-to-end against real data, not
+> because anyone spotted the zero-value trap by reading the code.
+>
+> **Verification:** every architecture guard green, 5 new unit tests (pure arithmetic —
+> `ApplyIncrease`, `ComputeCompaRatio`, `Revision.PctIncrease` — the `payslips.ComputeSlab` /
+> `ReferencesGross` precedent: money arithmetic gets tested before anything that calls it, since
+> `ComputeCycle` itself reaches `*pgxpool.Pool` directly and is only integration-testable), 10 new
+> integration tests (137 total, up from 127), migration reversibility proved down×2/re-up with
+> zero tables / zero permission rows / zero role grants, and a live HTTP smoke run against a real
+> seeded employee: banded + rated → cycle computed a 15000→15900 increase (6% matrix cell) →
+> submitted (no template configured, auto-approved fallback) → applied → confirmed as a real
+> `hrm_employee_salary_records` row → a bonus computed against the NEW basic pay (the snapshot
+> correctly picked up 15900) → submitted → paid out through a `run_type='bonus'` payroll run →
+> confirmed the bonus flipped to `paid` with real `payslip_run_id`/`payslip_line_id`. Test data
+> cleaned up afterward, including reverting the applied salary record.
+>
+> **Not built in this slice, staying open for 7C/7D as scoped:** `OverrideRevisionRequest` has no
+> public `is_excluded` toggle yet — the exclusion path exists and is tested, but only reachable by
+> a direct DB write today; a dedicated exclude/include endpoint is a 7C-or-later follow-up, not a
+> defect. Loan recovery and reimbursement lines, statutory withholding on bonus payouts, and
+> benefits enrollment deductions are unbuilt, as scoped — 7A's `line_type` ordering exists
+> specifically so they slot in without re-deriving anyone's pay.
+>
+> ---
+>
+> r25 — **HRM Extended Phase 7A: the payroll engine — plus four money
+> defects found in the existing engine and fixed before any feature work landed on it.**
+> Migrations `00096`–`00097`, no new packages, 1 new route (389 HRM routes total).
+>
+> **Phase 7 began by finding that payroll did not work at all.** Exploration of
+> `internal/hrm/payslips` — a module marked ✅ DONE since r19 — turned up four separate defects,
+> every one of them in money arithmetic, and every one invisible to the existing tests for the
+> same structural reason: `ComputeRun` had **no integration test whatsoever** and reached
+> `*pgxpool.Pool` directly, so the stub-repo unit tests could not see it. This is the fourth
+> appearance of that pattern (the terminations `status_id` bug, r23; the `ScopeOwn` bug, r24).
+>
+> **Defect 1 — payroll selected employees on a column that no longer exists.** The employee
+> query filtered `WHERE e.status IN ('active','on_leave','resigned')`. `hrm_employees.status` was
+> replaced by `status_id` → `hrm_employee_statuses` in migration `00053`; the column is gone, so
+> the query errored and **no payroll run could compute for any org**. `'resigned'` was never a
+> valid value even on the original `00021` CHECK (`active|inactive|on_leave|terminated`), so the
+> filter was wrong twice over. The same dropped column was found in four further raw-SQL sites —
+> `calendar` and `announcements` (`GetTargetEmployeeIDs`) and three headcount sub-selects in
+> `reports`. Fixing it required deciding **who gets paid**, not merely translating the old
+> predicate: active + on-leave + employees terminated mid-period (`termination_date >=` the period
+> start), so a leaver is paid for the days they worked.
+>
+> **Defect 2 — component order silently changed everyone's pay.** `pct_of_gross`, `formula` and
+> `slab` components all read a `gross` variable that the single compute loop was still
+> accumulating, so a gross-dependent component evaluated third saw only the first two components'
+> gross. Reordering rows in the salary-structure UI changed real net pay. Proved by
+> re-introducing it: **15000 vs 13500, an 11% swing from a `display_order` edit.** Replaced with
+> an explicit three-stage computation — earnings independent of gross define gross; earnings
+> expressed as a share of gross evaluate against that; everything else evaluates against the
+> final gross — with lines still emitted in display order. `ReferencesGross` is an exported,
+> separately-tested predicate (14 cases) rather than an inline condition, because "does this
+> component depend on gross" is now load-bearing for three calculation methods.
+>
+> **Defect 3 — negative net pay was silently zeroed.** `if netPay.IsNegative() { netPay =
+> decimal.Zero }`, with the same clamp on individual line amounts. Deductions exceeding gross
+> made the shortfall vanish with no error and no record, leaving a payslip whose lines total more
+> than its own gross. The build plan asks for a "negative-net guard"; what existed was a
+> silencer. Now the true figure is stored — it is a legitimate outcome, and F&F runs depend on it
+> (Section 9) — and `ApproveRun` refuses the run while any payslip in it is negative
+> (`ErrNegativeNetPay` → 409 `NEGATIVE_NET_PAY`). The count query lives on `Repository`, not on
+> `s.db`, specifically so a unit test can reach it.
+>
+> **Defect 4 — a partially-written run reported success.** A failed `CreatePayslip` was answered
+> with `continue` and a failed `CreatePayslipLines` with `_ =`, so an employee could end up
+> unpaid, or paid with a gross and a net but no lines explaining either — while the run was
+> marked `computed`. The run's own header concealed it: `TotalEmployees` counted every employee
+> while the money totals counted only the ones that saved, so the run looked complete and merely
+> disagreed with itself. A payroll run is now all-or-nothing: any persistence failure aborts,
+> **deletes the payslips already written** (without which the retry would insert a second set
+> alongside the first), returns the run to `draft`, and surfaces the error. Cleanup failures are
+> `errors.Join`-ed onto the cause rather than replacing it.
+>
+> **7A itself — the payroll engine.** `hrm_payslip_runs.run_type`
+> (`regular`/`off_cycle`/`bonus`/`arrears`/`fnf`) and `hrm_payslip_lines.line_type` +
+> `is_employer_contribution` + `source_period_id`.
+>
+> **`uq_hrm_pr_org_month` had to be replaced or `run_type` was stillborn.** It is
+> `UNIQUE (org_id, period_year, period_month)` — one run per org per month *of any type* — so the
+> column could never have held a second value in a period. It is now a PARTIAL unique index over
+> regular runs only: exactly one regular run per org per month still holds, while off-cycle,
+> bonus, arrears and F&F runs are legitimately repeatable, because a leaver's final settlement
+> does not wait for next month. The Down block restores the original constraint and will **fail
+> loudly** if the org has since created two runs in a month, rather than silently discarding one.
+>
+> **`line_type` overlaps `component_type` and both are kept, deliberately.** `component_type`
+> snapshots what the COMPONENT was; `line_type` records what the LINE DOES in the calculation.
+> They diverge the moment a line has no component behind it — a loan recovery (7C), a statutory
+> deduction from a rule (7D), an arrear from an earlier period. Same reasoning for
+> `is_employer_contribution`, which is only *partly* derivable from
+> `component_type='employer_contribution'`: 7D's statutory employer contributions are generated
+> from rules and carry no component row at all. Both migration headers say so, because the
+> obvious next move is to "deduplicate" them.
+>
+> **The mandatory dry-run preview.** `POST /runs/:runId/preview`, gated on a new
+> `hrm.payroll.preview`. It shares `computePayslips` with `ComputeRun` rather than having a
+> "preview mode", so a preview cannot disagree with what approval later commits — proved live:
+> preview and compute returned identical figures (18 employees / 71870 gross / 57466 net) with
+> zero rows written between them. `.preview` is its own permission key rather than a reuse of
+> `.compute` because preview is read-shaped, so it is safe to grant to `manager`, who already
+> holds `hrm.payroll.view`; reusing `.compute` would have meant anyone allowed to check the
+> numbers was also allowed to commit them, inverting the point of a dry run.
+>
+> **⚠ Note the scope asymmetry on `hrm.payroll`,** since it reads wrong at a glance: the resource
+> IS scope-tiered (`view_own`/`view_team`/`view_all`, seeded `00072`), and those tiers govern
+> which PAYSLIPS a caller sees, because payslips carry an `employee_id`. RUNS are org-level
+> objects with no `employee_id`, so `.preview` is an untiered org-wide capability — which is
+> exactly why it is granted narrowly instead of to `member`.
+>
+> **r24's open defect #1 is now CLOSED.** `scope.Predicate`'s `ScopeOwn` emitted
+> `employee_id = (SELECT …)` against a non-unique index, so one user with two employee rows in an
+> org 500s every `view_own` list in all six scope-tiered modules. Fixed to `IN`, with an
+> integration test that creates the duplicate state and asserts the query returns rows instead of
+> SQLSTATE 21000.
+>
+> **Verification:** every one of the four defects was proved by reverting it and watching the
+> test go red with the literal failure — the discipline that validated the r23 terminations fix.
+> The replaced unique index was proved the same way, by re-imposing the original constraint (it
+> could not even be created against the test's data, which is itself the proof). 14 new
+> integration tests, 14 new unit tests, all six architecture guards green, migration
+> reversibility proved down×2 → columns gone / original constraint restored / zero permission
+> rows / zero role grants → re-up, and a live HTTP smoke run with test data cleaned up
+> afterwards. Full integration suite: **127 tests**.
+>
+> **Still open, unchanged:** the scheduler's manual-trigger endpoint returns 400
+> `NO_BUSINESS_CONTEXT` for every job (its route has no `:orgId` but its permission gate requires
+> one); a fresh API-created org has no `hrm_employee_statuses`, so `POST /hrm/employees` 500s
+> until one is created by hand. Also unchanged and **not** fixed by this phase: `ComputeSlab` and
+> `evalFormula` still operate on `float64`. The `TestHygiene_NoFloatMoneyFields` guard only
+> inspects `*model.go`, so they pass it — new money paths must not widen that hole.
+>
+> ---
+>
+> r24 — **HRM Extended Phase 6 COMPLETE: Learning & Development.**
 > Sliced two ways and both shipped: 6A the LMS core, 6B certifications + the shared skills
 > taxonomy + the expiry sweep. Migrations `00092`–`00095`, three new packages
 > (`internal/hrm/learning`, `internal/hrm/skills`, `internal/hrm/certifications`), 47 new routes.
@@ -1388,7 +1755,7 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21; Performance/Goals Phase 5A added r22; appraisals 5B + 360 feedback/PIP 5C added r23]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **34 route-bearing sub-modules, 388 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount + 29 learning r24 + 9 skills r24 + 9 certifications r24). Counts re-grepped from `internal/hrm/*/routes.go` at r23 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **39 route-bearing sub-modules, 441 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount + 29 learning r24 + 9 skills r24 + 9 certifications r24 + 1 payroll preview r25 + 22 compensation r26 + 7 loans r27 + 5 reimbursements r27 + 7 statutory r28 + 11 benefits r28). Counts re-grepped from `internal/hrm/*/routes.go` at r28 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20) + `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/`hrm_referrals` (00080, r21).
 
@@ -1416,7 +1783,17 @@ Reuses `hrm.employees.view`/`.update` rather than minting `hrm.onboarding.*` key
 
 **Group C — Disciplinary** (`warnings, complaints, employeedocs, acknowledgements`): 34 routes. Cross-module writes via `ON CONFLICT DO NOTHING` + direct `pgPool.Exec` to avoid import cycles.
 
-**Group D — Time & Compensation** (`attendance, payslips`): 19 routes. Multi-punch attendance, `ComputeSlab` progressive tax, immutable finalized payslips. Attendance's `resolveShift` had a column-name bug (`wsa.scope`/`wsa.entity_id` vs the real `assignee_type`/`assignee_id`) that silently no-op'd shift resolution on every call — fixed 2026-08-03 (see Section 5 → PLATFORM — SCHEDULER for the `attendance.absence_sweep` job this also unblocked).
+**Group D — Time & Compensation** (`attendance, payslips`): 20 routes. Multi-punch attendance, `ComputeSlab` progressive tax, immutable finalized payslips.
+
+⚠ **Payroll was non-functional from `00053` until r25 and nothing noticed**, because `ComputeRun` had no integration test and read `*pgxpool.Pool` directly, out of reach of the stub-repo unit tests. r25 fixed four money defects here — a dropped-column employee filter that made every run error, order-dependent gross that let a `display_order` edit swing net pay 11%, silently zeroed negative net, and a partially-written run reporting success — then added the 7A engine columns (`run_type`, `line_type`, `is_employer_contribution`, `source_period_id`) and the mandatory dry-run preview. See the r25 changelog entry; the calculation is now three explicit stages, not one accumulating loop, and 7C/7D slot their line types into that order without re-deriving anyone's pay.
+
+Attendance's `resolveShift` had a column-name bug (`wsa.scope`/`wsa.entity_id` vs the real `assignee_type`/`assignee_id`) that silently no-op'd shift resolution on every call — fixed 2026-08-03 (see Section 5 → PLATFORM — SCHEDULER for the `attendance.absence_sweep` job this also unblocked).
+
+**Compensation (r26) — Phase 7B:** `internal/hrm/compensation/` (20 routes), `hrm.compensation_config.*` (untiered — bands and merit matrix carry no `employee_id`) + `hrm.salary_revisions.*` / `hrm.bonuses.*` (both scope-tiered). Salary revision cycles compute proposed pay per employee from a merit-matrix lookup (rating level × compa-ratio range → increase %), snapshot the whole `CompensationContext` used into a mandatory `calculation_snapshot`, and are batch-approved — one `hrm_approval_instances` row per cycle rather than one per employee. `ApplyCycle` is a distinct step from the approval decision (the `promotions.Apply` precedent) and writes real `hrm_employee_salary_records` rows for every non-excluded revision. Bonuses follow the same snapshot-and-approve shape, then pay out through a `run_type='bonus'` payroll run: `payslips.BonusSource` is a consumer-owned narrow interface declared in `hrm/payslips` (payslips is the consumer), satisfied by `hrm/compensation.Service` — the `recruitment.EmployeeCreator` / `pip.TerminationCreator` direction, so `hrm/compensation` imports `hrm/payslips` and never the reverse. A bonus run skips the normal salary-structure computation entirely (a dedicated branch in `computePayslips`, not a fallthrough) so a bonus never double-pays basic salary alongside itself, and `ComputeRun` marks the underlying bonuses paid atomically, in the same all-or-nothing failure discipline r25's `abortCompute` established. See the r26 changelog entry, including a real bug the integration tests (not inspection) caught: `SubmitCycle`/`ApplyCycle` building a bare `ListFilter{}` silently zero-valued `Scope` to "see nothing."
+
+**Loans + Reimbursements (r27) — Phase 7C:** `internal/hrm/loans/` (7 routes) and `internal/hrm/reimbursements/` (5 routes), `hrm.loans.*` (+ `.disburse`/`.foreclose`, distinct from `.manage`) and `hrm.reimbursements.*`, both scope-tiered. `loans.Amortize` is pure decimal arithmetic (no float pass-through) generating a reducing-balance schedule ONCE at disbursement, never recomputed — the last installment absorbs the rounding remainder, the `ComputeSlab` boundary shape. Both feed lines into every OTHER run type's EXISTING per-employee computation in `computePayslips` (not a dedicated branch the way 7B's bonus run is) via two more consumer-owned narrow interfaces on `payslips`: `LoanSource` and `ReimbursementSource` — `hrm/loans` and `hrm/reimbursements` both import `hrm/payslips`, never the reverse. Loan recovery is capped so it never drives net negative (`headroom = gross - deductions + reimbursements`; a shortfall carries to the next run rather than being written off), which is why `hrm_loan_schedules` tracks `recovered_amount` separately from the frozen `total_amount` and `hrm_loan_recovery_events` exists as an append-only ledger — one schedule row can be recovered across several runs. Reimbursements land straight in `NetPay` without inflating `GrossPay` (non-taxable pass-through, ahead of 7D's statutory engine). Foreclosure marks remaining schedule rows `foreclosed` rather than deleting them. The "resignation" edge case is resolved narrowly: an employee who has fully left simply is not in a later period's eligible set, so their remaining installments stay `pending` — a receivable, not silently recovered or written off — auto-foreclosure-on-exit is explicitly NOT built (it would require redesigning the negative-net guard around the still-unbuilt F&F module). See the r27 changelog entry.
+
+**Statutory + Benefits (r28) — Phase 7D, the final slice of Phase 7:** `internal/hrm/statutory/` (7 routes, `hrm.statutory.*`, untiered) and `internal/hrm/benefits/` (11 routes, `hrm.benefit_plans.*` untiered + `hrm.benefit_enrollments.*` scope-tiered). Statutory ships a country-pluggable `Provider` interface + `Registry` with ONE real, data-driven `SlabProvider` — reading effective-dated `hrm_statutory_slabs` and evaluating via `payslips.ComputeSlab`, the same function `hrm_salary_components`' slab components already use — rather than a bare interface with zero implementations. `computePayslips` grew a `taxableGross` accumulator (summing only earning components flagged `is_taxable`, `00023`) specifically for this: `GrossPay` stays gross salary, `TAXABLE_GROSS` is what a rule actually reads. Both statutory and benefits integrate into the SAME per-employee loop every non-bonus run already computes (the 7C loan/reimbursement shape) via two more consumer-owned narrow interfaces on `payslips` — `StatutorySource`/`BenefitsSource` — so `hrm/statutory` and `hrm/benefits` import `hrm/payslips`, never the reverse. Benefit tier costs are mutable catalog data; `employee_cost_snapshot`/`employer_cost_snapshot` freeze what an enrollment actually costs at signup (the `hrm_compensation_bands` pattern), proved by test: repricing a tier after enrollment leaves the existing payslip deduction unchanged. `benefits.activate_pending_enrollments` is the phase's scheduler consumer (the `certifications.expiry_sweep` shape). **Phase 7 (Compensation depth + Benefits) is now ✅ COMPLETE across all four slices.** See the r28 changelog entry.
 
 **Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences now genuinely run (see Section 5 → PLATFORM — SCHEDULER) — `milestones.generate_upcoming` previously errored on every run against a column `00053` had already dropped, silently, so it never generated anything despite being "wired."
 
@@ -1606,7 +1983,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 95
+### Migration Count: 105
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -1656,7 +2033,60 @@ its Down block drops them in the opposite order — certifications first, skills
 either into "logical" order breaks the migration; the drop-order half was caught only by actually
 running the rollback, which is why reversibility is proved rather than assumed.
 
-### Key Tables (130 total)
+`00096` Phase 7A payroll engine — **no new tables**: `hrm_payslip_runs.run_type` plus
+`hrm_payslip_lines.line_type`/`is_employer_contribution`/`source_period_id`, both backfilled
+before the NOT NULL lands · `00097` seeds `hrm.payroll.preview` to owner/admin/manager.
+
+⚠ `00096` **DROPS `uq_hrm_pr_org_month`** and replaces it with the partial unique index
+`uq_hrm_pr_org_month_regular … WHERE run_type = 'regular'`. Without that, `run_type` could never
+hold a second value in a period and the whole feature is inert. Its Down block re-adds the
+original blanket constraint, which **fails loudly** if the org has since created two runs in one
+month — the state this migration makes reachable — rather than silently discarding one.
+
+⚠ `00096`'s header records what must **never** be added to it: a
+`CHECK (line_type <> 'arrear' OR source_period_id IS NOT NULL)`. `source_period_id` is
+`ON DELETE SET NULL`, Postgres re-evaluates CHECKs on UPDATE, and `SET NULL` *is* an UPDATE — so
+that pairing would make `DELETE FROM hrm_payslip_runs` fail 23514 for any org holding an arrear
+line. This is the `00076` trap; the service validates the pairing instead.
+
+`00098` Phase 7B compensation — 5 new tables: `hrm_compensation_bands`, `hrm_merit_matrix_cells`,
+`hrm_salary_revision_cycles`, `hrm_salary_revisions`, `hrm_bonuses`; widens BOTH
+`hrm_approval_templates.action_type` (short form) and `hrm_approval_instances.entity_type` (long
+form) with `salary_revision`/`bonus` · `00099` seeds `hrm.compensation_config.*` (untiered) and
+the three mandatory scope tiers each for `hrm.salary_revisions` and `hrm.bonuses`.
+
+⚠ `00098` widens **two separate CHECK constraints with two separate vocabularies** for the same
+two new entity types — `hrm_approval_templates_action_type_check` uses `'promotion'`/`'leave'`,
+`hrm_approval_instances_entity_type_check` uses `'leave_request'`. Missing either one leaves a
+template creatable but no instance of it possible, or the reverse. See the r26 changelog entry.
+
+`00100` Phase 7C loans + reimbursements — 4 new tables: `hrm_loans`, `hrm_loan_schedules`,
+`hrm_loan_recovery_events`, `hrm_reimbursements`; widens the SAME two CHECK constraints 00098
+already widened once, again with `salary_revision`/`bonus` alongside the new `loan`/`reimbursement`
+· `00101` seeds `hrm.loans.*` (+ `.disburse`/`.foreclose`, distinct from `.manage`) and
+`hrm.reimbursements.*`, both fully scope-tiered.
+
+⚠ `00100`'s amortization schedule is generated ONCE at disbursement and never recomputed —
+`hrm_loan_schedules.total_amount` is frozen; only `recovered_amount` (and derived `status`) ever
+change, tracked because the zero-net-pay guard can spread one installment's recovery across
+multiple payroll runs. `hrm_loan_recovery_events` is the append-only ledger this makes necessary —
+see the r27 changelog entry.
+
+`00102` Phase 7D statutory — 2 new tables: `hrm_statutory_rules` (stable identity), `hrm_statutory_slabs`
+(effective-dated bracket data, evaluated via `payslips.ComputeSlab`) · `00103` seeds `hrm.statutory.*`,
+untiered, owner/admin only.
+`00104` Phase 7D benefits — 4 new tables: `hrm_benefit_plans`, `hrm_benefit_tiers` (mutable catalog),
+`hrm_benefit_enrollments` (`employee_cost_snapshot`/`employer_cost_snapshot` frozen at enrollment),
+`hrm_dependents` (manually verified) · `00105` seeds `hrm.benefit_plans.*` (untiered) and
+`hrm.benefit_enrollments.*` (scope-tiered + `.enroll_self` + `.verify_dependent`).
+
+⚠ A statutory rule's bracket table is revised by inserting a WHOLE NEW SET of `hrm_statutory_slabs`
+rows sharing one `effective_date` — never by editing a bracket in place. `SlabsAsOf` groups by
+`MAX(effective_date) <= asOf`, which is what makes "the current table" well-defined instead of a
+mix of brackets from different revisions; this grouping is the exact mechanism the r28 changelog's
+mandatory effective-dating test proved non-vacuous by breaking.
+
+### Key Tables (145 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -1680,6 +2110,15 @@ Group E (4): `hrm_awards` · `hrm_announcements` · `hrm_calendar_events` · `hr
 Leave (5): `hrm_leave_types` · `hrm_leave_requests` · `hrm_leave_policies` · `hrm_leave_transactions` · `hrm_leave_balances`
 Performance (3): `hrm_goal_cycles` · `hrm_goals` · `hrm_goal_checkins`
 Recruitment (12): `hrm_recruitment_pipelines` · `hrm_recruitment_stages` · `hrm_job_requisitions` · `hrm_job_postings` · `hrm_candidates` · `hrm_applications` · `hrm_application_stage_history` · `hrm_interviews` · `hrm_interview_panelists` · `hrm_interview_scorecards` · `hrm_offers` · `hrm_referrals`
+Compensation (5): `hrm_compensation_bands` · `hrm_merit_matrix_cells` · `hrm_salary_revision_cycles` · `hrm_salary_revisions` · `hrm_bonuses`
+Loans + Reimbursements (4): `hrm_loans` · `hrm_loan_schedules` · `hrm_loan_recovery_events` · `hrm_reimbursements`
+Statutory (2): `hrm_statutory_rules` · `hrm_statutory_slabs`
+Benefits (4): `hrm_benefit_plans` · `hrm_benefit_tiers` · `hrm_benefit_enrollments` · `hrm_dependents`
+
+⚠ This listing is not exhaustive — appraisals/feedback/PIP/learning/certifications/skills tables
+(r23/r24) are missing from it, a pre-existing gap this revision did not audit. Re-grep
+`internal/migrations/*.sql` `CREATE TABLE` statements before trusting this section as a full
+inventory; the doc's own drift-assumption rule applies here.
 
 ---
 
@@ -2177,13 +2616,54 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 
 **Compensation & benefits**
 
-- **Compensation depth** — salary revision cycles (effective-dated, batch-approved, merit matrix from rating × compa-ratio), bonus/incentive engine (reuses `expr-lang/expr` with a widened shared evaluation context, `calculation_snapshot` JSONB mandatory), loans/advances with amortization schedules generated once at approval, reimbursement payout, statutory compliance (country-pluggable schema, per-country Go implementation behind an interface — no universal statutory formula engine).
-  Payroll engine additions this requires: `run_type` on payslip runs (off-cycle, F&F, arrears), `line_type` enum, `is_employer_contribution`, deterministic calculation order, negative-net guard, mandatory dry-run preview.
-  ⚠️ This cluster is internally coupled — loans → statutory (perquisite), benefits → statutory, revisions → payroll (arrears), bonus → performance. Design it whole, not in pieces.
-  Depends on: decimal money discipline (Section 10), temporal modeling (Section 4), resource-level permissions (salary visibility is the sharpest case in the system).
+- **Payroll engine additions — ✅ DONE (r25, Phase 7A), see Section 5 → HRM MODULE → Time &
+  Compensation.** `run_type` on payslip runs (regular/off_cycle/bonus/arrears/fnf), `line_type` +
+  `is_employer_contribution` + `source_period_id` on lines, deterministic three-stage calculation
+  order, a real negative-net guard (the prior code silently zeroed it), and the mandatory dry-run
+  preview (`POST .../runs/:runId/preview`). Four money defects found and fixed in the pre-existing
+  engine along the way — see the r25 changelog entry.
 
-- **Benefits Administration** — plans, coverage tiers, cost splits, enrollment windows (open / new-hire / qualifying-event), dependents with manual verification, enrollment → payroll deduction. Claims tracking deliberately out of scope; it lives with the insurance provider.
-  Depends on: scheduler (window open/close, dependent aging), notification, effective-dated enrollments.
+- **Salary revision cycles + bonus engine — ✅ DONE (r26, Phase 7B), see Section 5 → HRM MODULE →
+  Compensation.** `internal/hrm/compensation` (20 routes), 5 tables. Effective-dated compensation
+  bands and merit-matrix cells (real rows, not JSONB); batch-approved cycles — one approval
+  instance per cycle, `HandleApprovalDecision` and `ApplyCycle` kept as distinct steps, the
+  `promotions.Apply` precedent; mandatory `calculation_snapshot` JSONB on every revision and every
+  bonus, built by a shared `CompensationContext`; bonuses paid out through a
+  `run_type='bonus'` payroll run via `payslips.BonusSource`, a consumer-owned narrow interface —
+  payslips declares it, `hrm/compensation` imports payslips (not the reverse) to satisfy it.
+  **Not** built: an `expr-lang/expr` formula language for bonuses — the shared context feeds a
+  small closed calc-method enum (fixed / pct-of-basic) instead of a full DSL, since payslips
+  already owns formula evaluation for salary components and duplicating it here for two calc
+  methods would be the speculative-primitive rule 1 forbids.
+
+- **Loans + reimbursement payout — ✅ DONE (r27, Phase 7C), see Section 5 → HRM MODULE → Loans +
+  Reimbursements.** `internal/hrm/loans` (amortization generated once at disbursement, a
+  zero-net-pay-capped recovery stage feeding every non-bonus run type, an append-only recovery
+  ledger, foreclosure) and `internal/hrm/reimbursements` (payout only, no claims workflow). Both
+  follow 7B's bonus payout template exactly: a payslips-side narrow consumer interface
+  (`LoanSource`/`ReimbursementSource`), not a payslips-side rewrite. **Not** built:
+  auto-foreclosure on resignation — a resigned employee's remaining installments simply stay
+  `pending` once they leave the eligible-employee set, a deliberate, narrower scope than full F&F
+  settlement (see the r27 changelog entry for why building that now would be out of proportion).
+
+- **Statutory compliance — ✅ DONE (r28, Phase 7D), see Section 5 → HRM MODULE → Statutory +
+  Benefits.** `internal/hrm/statutory` — a country-pluggable `Provider` interface + `Registry`,
+  shipped with ONE real, data-driven `SlabProvider` (effective-dated `hrm_statutory_slabs`,
+  evaluated via `payslips.ComputeSlab`). Per-country Go providers for proration/eligibility rules a
+  slab table cannot express register in the `Registry` per rule's `country_code` — zero schema
+  change needed. **Not built**: employee-level country filtering (every active rule applies
+  org-wide) — no `hrm_employees.country` field exists yet, that is explicitly Phase 11
+  (multi-country/multi-currency) scope.
+
+- **Benefits Administration — ✅ DONE (r28, Phase 7D).** `internal/hrm/benefits` — plans, mutable
+  catalog tiers, enrollments (cost frozen at signup via `employee_cost_snapshot`/
+  `employer_cost_snapshot`), dependents with manual verification (no document workflow, per the
+  build plan), enrollment → payroll deduction line through `payslips.BenefitsSource`. Enrollment
+  windows are the three named TYPES (`open`/`new_hire`/`qualifying_event`) on the enrollment row
+  itself, not a separate window-definition table — none was asked for. The scheduler consumer
+  (`benefits.activate_pending_enrollments`, daily) flips a `pending` enrollment to `active` once
+  its `effective_date` arrives. Claims tracking remains explicitly out of scope; it lives with the
+  insurance provider.
 
 **Operations**
 

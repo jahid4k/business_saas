@@ -125,6 +125,27 @@ func (h *Handler) ComputeRun(c fiber.Ctx) error {
 	return response.OK(c, fiber.Map{"run": run}, "Payroll computed")
 }
 
+// PreviewRun godoc
+//
+//	@Summary		Dry-run a payroll computation
+//	@Description	Computes exactly what ComputeRun would and persists NOTHING — no payslips, no lines, no status change.
+//	@Description	Surfaces negative_net_count, which is the condition that blocks approval.
+//	@Description	**Required permission:** `hrm.payroll.preview`
+//	@Tags			HRM / Payroll
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			orgId	path		string	true	"Organization ID"
+//	@Param			runId	path		string	true	"Run public ID"
+//	@Success		200		{object}	response.OK{data=object{preview=RunPreview}}
+//	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/preview [post]
+func (h *Handler) PreviewRun(c fiber.Ctx) error {
+	orgID, ok := middleware.OrganizationIDFromCtx(c)
+	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	preview, err := h.service.PreviewRun(c.Context(), orgID, c.Params("runId"))
+	if err != nil { return h.err(c, err) }
+	return response.OK(c, fiber.Map{"preview": preview}, "Payroll preview computed")
+}
+
 // ApproveRun godoc
 //
 //	@Summary		Approve payroll run
@@ -266,6 +287,8 @@ func (h *Handler) err(c fiber.Ctx, err error) error {
 	case errors.Is(err, ErrWrongStatus): return response.Conflict(c, "WRONG_STATUS", "Action not allowed in current payroll run status")
 	case errors.Is(err, ErrAlreadyComputed): return response.Conflict(c, "ALREADY_COMPUTED", "Payslip run has already been computed")
 	case errors.Is(err, ErrNotComputed): return response.Conflict(c, "NOT_COMPUTED", "Payslip run must be computed before approving")
+	case errors.Is(err, ErrNegativeNetPay): return response.Conflict(c, "NEGATIVE_NET_PAY", err.Error())
+	case errors.Is(err, ErrInvalidRunType): return response.BadRequest(c, "INVALID_RUN_TYPE", err.Error())
 	case errors.Is(err, ErrNotApproved): return response.Conflict(c, "NOT_APPROVED", "Payslip run must be approved before marking as paid")
 	default: log.Error("payslips: error", slog.Any("error", err)); return response.InternalServerError(c)
 	}
