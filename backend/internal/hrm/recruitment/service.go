@@ -4,10 +4,12 @@ package recruitment
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
+	"github.com/mridha/businesssaas/internal/hrm/exits"
 )
 
 // Service defines business logic for the recruitment module. Composed of
@@ -48,10 +50,50 @@ type serviceImpl struct {
 	repo            Repository
 	approvalsSvc    approvals.Service
 	employeeCreator EmployeeCreator
+	rehireChecker   RehireChecker
 }
 
-func NewService(repo Repository, approvalsSvc approvals.Service, employeeCreator EmployeeCreator) Service {
-	return &serviceImpl{repo: repo, approvalsSvc: approvalsSvc, employeeCreator: employeeCreator}
+// NewService takes rehireChecker as a NIL-SAFE dependency: an install without
+// exit management still recruits, and a nil checker simply produces no
+// warning rather than failing candidate creation.
+func NewService(repo Repository, approvalsSvc approvals.Service, employeeCreator EmployeeCreator, rehireChecker RehireChecker) Service {
+	return &serviceImpl{
+		repo: repo, approvalsSvc: approvalsSvc,
+		employeeCreator: employeeCreator, rehireChecker: rehireChecker,
+	}
+}
+
+// RehireChecker is the minimal slice of exit management this package needs.
+//
+// Declared HERE, by the consumer, and naming exits' own result type so
+// exits.Service satisfies it structurally with no adapter — the corrected
+// certifications.SkillGranter precedent, also used for
+// assets.HandoverAcknowledger, expenses.ReimbursementCreator and
+// email.TicketRaiser. hrm/recruitment imports hrm/exits; never the reverse.
+type RehireChecker interface {
+	CheckRehireEligibility(ctx context.Context, orgID, email string) (*exits.RehireEligibility, error)
+}
+
+// attachRehireFlag looks up whether this candidate is a former employee the
+// org decided not to take back. Best-effort by design: a lookup failure must
+// not stop a recruiter creating a candidate, so it is logged and skipped.
+func (s *serviceImpl) attachRehireFlag(ctx context.Context, orgID string, c *Candidate) {
+	if s.rehireChecker == nil || c == nil || c.Email == nil {
+		return
+	}
+	re, err := s.rehireChecker.CheckRehireEligibility(ctx, orgID, *c.Email)
+	if err != nil {
+		slog.Warn("recruitment: rehire eligibility lookup failed",
+			slog.String("org_id", orgID), slog.Any("error", err))
+		return
+	}
+	// Only a negative decision is worth surfacing. Flagging every former
+	// employee as "eligible" would be noise a recruiter learns to ignore,
+	// and the one that matters would go unread with it.
+	if re == nil || re.Status == exits.RehireEligible {
+		return
+	}
+	c.RehireFlag = &RehireFlag{Status: string(re.Status), Reason: re.Reason}
 }
 
 // ============================================================

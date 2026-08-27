@@ -41,6 +41,10 @@ type Repository interface {
 	// pending/partially_recovered schedule row 'foreclosed' — those rows are
 	// never deleted, only stopped, preserving the amortization as history.
 	ForecloseLoan(ctx context.Context, orgID, loanID, foreclosedBy string, foreclosureAmount string) error
+	// OutstandingForEmployee reports every ACTIVE loan's remaining balance for
+	// one employee. Backs the F&F settlement, where a leaver's loan is closed
+	// out in full rather than left as installments nobody will collect.
+	OutstandingForEmployee(ctx context.Context, orgID, employeeID string) ([]*OutstandingLoan, error)
 }
 
 // RecoveryApplicationInput is the repository-layer shape of a recovery
@@ -322,4 +326,39 @@ func (r *repoImpl) ForecloseLoan(ctx context.Context, orgID, loanID, foreclosedB
 		return fmt.Errorf("loans: ForecloseLoan: close schedule: %w", err)
 	}
 	return tx.Commit(ctx)
+}
+
+// OutstandingForEmployee sums what remains on each of an employee's active
+// loans.
+//
+// The sum is over SCHEDULE rows, not the loan's principal: principal ignores
+// everything already repaid, and would charge a departing employee for money
+// they have handed back month after month. Only 'pending' and
+// 'partially_recovered' rows count — 'recovered' is settled and 'foreclosed'
+// was closed by an earlier settlement.
+func (r *repoImpl) OutstandingForEmployee(ctx context.Context, orgID, employeeID string) ([]*OutstandingLoan, error) {
+	const q = `
+		SELECT l.id::text, l.public_id, l.loan_type,
+		       COALESCE(SUM(s.total_amount - s.recovered_amount), 0)
+		  FROM hrm_loans l
+		  JOIN hrm_loan_schedules s ON s.loan_id = l.id
+		 WHERE l.org_id = $1 AND l.employee_id = $2::uuid AND l.status = 'active'
+		   AND s.status IN ('pending', 'partially_recovered')
+		 GROUP BY l.id, l.public_id, l.loan_type
+		HAVING COALESCE(SUM(s.total_amount - s.recovered_amount), 0) > 0
+		 ORDER BY l.created_at`
+	rows, err := r.db.Query(ctx, q, orgID, employeeID)
+	if err != nil {
+		return nil, fmt.Errorf("loans: OutstandingForEmployee: %w", err)
+	}
+	defer rows.Close()
+	out := make([]*OutstandingLoan, 0)
+	for rows.Next() {
+		o := &OutstandingLoan{}
+		if err := rows.Scan(&o.LoanID, &o.PublicID, &o.LoanType, &o.Outstanding); err != nil {
+			return nil, fmt.Errorf("loans: OutstandingForEmployee: scan: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }

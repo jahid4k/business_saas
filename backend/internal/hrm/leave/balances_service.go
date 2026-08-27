@@ -379,6 +379,19 @@ func (s *serviceImpl) PostAdjustment(ctx context.Context, orgID, employeeID, lea
 	return t, nil
 }
 
+// EncashmentsForSettlement satisfies exits.LeaveEncashmentSource. It reports
+// the days this package has recorded as encashed, per leave type, plus the
+// rate basis the policy configured — and stops there. Leave owns HOW MANY
+// days; the F&F settlement owns what a day is worth. Splitting it that way is
+// what keeps currency out of this package, which was Phase 2's decision #3.
+func (s *serviceImpl) EncashmentsForSettlement(ctx context.Context, orgID, employeeID string) ([]*EncashmentSummary, error) {
+	out, err := s.repo.SumEncashmentsByLeaveType(ctx, orgID, employeeID)
+	if err != nil {
+		return nil, fmt.Errorf("leave: EncashmentsForSettlement: %w", err)
+	}
+	return out, nil
+}
+
 // PostEncashment records days encashed only — it never computes a currency
 // amount (decision #3). encashment_rate_basis is stored config a future
 // F&F phase reads; this phase does not evaluate it.

@@ -42,6 +42,10 @@ compose.md
 # Go
 # ----------------------------------------------------------
 backend/vendor/
+# The compiled server binary. `go build ./cmd/server/` writes ./server into
+# backend/ — 39MB, and the *.exe rules above only cover Windows. Build with
+# `go build -o /dev/null ./...` to avoid producing it at all.
+backend/server
 backend/*.exe
 backend/*.exe~
 backend/*.dll

@@ -9,9 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
-	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 )
 
 // ContactCreator is the subset of contacts.Service needed by lead conversion.
@@ -120,7 +120,7 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 				if req.CaptureSource != nil {
 					source = *req.CaptureSource
 				}
-				
+
 				noteReq := engagement.CreateNoteRequest{
 					RelatedType: "lead",
 					RelatedID:   existing.ID,
@@ -163,7 +163,7 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 		Source:          req.Source,
 		Status:          LeadStatusNew,
 		OwnerID:         ownerID,
-		CreatedBy:       userID,
+		CreatedBy:       nullableActor(userID),
 		CustomFields:    req.CustomFields,
 		CaptureSource:   req.CaptureSource,
 		CaptureMetadata: req.CaptureMetadata,
@@ -306,4 +306,14 @@ func (s *serviceImpl) GetLeadsBySource(ctx context.Context, orgID string) ([]*Le
 		result = []*LeadsBySource{}
 	}
 	return result, nil
+}
+
+// nullableActor maps the system caller (an empty userID, used by every
+// internal/capture/* path) to NULL rather than to the empty string, which is
+// not a uuid and cannot be stored in created_by. See migration 00112.
+func nullableActor(userID string) *string {
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	return &userID
 }

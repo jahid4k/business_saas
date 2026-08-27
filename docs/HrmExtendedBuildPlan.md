@@ -420,6 +420,24 @@ manual verification, enrollment → payroll deduction line. **Claims tracking ou
 
 ## PHASE 8 — Operations: Assets, Travel & Expense, Helpdesk
 
+> **Status: ✅ COMPLETE — all 4 slices shipped, all uncommitted.**
+> 8A Assets ✅ (r29, `internal/hrm/assets`, migrations `00106`/`00107`) ·
+> 8B Travel & Expense ✅ (r30, `internal/hrm/expenses`, `00108`/`00109`) ·
+> 8C Helpdesk core ✅ (r31, `internal/platform/tickets`, `00110`/`00111`) ·
+> 8D Knowledge base + email-to-ticket ✅ (r32, `internal/platform/kb`, `00112`/`00113`).
+>
+> ⚠ 8D found and fixed a live production defect BEFORE writing any code: every system-originated
+> lead capture (email, social, visitors) had been failing, because `crm_leads.created_by` was
+> `NOT NULL` and all three pass an empty userID. It surfaced only because the "lead capture still
+> works" regression test this phase mandates was written first and could not be made to pass. See
+> r32.
+>
+> The architectural fork below is **decided: platform.** See r31 and Section 5 → PLATFORM —
+> TICKETS in `Project_Instruction.md`. The `ticket_audience` discriminator suggested here was
+> not built as such — `requester_type` (FK-free, `CHECK IN ('employee')`) plays that role, matching
+> the `platform_checklist_instances.subject_type` / `platform_form_instances.subject_type`
+> precedent already twice established in this codebase.
+
 **Asset Management** — categories with `requires_return`, instances, **assignment history
 where current holder is a derived query, never a stored column**, maintenance log, requests,
 software license seats as a separate shape. Depreciation is a book-value stub; real fixed-asset
@@ -431,16 +449,46 @@ effective-dated mileage rates, advances settled against claims with all three ou
 Multi-currency columns are mandatory here regardless of Phase 11. OCR: nullable column, manual
 entry, vendor later.
 
-**HR Helpdesk** — ⚠️ **architectural fork to decide before starting:** this has the same data
-shape as the customer-facing Ticketing/Helpdesk in the CRM list. Build it in
-`internal/platform/tickets/` with a `ticket_audience` discriminator, or build it inside HRM and
-duplicate later. **Recommendation: platform.** Distinct from `hrm_complaints` (disciplinary,
-legal weight) with a one-way convert path. SLA clock must be pausable. `is_internal` comments
-filtered at repository layer. Email-to-ticket reuses the capture inbound-email pipeline.
+**HR Helpdesk** — ✅ core shipped r31 in `internal/platform/tickets/`, the recommended location.
+The pausable SLA clock is an append-only `platform_ticket_sla_events` ledger, not a counter, so a
+ticket paused and resumed several times can be audited rather than merely totalled. `is_internal`
+comments are filtered at the repository layer via two separate read methods, so the requester's
+path never has an internal comment in scope. The `hrm_complaints` convert path is one-way and
+initiated from the HRM side (`hrm → platform` is the allowed direction); `MarkConverted` is built
+and tested but has **no HRM-side caller yet**. Email-to-ticket remains open — Slice 8D — and is
+the riskiest change in this phase, since `internal/capture/email` hardcodes lead creation.
 
 ---
 
 ## PHASE 9 — Exit Management
+
+> **Status: 2 of 3 slices shipped, uncommitted.**
+> 9A Exit umbrella + clearance + rehire ✅ (r33, `internal/hrm/exits`, migrations `00114`/`00115`) ·
+> 9B F&F settlement + gratuity ✅ COMPLETE (r34 core, r35 the three cross-module sources) ·
+> 9C Exit interviews + documents + access revocation ⏳ not started (`00118`/`00119`).
+>
+> ⚠ **F&F turned out to be the ADDS-ON integration shape, NOT the REPLACES shape** the plan
+> assumed. Bonus replaces the salary computation because a bonus run must not pay salary; an F&F
+> run MUST pay prorated final salary. See r34.
+>
+> ✅ **All F&F sources are wired** (r35): leave encashment (priced from `encashment_rate_basis`,
+> a Phase 2 column that finally has its reader), loan foreclosure (full outstanding, with the
+> ordinary per-installment recovery SKIPPED for `fnf` runs so the due installment is not charged
+> twice) and travel-advance recovery (same-currency only — no FX table exists, so a foreign advance
+> is reported rather than converted at a guessed rate).
+>
+> Three decisions taken during planning, all confirmed with the user:
+> **(1)** `payslips.ApproveRun`'s negative-net guard becomes RUN-TYPE-AWARE in 9B — negative net is
+> valid for `run_type='fnf'` only, and the guard stays exactly as-is for every other run type.
+> **(2)** Gratuity is built in 9B; the **training bond is deliberately NOT built** — it has no
+> Phase 6 substrate (no course cost, no agreement record), so building it means inventing a
+> Learning feature inside an Exit phase.
+> **(3)** Access revocation is a scheduler sweep that suspends `organization_members.status` AND
+> revokes sessions on last working date.
+>
+> ⚠ `hrm_notice_periods` below was NOT built as its own table — `hrm_resignations` already carries
+> `notice_period_days`, `is_notice_waived` and `last_working_date`, and a second table holding the
+> same facts is a second source of truth. Only the SHORTFALL was new. See r33.
 
 Pulls from seven modules — this is the architectural stress test for everything above.
 

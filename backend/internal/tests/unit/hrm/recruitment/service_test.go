@@ -827,14 +827,18 @@ var _ recruitment.EmployeeCreator = (*stubEmployeeCreator)(nil)
 
 const testOrg = "org_1"
 
+// newTestSvc passes a nil RehireChecker deliberately: it is a nil-safe
+// dependency, and these tests are about the recruitment pipeline rather than
+// the exit-management seam. Candidate creation must work identically with no
+// checker wired — see TestCreateCandidate_NilRehireCheckerIsSafe.
 func newTestSvc(appSvc approvals.Service) (recruitment.Service, *stubRepo) {
 	repo := newStubRepo()
-	return recruitment.NewService(repo, appSvc, &stubEmployeeCreator{}), repo
+	return recruitment.NewService(repo, appSvc, &stubEmployeeCreator{}, nil), repo
 }
 
 func newTestSvcWithEmployeeCreator(appSvc approvals.Service, ec recruitment.EmployeeCreator) (recruitment.Service, *stubRepo) {
 	repo := newStubRepo()
-	return recruitment.NewService(repo, appSvc, ec), repo
+	return recruitment.NewService(repo, appSvc, ec, nil), repo
 }
 
 func seedPipelineWithStages(t *testing.T, repo *stubRepo, kinds ...recruitment.StageKind) (*recruitment.Pipeline, []*recruitment.Stage) {
@@ -961,6 +965,23 @@ func TestCreateCandidate_DuplicateEmail_CaseInsensitive(t *testing.T) {
 	_, err = svc.CreateCandidate(ctx, testOrg, nil, recruitment.CreateCandidateRequest{FirstName: "Jane2", Email: &dup})
 	if !errors.Is(err, recruitment.ErrCandidateEmailExists) {
 		t.Fatalf("expected ErrCandidateEmailExists for a case-different duplicate, got %v", err)
+	}
+}
+
+// TestCreateCandidate_NilRehireCheckerIsSafe pins the nil-safety the wiring
+// depends on: an install without exit management still recruits. A nil
+// checker must produce no flag rather than a nil-pointer panic inside
+// candidate creation.
+func TestCreateCandidate_NilRehireCheckerIsSafe(t *testing.T) {
+	svc, _ := newTestSvc(nil) // nil RehireChecker
+	email := "someone@example.com"
+	c, err := svc.CreateCandidate(context.Background(), testOrg, nil,
+		recruitment.CreateCandidateRequest{FirstName: "Alice", Email: &email})
+	if err != nil {
+		t.Fatalf("CreateCandidate with a nil rehire checker: %v", err)
+	}
+	if c.RehireFlag != nil {
+		t.Errorf("a nil checker produced a flag: %+v", c.RehireFlag)
 	}
 }
 

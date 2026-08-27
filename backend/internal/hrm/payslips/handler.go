@@ -20,6 +20,7 @@ type Handler struct {
 	authz         authz.Service
 	scopeResolver *scope.Resolver
 }
+
 func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
 	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
 }
@@ -39,9 +40,14 @@ func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Re
 func (h *Handler) ListRuns(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.ListRuns(c.Context(), orgID)
-	if err != nil { log.Error("payslips: ListRuns", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("payslips: ListRuns", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -66,13 +72,21 @@ func (h *Handler) ListRuns(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs [post]
 func (h *Handler) CreateRun(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateRunRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	run, err := h.service.CreateRun(c.Context(), orgID, userID, req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.Created(c, fiber.Map{"run": run}, "Payslip run created")
 }
 
@@ -88,9 +102,13 @@ func (h *Handler) CreateRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId} [get]
 func (h *Handler) GetRun(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	run, err := h.service.GetRun(c.Context(), orgID, c.Params("runId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"run": run}, "OK")
 }
 
@@ -117,11 +135,17 @@ func (h *Handler) GetRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/compute [post]
 func (h *Handler) ComputeRun(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	run, err := h.service.ComputeRun(c.Context(), orgID, c.Params("runId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"run": run}, "Payroll computed")
 }
 
@@ -140,9 +164,13 @@ func (h *Handler) ComputeRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/preview [post]
 func (h *Handler) PreviewRun(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	preview, err := h.service.PreviewRun(c.Context(), orgID, c.Params("runId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"preview": preview}, "Payroll preview computed")
 }
 
@@ -161,11 +189,17 @@ func (h *Handler) PreviewRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/approve [post]
 func (h *Handler) ApproveRun(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	run, err := h.service.ApproveRun(c.Context(), orgID, c.Params("runId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"run": run}, "Payroll run approved")
 }
 
@@ -184,11 +218,17 @@ func (h *Handler) ApproveRun(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/pay [post]
 func (h *Handler) MarkPaid(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	run, err := h.service.MarkPaid(c.Context(), orgID, c.Params("runId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"run": run}, "Payroll marked as paid")
 }
 
@@ -204,9 +244,13 @@ func (h *Handler) MarkPaid(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/payroll/runs/{runId}/cancel [post]
 func (h *Handler) CancelRun(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	run, err := h.service.CancelRun(c.Context(), orgID, c.Params("runId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"run": run}, "Payroll run cancelled")
 }
 
@@ -227,21 +271,35 @@ func (h *Handler) CancelRun(c fiber.Ctx) error {
 func (h *Handler) ListPayslips(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.payroll")
-	if err != nil { log.Error("payslips: ListPayslips", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("payslips: ListPayslips", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	filter := SlipListFilter{
 		RunID:        c.Query("run_id"),
 		EmployeeID:   c.Query("employee_id"),
 		Scope:        scopeTier,
 		CallerUserID: userID,
 	}
-	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil { filter.Limit = limit }
-	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil { filter.Offset = offset }
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil {
+		filter.Limit = limit
+	}
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil {
+		filter.Offset = offset
+	}
 	res, err := h.service.ListPayslips(c.Context(), orgID, filter)
-	if err != nil { log.Error("payslips: ListPayslips", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("payslips: ListPayslips", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -261,35 +319,73 @@ func (h *Handler) ListPayslips(c fiber.Ctx) error {
 func (h *Handler) GetPayslip(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	p, err := h.service.GetPayslip(c.Context(), orgID, c.Params("payslipId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.payroll")
-	if err != nil { log.Error("payslips: GetPayslip", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("payslips: GetPayslip", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, p.EmployeeID)
-	if err != nil { log.Error("payslips: GetPayslip", slog.Any("error", err)); return response.InternalServerError(c) }
-	if !allowed { return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record") }
+	if err != nil {
+		log.Error("payslips: GetPayslip", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
+	}
 	return response.OK(c, fiber.Map{"payslip": p}, "OK")
 }
 
 func (h *Handler) err(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrNotFound): return response.NotFound(c, "RUN_NOT_FOUND", "Payslip run not found")
-	case errors.Is(err, ErrPayslipNotFound): return response.NotFound(c, "PAYSLIP_NOT_FOUND", "Payslip not found")
-	case errors.Is(err, ErrYearRequired): return response.BadRequest(c, "YEAR_REQUIRED", "year is required")
-	case errors.Is(err, ErrMonthRequired): return response.BadRequest(c, "MONTH_REQUIRED", "month is required (1-12)")
-	case errors.Is(err, ErrInvalidMonth): return response.BadRequest(c, "INVALID_MONTH", "month must be between 1 and 12")
-	case errors.Is(err, ErrDuplicateRun): return response.Conflict(c, "DUPLICATE_RUN", "A payslip run already exists for this period")
-	case errors.Is(err, ErrAttendanceNotFinalized): return response.Conflict(c, "ATTENDANCE_NOT_FINALIZED", "The linked attendance period must be finalized before computing payroll")
-	case errors.Is(err, ErrWrongStatus): return response.Conflict(c, "WRONG_STATUS", "Action not allowed in current payroll run status")
-	case errors.Is(err, ErrAlreadyComputed): return response.Conflict(c, "ALREADY_COMPUTED", "Payslip run has already been computed")
-	case errors.Is(err, ErrNotComputed): return response.Conflict(c, "NOT_COMPUTED", "Payslip run must be computed before approving")
-	case errors.Is(err, ErrNegativeNetPay): return response.Conflict(c, "NEGATIVE_NET_PAY", err.Error())
-	case errors.Is(err, ErrInvalidRunType): return response.BadRequest(c, "INVALID_RUN_TYPE", err.Error())
-	case errors.Is(err, ErrNotApproved): return response.Conflict(c, "NOT_APPROVED", "Payslip run must be approved before marking as paid")
-	default: log.Error("payslips: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrNotFound):
+		return response.NotFound(c, "RUN_NOT_FOUND", "Payslip run not found")
+	case errors.Is(err, ErrPayslipNotFound):
+		return response.NotFound(c, "PAYSLIP_NOT_FOUND", "Payslip not found")
+	case errors.Is(err, ErrYearRequired):
+		return response.BadRequest(c, "YEAR_REQUIRED", "year is required")
+	case errors.Is(err, ErrMonthRequired):
+		return response.BadRequest(c, "MONTH_REQUIRED", "month is required (1-12)")
+	case errors.Is(err, ErrInvalidMonth):
+		return response.BadRequest(c, "INVALID_MONTH", "month must be between 1 and 12")
+	case errors.Is(err, ErrDuplicateRun):
+		return response.Conflict(c, "DUPLICATE_RUN", "A payslip run already exists for this period")
+	case errors.Is(err, ErrAttendanceNotFinalized):
+		return response.Conflict(c, "ATTENDANCE_NOT_FINALIZED", "The linked attendance period must be finalized before computing payroll")
+	case errors.Is(err, ErrWrongStatus):
+		return response.Conflict(c, "WRONG_STATUS", "Action not allowed in current payroll run status")
+	case errors.Is(err, ErrAlreadyComputed):
+		return response.Conflict(c, "ALREADY_COMPUTED", "Payslip run has already been computed")
+	case errors.Is(err, ErrNotComputed):
+		return response.Conflict(c, "NOT_COMPUTED", "Payslip run must be computed before approving")
+	case errors.Is(err, ErrNegativeNetPay):
+		return response.Conflict(c, "NEGATIVE_NET_PAY", err.Error())
+	case errors.Is(err, ErrClearancePending):
+		return response.Conflict(c, "CLEARANCE_PENDING",
+			"Clearance is incomplete: resolve all blocking items before approving the settlement")
+	case errors.Is(err, ErrNoExitForFnFRun):
+		return response.BadRequest(c, "NO_EXIT_FOR_FNF_RUN",
+			"This full & final run has no exit record attached")
+	case errors.Is(err, ErrFnFEmployeeNotFound):
+		return response.NotFound(c, "FNF_EMPLOYEE_NOT_FOUND",
+			"The employee this settlement names was not found")
+	case errors.Is(err, ErrInvalidRunType):
+		return response.BadRequest(c, "INVALID_RUN_TYPE", err.Error())
+	case errors.Is(err, ErrNotApproved):
+		return response.Conflict(c, "NOT_APPROVED", "Payslip run must be approved before marking as paid")
+	default:
+		log.Error("payslips: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }

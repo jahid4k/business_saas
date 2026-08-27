@@ -63,6 +63,20 @@ type Loan struct {
 	UpdatedAt          time.Time        `db:"updated_at"             json:"updated_at"`
 }
 
+// OutstandingLoan is one active loan's remaining balance, for the F&F
+// settlement to foreclose.
+//
+// Outstanding is SUM(total_amount - recovered_amount) over schedule rows still
+// pending or partially recovered — NOT principal_amount, which ignores
+// everything already repaid, and not the installment amount, which is only
+// one month of it.
+type OutstandingLoan struct {
+	LoanID      string          `json:"loan_id"`
+	PublicID    string          `json:"public_id"`
+	LoanType    LoanType        `json:"loan_type"`
+	Outstanding decimal.Decimal `json:"outstanding"`
+}
+
 type CreateLoanRequest struct {
 	EmployeeID      string `json:"employee_id"`
 	LoanType        string `json:"loan_type"`

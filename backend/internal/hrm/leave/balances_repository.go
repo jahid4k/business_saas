@@ -35,6 +35,10 @@ type BalanceRepository interface {
 
 	// Transactions (ledger)
 	SumTransactionsSince(ctx context.Context, orgID, employeeID, leaveTypeID string, sinceDate *string) (float64, error)
+	// SumEncashmentsByLeaveType totals every encashment this employee has had
+	// recorded, grouped by leave type, with each type's rate basis. Backs the
+	// F&F settlement, which prices days this package has only ever counted.
+	SumEncashmentsByLeaveType(ctx context.Context, orgID, employeeID string) ([]*EncashmentSummary, error)
 	SumTransactionsByType(ctx context.Context, orgID, employeeID, leaveTypeID string, sinceDate *string, throughDate string) (*PeriodTransactionSums, error)
 	FindTransactions(ctx context.Context, orgID, employeeID string, filter TransactionFilter) ([]*LeaveTransaction, error)
 	CountTransactions(ctx context.Context, orgID, employeeID string, filter TransactionFilter) (int, error)
@@ -437,4 +441,37 @@ func (r *repoImpl) FindApprovedRequestsWithoutUsageEntry(ctx context.Context, or
 		list = append(list, lr)
 	}
 	return list, rows.Err()
+}
+
+// SumEncashmentsByLeaveType totals recorded encashment days per leave type.
+//
+// Encashment rows are stored with NEGATIVE days (they reduce the balance), so
+// the sum is negated to give the positive day count F&F pays for. Reading the
+// sign wrong here would turn a credit into a debit on somebody's final
+// settlement.
+func (r *repoImpl) SumEncashmentsByLeaveType(ctx context.Context, orgID, employeeID string) ([]*EncashmentSummary, error) {
+	const q = `
+		SELECT t.leave_type_id::text, lt.name, -SUM(t.days), p.encashment_rate_basis
+		  FROM hrm_leave_transactions t
+		  JOIN hrm_leave_types lt ON lt.id = t.leave_type_id
+		  LEFT JOIN hrm_leave_policies p
+		         ON p.leave_type_id = t.leave_type_id AND p.org_id = t.org_id AND p.is_active = TRUE
+		 WHERE t.org_id = $1 AND t.employee_id = $2 AND t.transaction_type = 'encashment'
+		 GROUP BY t.leave_type_id, lt.name, p.encashment_rate_basis
+		HAVING -SUM(t.days) > 0
+		 ORDER BY lt.name`
+	rows, err := r.db.Query(ctx, q, orgID, employeeID)
+	if err != nil {
+		return nil, fmt.Errorf("leave: SumEncashmentsByLeaveType: %w", err)
+	}
+	defer rows.Close()
+	out := make([]*EncashmentSummary, 0)
+	for rows.Next() {
+		e := &EncashmentSummary{}
+		if err := rows.Scan(&e.LeaveTypeID, &e.LeaveTypeName, &e.Days, &e.RateBasis); err != nil {
+			return nil, fmt.Errorf("leave: SumEncashmentsByLeaveType: scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

@@ -35,6 +35,13 @@ type Service interface {
 	ListSchedule(ctx context.Context, orgID, ref string) ([]*ScheduleRow, error)
 	ForecloseLoan(ctx context.Context, orgID, ref, foreclosedBy string, req ForecloseLoanRequest) (*Loan, error)
 
+	// OutstandingLoansForEmployee and ForecloseForSettlement satisfy
+	// exits.LoanSettlementSource. Declared on the interface so main.go can
+	// pass this service where that source is wanted — satisfaction is
+	// structural, so both must be visible here and not only on serviceImpl.
+	OutstandingLoansForEmployee(ctx context.Context, orgID, employeeID string) ([]*OutstandingLoan, error)
+	ForecloseForSettlement(ctx context.Context, orgID, loanID, foreclosedBy string, amount decimal.Decimal) error
+
 	// PendingInstallmentsForEmployee and RecordRecoveries satisfy
 	// payslips.LoanSource structurally. See that interface's doc comment in
 	// hrm/payslips/model.go for why loans imports payslips and not the
@@ -255,6 +262,32 @@ func (s *serviceImpl) ForecloseLoan(ctx context.Context, orgID, ref, foreclosedB
 		return nil, fmt.Errorf("loans: ForecloseLoan: %w", err)
 	}
 	return s.repo.FindLoanByRef(ctx, orgID, ref)
+}
+
+// OutstandingLoansForEmployee and ForecloseForSettlement satisfy
+// exits.LoanSettlementSource.
+//
+// ForecloseForSettlement exists separately from ForecloseLoan because the
+// caller is different in kind: ForecloseLoan takes an amount from a request
+// body, which is right when a human decides to settle a loan early. A
+// settlement must never trust a supplied figure — it computes the outstanding
+// itself and forecloses exactly that.
+func (s *serviceImpl) OutstandingLoansForEmployee(ctx context.Context, orgID, employeeID string) ([]*OutstandingLoan, error) {
+	out, err := s.repo.OutstandingForEmployee(ctx, orgID, employeeID)
+	if err != nil {
+		return nil, fmt.Errorf("loans: OutstandingLoansForEmployee: %w", err)
+	}
+	return out, nil
+}
+
+func (s *serviceImpl) ForecloseForSettlement(ctx context.Context, orgID, loanID, foreclosedBy string, amount decimal.Decimal) error {
+	if amount.IsNegative() {
+		return ErrInvalidAmount
+	}
+	if err := s.repo.ForecloseLoan(ctx, orgID, loanID, foreclosedBy, amount.String()); err != nil {
+		return fmt.Errorf("loans: ForecloseForSettlement: %w", err)
+	}
+	return nil
 }
 
 func (s *serviceImpl) PendingInstallmentsForEmployee(ctx context.Context, orgID, employeeID string, year, month int) ([]payslips.PendingInstallment, error) {

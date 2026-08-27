@@ -145,7 +145,10 @@ func (m *mockPayslipsRepo) LoadPayslipLines(ctx context.Context, payslipID strin
 
 func TestPayslipsService(t *testing.T) {
 	repo := newMockPayslipsRepo()
-	svc := payslips.NewService(repo, nil, nil, nil, nil, nil, nil)
+	// Every source is nil, which is the contract: all six are nil-safe, and a
+	// deployment missing any of them computes without those lines rather than
+	// panicking. The trailing nil is the 9B FnFSource.
+	svc := payslips.NewService(repo, nil, nil, nil, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	orgID := "org1"

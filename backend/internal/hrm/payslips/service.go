@@ -13,6 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/expr-lang/expr"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
@@ -50,17 +51,23 @@ type serviceImpl struct {
 	reimbursementSource ReimbursementSource
 	statutorySource     StatutorySource
 	benefitsSource      BenefitsSource
+	// fnfSource feeds a run_type='fnf' run its exit-specific credits and
+	// debits, and tells it WHICH employee is being settled. Nil is valid —
+	// see FnFSource's doc comment in model.go.
+	fnfSource FnFSource
 }
 
 func NewService(
 	repo Repository, db *pgxpool.Pool,
 	bonusSource BonusSource, loanSource LoanSource, reimbursementSource ReimbursementSource,
 	statutorySource StatutorySource, benefitsSource BenefitsSource,
+	fnfSource FnFSource,
 ) Service {
 	return &serviceImpl{
 		repo: repo, db: db, bonusSource: bonusSource,
 		statutorySource: statutorySource, benefitsSource: benefitsSource,
 		loanSource: loanSource, reimbursementSource: reimbursementSource,
+		fnfSource: fnfSource,
 	}
 }
 
@@ -181,6 +188,7 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 	var paidBonusLines []PaidBonusLine
 	var recoveryApplications []RecoveryApplication
 	var paidReimbursementLines []PaidReimbursementLine
+	var appliedSettlementLines []AppliedSettlementLine
 	for _, res := range results {
 		if err := s.repo.CreatePayslip(ctx, res.Slip); err != nil {
 			return nil, s.abortCompute(ctx, run,
@@ -217,6 +225,12 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 					ReimbursementID: l.sourceReimbursementID, LineID: l.ID,
 				})
 			}
+			if l.sourceSettlementType != "" {
+				appliedSettlementLines = append(appliedSettlementLines, AppliedSettlementLine{
+					SourceType: l.sourceSettlementType, SourceID: l.sourceSettlementID,
+					LineID: l.ID, Amount: l.ComputedAmount,
+				})
+			}
 		}
 		totalGross = totalGross.Add(res.Slip.GrossPay)
 		totalDeductions = totalDeductions.Add(res.Slip.TotalDeductions)
@@ -244,6 +258,15 @@ func (s *serviceImpl) ComputeRun(ctx context.Context, orgID, ref, computedBy str
 		if err := s.reimbursementSource.MarkReimbursementsPaid(ctx, run.ID, paidReimbursementLines); err != nil {
 			return nil, s.abortCompute(ctx, run,
 				fmt.Errorf("payslips: ComputeRun: mark reimbursements paid: %w", err))
+		}
+	}
+	// Same all-or-nothing discipline: a loan marked foreclosed or an advance
+	// marked recovered with no payslip behind it is money written off that
+	// nobody ever collected.
+	if len(appliedSettlementLines) > 0 && s.fnfSource != nil {
+		if err := s.fnfSource.MarkSettled(ctx, run.ID, appliedSettlementLines); err != nil {
+			return nil, s.abortCompute(ctx, run,
+				fmt.Errorf("payslips: ComputeRun: mark settlement applied: %w", err))
 		}
 	}
 
@@ -392,6 +415,18 @@ type computedPayslip struct {
 // compute share this exact arithmetic, so a preview cannot disagree with what
 // approval would later commit. Duplicating the calculation for a "preview
 // mode" would have created two engines that drift.
+// empRow is one employee's payroll inputs. Package-level rather than local to
+// computePayslips because the F&F path (loadFnFEmployee) produces the same
+// shape by a different query, and the per-employee computation downstream must
+// not be able to tell which produced it.
+type empRow struct {
+	ID            string
+	HireDate      string
+	StructureID   *string
+	StructureName *string
+	BasicPay      decimal.Decimal
+}
+
 func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *PayslipRun) ([]computedPayslip, error) {
 	// A bonus run pays ONLY approved bonuses for its period — running the
 	// normal salary-structure computation here would double-pay everyone's
@@ -405,14 +440,8 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 	var roundingMode string = "half_up"
 	_ = s.db.QueryRow(ctx, `SELECT money_rounding_scale, money_rounding_mode FROM organizations WHERE id=$1::uuid`, orgID).Scan(&roundingScale, &roundingMode)
 
-	// Load active employees
-	type empRow struct {
-		ID            string
-		HireDate      string
-		StructureID   *string
-		StructureName *string
-		BasicPay      decimal.Decimal
-	}
+	// Load active employees (empRow is package-level — see its declaration —
+	// so the F&F path can produce the same shape).
 	// Who gets paid.
 	//
 	// This filter previously read `e.status IN ('active','resigned')`, which was
@@ -462,6 +491,40 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 			continue
 		}
 		employees = append(employees, e)
+	}
+
+	// ── F&F: narrow the employee set to the one leaver being settled ──
+	//
+	// An F&F run settles ONE person, and it must ignore the org-wide
+	// eligibility filter above entirely. That filter pays a terminated
+	// employee only when their termination_date falls on or after the period
+	// start — which is exactly the person an F&F run exists to pay, months
+	// after they left. Running the filter for a settlement would silently
+	// produce an empty run.
+	//
+	// Everything after this point is unchanged: the ordinary per-employee
+	// computation gives the leaver their prorated final salary, statutory
+	// deductions, benefits and reimbursements, and the settlement's own
+	// credits and debits are appended alongside — the ADDS-ON shape loans and
+	// reimbursements already use, NOT the REPLACES shape bonus uses.
+	var fnfSettlement *FnFSettlement
+	if run.RunType == RunTypeFnF {
+		if s.fnfSource == nil {
+			// No exit engine wired — an F&F run computes to nothing rather
+			// than panicking. See FnFSource's doc comment in model.go.
+			return nil, nil
+		}
+		fnfSettlement, err = s.fnfSource.SettlementForRun(ctx, orgID, run.ID)
+		if err != nil {
+			return nil, fmt.Errorf("payslips: computePayslips: fnf settlement: %w", err)
+		}
+		if fnfSettlement == nil {
+			return nil, ErrNoExitForFnFRun
+		}
+		employees, err = s.loadFnFEmployee(ctx, orgID, run, fnfSettlement.EmployeeID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	results := make([]computedPayslip, 0, len(employees))
@@ -781,8 +844,14 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 		// remaining headroom). A shortfall is simply not recovered this
 		// run — the schedule row (hrm/loans) stays partially_recovered and
 		// is picked up again next run, never written off silently.
+		// ⚠ SKIPPED for an F&F run. A settlement forecloses the whole
+		// outstanding balance as a single line (see FnFSource), and running
+		// this as well would charge the installment due this period TWICE —
+		// once here and once inside that balance. The headroom cap below is
+		// also wrong for a settlement: it exists to stop recovery driving net
+		// negative, which is precisely what an F&F run is allowed to do.
 		loanRecoveryTotal := decimal.Zero
-		if s.loanSource != nil {
+		if s.loanSource != nil && run.RunType != RunTypeFnF {
 			pending, err := s.loanSource.PendingInstallmentsForEmployee(ctx, orgID, emp.ID, run.PeriodYear, run.PeriodMonth)
 			if err != nil {
 				return nil, fmt.Errorf("payslips: computePayslips: loan installments for employee %s: %w", emp.ID, err)
@@ -808,6 +877,42 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 			}
 		}
 
+		// ── F&F settlement lines ──
+		//
+		// Appended alongside loan recovery and reimbursements, in the same
+		// additive shape, so a settlement is an ordinary payslip with extra
+		// lines rather than a parallel calculator. Credits raise gross,
+		// debits raise deductions, and BOTH are stored positive — direction
+		// lives on the line's own type, never on the sign of the amount.
+		fnfCreditTotal, fnfDebitTotal := decimal.Zero, decimal.Zero
+		if fnfSettlement != nil {
+			for _, sl := range fnfSettlement.Lines {
+				if sl.Amount.IsZero() {
+					// A zero line is noise on a document somebody has to read
+					// and possibly dispute. Skipping it is not hiding
+					// anything: hrm_exit_settlement_lines still records that
+					// the source was evaluated and came to nothing.
+					continue
+				}
+				lineType, componentType := LineDeduction, "deduction"
+				if sl.IsCredit {
+					lineType, componentType = LineEarning, "earning"
+					fnfCreditTotal = fnfCreditTotal.Add(sl.Amount)
+				} else {
+					fnfDebitTotal = fnfDebitTotal.Add(sl.Amount)
+				}
+				line := &PayslipLine{
+					OrgID: orgID, ComponentName: sl.Description, ComponentType: componentType,
+					CalcMethod: "manual", ComputedAmount: sl.Amount,
+					LineType: lineType, DisplayOrder: len(lines) + 1,
+				}
+				line.sourceSettlementType = sl.SourceType
+				line.sourceSettlementID = sl.SourceID
+				lines = append(lines, line)
+			}
+			gross = gross.Add(fnfCreditTotal)
+		}
+
 		// The true net, negative or not. Clamping this to zero was the worst of
 		// the three defects: deductions exceeding gross produced a payslip
 		// reporting net = 0 whose own line items did not add up, with nothing
@@ -816,8 +921,14 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 		// (Loan recovery above already keeps this run's OWN contribution from
 		// causing that; a negative net from ordinary salary-structure
 		// deductions alone is still exactly the case the guard exists for.)
-		totalDeductions := deductions.Add(loanRecoveryTotal)
-		netPay := gross.Sub(deductions).Add(reimbursementTotal).Sub(loanRecoveryTotal)
+		// fnfDebitTotal is NOT capped against available credits, unlike loan
+		// recovery above. That is the point of an F&F run: what a leaver owes
+		// can legitimately exceed what they are due, and the negative net
+		// that results is a receivable to collect, not a data problem to
+		// suppress. ApproveRun permits a negative net for run_type='fnf' and
+		// for no other run type.
+		totalDeductions := deductions.Add(loanRecoveryTotal).Add(fnfDebitTotal)
+		netPay := gross.Sub(deductions).Add(reimbursementTotal).Sub(loanRecoveryTotal).Sub(fnfDebitTotal)
 
 		// Create payslip
 		slip := &Payslip{
@@ -848,6 +959,38 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 // pending that engine, not a placeholder silently pretending otherwise —
 // exactly the distinction r25's negative-net fix drew between a real
 // zero and a masked one.
+// loadFnFEmployee loads the single leaver an F&F run settles, BY ID and
+// without the org-wide eligibility filter.
+//
+// The SELECT list mirrors the eligibility query exactly — same salary-record
+// LATERAL, same COALESCE — so the per-employee computation downstream cannot
+// tell which path produced its input. What it deliberately omits is the
+// status/termination_date predicate: a settlement is run for somebody who has
+// already left, which that predicate exists to exclude from ordinary payroll.
+func (s *serviceImpl) loadFnFEmployee(ctx context.Context, orgID string, run *PayslipRun, employeeID string) ([]empRow, error) {
+	var e empRow
+	err := s.db.QueryRow(ctx,
+		`SELECT e.id::text, COALESCE(to_char(e.hire_date,'YYYY-MM-DD'),''),
+		 es.structure_id::text, ess.name, COALESCE(es.basic_pay,0)
+		 FROM hrm_employees e
+		 LEFT JOIN LATERAL (
+		     SELECT structure_id, basic_pay FROM hrm_employee_salary_records
+		     WHERE employee_id=e.id AND effective_date <= make_date($3,$4,1)
+		     ORDER BY effective_date DESC LIMIT 1
+		 ) es ON TRUE
+		 LEFT JOIN hrm_salary_structures ess ON ess.id=es.structure_id
+		 WHERE e.org_id=$1 AND e.id=$2::uuid`,
+		orgID, employeeID, run.PeriodYear, run.PeriodMonth,
+	).Scan(&e.ID, &e.HireDate, &e.StructureID, &e.StructureName, &e.BasicPay)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrFnFEmployeeNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("payslips: loadFnFEmployee: %w", err)
+	}
+	return []empRow{e}, nil
+}
+
 func (s *serviceImpl) computeBonusPayslips(ctx context.Context, orgID string, run *PayslipRun) ([]computedPayslip, error) {
 	if s.bonusSource == nil {
 		// No bonus engine wired — a bonus run computes to nothing, not a
@@ -1034,8 +1177,31 @@ func (s *serviceImpl) ApproveRun(ctx context.Context, orgID, ref, approvedBy str
 	if err != nil {
 		return nil, fmt.Errorf("payslips: ApproveRun: negative-net check: %w", err)
 	}
-	if negatives > 0 {
+	// An F&F run is the ONE exception, and it is an exception to the
+	// CONCLUSION, not to the reasoning above. For ordinary payroll a negative
+	// net means the inputs are wrong and paying it out would be indefensible.
+	// For a settlement it means the leaver owes the company more than the
+	// company owes them — a receivable to collect, which refusing to approve
+	// would strand along with the rest of the settlement. Every other run
+	// type keeps the guard exactly as r25 wrote it.
+	if negatives > 0 && run.RunType != RunTypeFnF {
 		return nil, fmt.Errorf("%w: %d payslip(s) in this run", ErrNegativeNetPay, negatives)
+	}
+
+	// Clearance gates the MONEY LEAVING, not the arithmetic. An F&F run can
+	// be computed and inspected with clearance still open — that is how HR
+	// answers "what will I actually receive" — but it cannot be approved
+	// until every department with an outstanding claim has settled or waived
+	// it. Once approved the figure is fixed, and a late claim has nowhere
+	// left to go.
+	if run.RunType == RunTypeFnF && s.fnfSource != nil {
+		cleared, err := s.fnfSource.ClearanceComplete(ctx, orgID, run.ID)
+		if err != nil {
+			return nil, fmt.Errorf("payslips: ApproveRun: clearance check: %w", err)
+		}
+		if !cleared {
+			return nil, ErrClearancePending
+		}
 	}
 
 	now := time.Now()

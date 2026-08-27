@@ -214,8 +214,32 @@ func TestCreateLead_Success(t *testing.T) {
 	if l.Status != leads.LeadStatusNew {
 		t.Errorf("expected default status=new, got %q", l.Status)
 	}
-	if l.CreatedBy != "user-1" {
-		t.Errorf("expected CreatedBy=user-1, got %q", l.CreatedBy)
+	if l.CreatedBy == nil || *l.CreatedBy != "user-1" {
+		t.Errorf("expected CreatedBy=user-1, got %v", l.CreatedBy)
+	}
+}
+
+// TestCreateLead_SystemCaptureHasNoCreator covers the caller every
+// internal/capture/* path actually is: no acting user. created_by was
+// uuid NOT NULL and each of those inserts died with 22P02, silently, into a
+// log row — see migration 00112. An empty userID must become NULL, not the
+// empty string.
+func TestCreateLead_SystemCaptureHasNoCreator(t *testing.T) {
+	svc := newSvc(newStubLeadRepo())
+	source := "email"
+	l, err := svc.CreateLead(context.Background(), "org-1", "", leads.CreateLeadRequest{
+		FirstName:     "jane",
+		CaptureSource: &source,
+	})
+	if err != nil {
+		t.Fatalf("CreateLead() error: %v", err)
+	}
+	if l.CreatedBy != nil {
+		t.Errorf("expected CreatedBy=nil for a system capture, got %q", *l.CreatedBy)
+	}
+	// capture_source is what records the origin instead.
+	if l.CaptureSource == nil || *l.CaptureSource != "email" {
+		t.Errorf("expected CaptureSource=email, got %v", l.CaptureSource)
 	}
 }
 
@@ -439,4 +463,3 @@ func TestGetLeadsBySource_Success(t *testing.T) {
 		t.Error("expected non-nil result")
 	}
 }
-

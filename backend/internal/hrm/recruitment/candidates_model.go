@@ -50,10 +50,17 @@ type Candidate struct {
 	ResumeSizeBytes      *int64          `db:"resume_size_bytes"        json:"resume_size_bytes,omitempty"`
 	ResumeSHA256         *string         `db:"resume_sha256"            json:"-"`
 	Notes                *string         `db:"notes"                    json:"notes,omitempty"`
-	PurgeAfter           *time.Time      `db:"purge_after"              json:"purge_after,omitempty"`
-	CreatedBy            *string         `db:"created_by"               json:"created_by,omitempty"`
-	CreatedAt            time.Time       `db:"created_at"                json:"created_at"`
-	UpdatedAt            time.Time       `db:"updated_at"                json:"updated_at"`
+
+	// DERIVED on read, never stored. A candidate who used to work here and
+	// was marked not-rehire-eligible carries a warning — but the decision
+	// lives in hrm_rehire_eligibility and HR can revise it, so a copy on
+	// this row would go stale and keep warning about somebody already
+	// cleared. Recomputed on every read instead (the 00076 rule).
+	RehireFlag *RehireFlag `db:"-" json:"rehire_flag,omitempty"`
+	PurgeAfter *time.Time  `db:"purge_after"              json:"purge_after,omitempty"`
+	CreatedBy  *string     `db:"created_by"               json:"created_by,omitempty"`
+	CreatedAt  time.Time   `db:"created_at"                json:"created_at"`
+	UpdatedAt  time.Time   `db:"updated_at"                json:"updated_at"`
 }
 
 // HasResume reports whether a resume file is on record — the handler uses
@@ -122,3 +129,16 @@ var (
 	ErrInvalidResumeType      = errors.New("only PDF resumes are accepted")
 	ErrResumeTooLarge         = errors.New("resume file exceeds the size limit")
 )
+
+// RehireFlag is the warning shown when a candidate matches a former employee
+// the organization decided not to rehire.
+//
+// It is a WARNING, never a block. Creating the candidate succeeds either way,
+// for the same reason 8B's expense-policy violations do not block a claim: a
+// hard block would make a wrongly-flagged ex-employee unhireable with no
+// override, and the person best placed to judge is the recruiter reading the
+// reason — not this code.
+type RehireFlag struct {
+	Status string  `json:"status"`
+	Reason *string `json:"reason,omitempty"`
+}

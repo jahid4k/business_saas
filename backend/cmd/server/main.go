@@ -72,8 +72,10 @@ import (
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
 	"github.com/mridha/businesssaas/internal/platform/forms"
+	"github.com/mridha/businesssaas/internal/platform/kb"
 	"github.com/mridha/businesssaas/internal/platform/notifications"
 	"github.com/mridha/businesssaas/internal/platform/scheduler"
+	"github.com/mridha/businesssaas/internal/platform/tickets"
 
 	// ── Internal — Capture ────────────────────────────────────────────────────
 	"github.com/mridha/businesssaas/internal/capture/apikeys"
@@ -93,6 +95,7 @@ import (
 	// ── Internal — HRM Phase 1 (Core Employee Management) ────────────────────
 	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmexits "github.com/mridha/businesssaas/internal/hrm/exits"
 	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
 	hrmpositions "github.com/mridha/businesssaas/internal/hrm/positions"
@@ -141,6 +144,12 @@ import (
 	// ── Internal — HRM Extended Phase 7D (Statutory + Benefits) ───────────────
 	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
 	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
+
+	// ── Internal — HRM Extended Phase 8A (Assets) ─────────────────────────────
+	hrmassets "github.com/mridha/businesssaas/internal/hrm/assets"
+
+	// ── Internal — HRM Extended Phase 8B (Travel & Expense) ───────────────────
+	hrmexpenses "github.com/mridha/businesssaas/internal/hrm/expenses"
 
 	// ── Internal — HRM Group E (Recognition and Communication) ───────────────
 	hrmannouncements "github.com/mridha/businesssaas/internal/hrm/announcements"
@@ -238,6 +247,8 @@ func main() {
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
 	schedulerRepo := scheduler.NewRepository(pgPool)
+	ticketsRepo := tickets.NewRepository(pgPool)
+	kbRepo := kb.NewRepository(pgPool)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineRepo := crmpipeline.NewRepository(pgPool)
@@ -300,6 +311,12 @@ func main() {
 	hrmStatutoryRepo := hrmstatutory.NewRepository(pgPool)
 	hrmBenefitsRepo := hrmbenefits.NewRepository(pgPool)
 
+	// ── HRM Extended Phase 8A — Assets (migrations 00106–00107) ────────────────
+	hrmAssetsRepo := hrmassets.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 8B — Travel & Expense (migrations 00108–00109) ──────
+	hrmExpensesRepo := hrmexpenses.NewRepository(pgPool)
+
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	hrmAwardsRepo := hrmawards.NewRepository(pgPool)
 	hrmAnnsRepo := hrmannouncements.NewRepository(pgPool)
@@ -346,6 +363,12 @@ func main() {
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
 	schedulerSvc := scheduler.NewService(schedulerRepo, redisClient)
+	// authzSvc satisfies tickets.AccessDirectory structurally too — Can plus
+	// UserRoleName, the latter backing the sensitive-category assignee gate.
+	ticketsSvc := tickets.NewService(ticketsRepo, authzSvc)
+	// authzSvc satisfies kb.AccessDirectory too (Can only — the KB has no
+	// role-restricted content).
+	kbSvc := kb.NewService(kbRepo, authzSvc)
 
 	// ── CRM (wire in dependency order) ────────────────────────────────────────
 	crmSettingsSvc := crmsettings.NewService(crmSettingsRepo)
@@ -357,7 +380,10 @@ func main() {
 
 	// ── Capture ───────────────────────────────────────────────────────────────
 	apikeysSvc := apikeys.NewService(apikeysRepo)
-	emailSvc := email.NewService(emailRepo, leadsSvc)
+	// ticketsSvc satisfies email.TicketRaiser structurally — the interface
+	// names tickets' own types, so no adapter. capture/email imports
+	// platform/tickets; never the reverse.
+	emailSvc := email.NewService(emailRepo, leadsSvc, ticketsSvc)
 	socialSvc := social.NewService(socialRepo, leadsSvc, cfg.Social)
 	visitorsSvc := visitors.NewService(visitorsRepo, leadsSvc)
 
@@ -400,6 +426,13 @@ func main() {
 	hrmEmpDocsSvc := hrmemployeedocs.NewService(hrmEmpDocsRepo, pgPool)
 	hrmAcksSvc := hrmacks.NewService(hrmAcksRepo, pgPool)
 
+	// ── HRM Extended Phase 8A — Assets ─────────────────────────────────────────
+	// hrmAcksSvc satisfies assets.HandoverAcknowledger structurally — it names
+	// acknowledgements' own types, so no adapter is needed here (the corrected
+	// certifications.SkillGranter precedent). Handover sign-off is requested on
+	// every assignment; a nil acknowledger would simply skip it.
+	hrmAssetsSvc := hrmassets.NewService(hrmAssetsRepo, hrmApprovalsSvc, hrmAcksSvc)
+
 	// ── HRM Extended Phase 7B — Compensation ───────────────────────────────────
 	// Constructed before Group D so it can be wired into payslips as its
 	// BonusSource below — payslips is the CONSUMER of that narrow interface
@@ -415,6 +448,15 @@ func main() {
 	// both must exist before hrmPayslipsSvc is constructed.
 	hrmLoansSvc := hrmloans.NewService(hrmLoansRepo, pgPool, hrmApprovalsSvc)
 	hrmReimbursementsSvc := hrmreimbursements.NewService(hrmReimbursementsRepo, pgPool, hrmApprovalsSvc)
+
+	// ── HRM Extended Phase 8B — Travel & Expense ───────────────────────────────
+	// hrmReimbursementsSvc satisfies expenses.ReimbursementCreator structurally
+	// — it names reimbursements' own types, so no adapter (the corrected
+	// certifications.SkillGranter precedent). This IS the 7C boundary: an
+	// approved claim becomes a reimbursement, which 7C's
+	// payslips.ReimbursementSource already pays out through payroll, so 8B
+	// adds no payroll coupling of its own.
+	hrmExpensesSvc := hrmexpenses.NewService(hrmExpensesRepo, hrmApprovalsSvc, hrmReimbursementsSvc)
 
 	// ── HRM Extended Phase 7D — Statutory + Benefits ───────────────────────────
 	// Same construction-order requirement — payslips is the CONSUMER of
@@ -434,9 +476,21 @@ func main() {
 	//                loanSource / reimbursementSource / statutorySource /
 	//                benefitsSource feed every OTHER run type.
 	hrmAttendanceSvc := hrmattendance.NewService(hrmAttendanceRepo, pgPool)
+
+	// hrmExitsSvc sits HERE, ahead of payslips, because payslips consumes it:
+	// exits.Service satisfies payslips.FnFSource structurally (it supplies a
+	// run_type='fnf' run its employee and its settlement lines), and it also
+	// satisfies recruitment.RehireChecker further down. Both are passed
+	// directly with no adapter.
+	// leave / loans / expenses each satisfy one of exits' settlement sources
+	// structurally, naming their own types, so all three are passed directly
+	// with no adapter. All three are nil-safe on the exits side.
+	hrmExitsSvc := hrmexits.NewService(hrmexits.NewRepository(pgPool), checklistsSvc, hrmScopeResolver,
+		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc)
+
 	hrmPayslipsSvc := hrmpayslips.NewService(
 		hrmPayslipsRepo, pgPool, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
-		hrmStatutorySvc, hrmBenefitsSvc,
+		hrmStatutorySvc, hrmBenefitsSvc, hrmExitsSvc,
 	)
 
 	// ── HRM Group E — recognition and communication ───────────────────────────
@@ -457,7 +511,7 @@ func main() {
 	// hrmEmpSvc (constructed above, in the HRM Phase 1 block) satisfies
 	// recruitment.EmployeeCreator structurally — HireApplication uses it to
 	// materialize an employee record from a hired application.
-	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc)
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc, hrmExitsSvc)
 
 	// ── HRM Extended Phase 5A — Performance / Goals ────────────────────────────
 	// hrmScopeResolver satisfies performance.RecordAuthorizer structurally, so
@@ -514,6 +568,9 @@ func main() {
 	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("reimbursement", hrmReimbursementsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("asset_request", hrmAssetsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("travel_request", hrmExpensesSvc.HandleTravelApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("expense_claim", hrmExpensesSvc.HandleClaimApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS
@@ -535,6 +592,9 @@ func main() {
 	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
 	schedulerHandler := scheduler.NewHandler(schedulerSvc)
+	ticketsHandler := tickets.NewHandler(ticketsSvc)
+	hrmExitsHandler := hrmexits.NewHandler(hrmExitsSvc, authzSvc, hrmScopeResolver)
+	kbHandler := kb.NewHandler(kbSvc)
 	notifHandler := notifications.NewHandler(notifSvc)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
@@ -589,6 +649,8 @@ func main() {
 	hrmReimbursementsHandler := hrmreimbursements.NewHandler(hrmReimbursementsSvc, authzSvc, hrmScopeResolver)
 	hrmStatutoryHandler := hrmstatutory.NewHandler(hrmStatutorySvc)
 	hrmBenefitsHandler := hrmbenefits.NewHandler(hrmBenefitsSvc, authzSvc, hrmScopeResolver)
+	hrmAssetsHandler := hrmassets.NewHandler(hrmAssetsSvc, authzSvc, hrmScopeResolver)
+	hrmExpensesHandler := hrmexpenses.NewHandler(hrmExpensesSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group E ───────────────────────────────────────────────────────────
 	hrmAwardsHandler := hrmawards.NewHandler(hrmAwardsSvc)
@@ -678,6 +740,9 @@ func main() {
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
 	scheduler.RegisterRoutes(api, schedulerHandler, requireAuth, permFn)
+	tickets.RegisterRoutes(api, ticketsHandler, permFn, requireAuth, requireOrgMatch)
+	kb.RegisterRoutes(api, kbHandler, permFn, requireAuth, requireOrgMatch)
+	hrmexits.RegisterRoutes(api, hrmExitsHandler, permFn, requireAuth, requireOrgMatch)
 	notifications.RegisterRoutes(api, notifHandler, requireAuth)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
@@ -741,6 +806,8 @@ func main() {
 	hrmreimbursements.RegisterRoutes(api, hrmReimbursementsHandler, permFn, requireAuth, requireOrgMatch)
 	hrmstatutory.RegisterRoutes(api, hrmStatutoryHandler, permFn, requireAuth, requireOrgMatch)
 	hrmbenefits.RegisterRoutes(api, hrmBenefitsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmassets.RegisterRoutes(api, hrmAssetsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmexpenses.RegisterRoutes(api, hrmExpensesHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	// Awards (E1), Announcements (E2), HR Calendar (E3), Employee Milestones (E4)

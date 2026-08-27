@@ -1,6 +1,609 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-08-24 (r28 — **HRM Extended Phase 7D: statutory compliance + benefits
+> Last updated: 2026-08-27 (r35 — **HRM Extended Phase 9B-2: the three cross-module settlement
+> sources.** No migration — all three read tables that already existed. **Phase 9B is now complete.**
+>
+> **Three consumer-owned narrow interfaces, one per owning module**, each naming the provider's own
+> types so the provider satisfies it structurally with no adapter — the corrected
+> `certifications.SkillGranter` precedent, now applied for the eighth time. All three are **nil-safe**:
+> a deployment without leave, loans or expenses wired produces no line from that source rather than
+> failing the settlement.
+>
+> **Leave encashment: `hrm/leave` owns HOW MANY days, F&F owns what a day is WORTH.** That split was
+> designed in Phase 2 — `PostEncashment` records days and never money, and `encashment_rate_basis`
+> has sat there since with the comment "stored config a future F&F phase reads; this phase does not
+> evaluate it". This is that phase. Third instance of a column written ahead of its consumer, after
+> `is_taxable` (7D) and `is_rehire_eligible` (9A). **F&F prices what HR already recorded; it does not
+> decide how much to encash** — auto-encashing the whole balance was rejected because no cap exists
+> in `hrm_leave_policies` (only `carry_forward_cap`), so it would pay out unlimited accrued leave
+> with no way to limit it, overriding HR's own judgement.
+>
+> ⚠ **`EncashmentBasisFixed` cannot be honoured, and says so.** `hrm_leave_policies` stores the
+> BASIS but has no column for the fixed amount, so there is nothing to pay. The settlement produces a
+> **zero-amount line reading "NOT PAID: the policy uses a fixed encashment rate, which
+> hrm_leave_policies has no column to store"** rather than guessing a figure or silently pricing it
+> at zero. A real gap in the Phase 2 schema, recorded as such.
+>
+> ⚠ **Encashment rows are stored with NEGATIVE days** (they reduce a balance), so the sum is negated
+> to get the positive count F&F pays for. Reading that sign wrong turns a credit into a debit on
+> somebody's final settlement — proved by dropping the negation and watching the line vanish.
+>
+> **Loan foreclosure: the FULL outstanding, and the ordinary per-installment recovery is SKIPPED for
+> `fnf` runs.** 7C deliberately left auto-foreclosure-on-exit unbuilt because it "would require
+> redesigning the negative-net guard around the still-unbuilt F&F module" — 9B did both, so it is
+> unblocked. **Skipping the ordinary recovery is not optional:** it is not gated by run type, so
+> leaving it in charges the installment due this period TWICE (once by recovery, once inside the
+> foreclosed balance) and caps the two portions by different rules — the headroom cap exists to stop
+> recovery driving net negative, which is precisely what an F&F run is allowed to do. Proved by
+> removing the gate and watching the loan total go from 12,000 to **13,000**.
+>
+> Outstanding is `SUM(total_amount - recovered_amount)` over live schedule rows, **not
+> `principal_amount`** — principal ignores everything already repaid and would charge a leaver for
+> money they handed back month after month. `ForecloseForSettlement` is separate from the existing
+> `ForecloseLoan` because the caller differs in kind: a human settling early supplies the amount, but
+> a settlement must never trust a supplied figure and computes it itself.
+>
+> **Travel advances: same-currency recovered, foreign-currency reported.** No FX rate table exists
+> anywhere (Phase 11 scope, r30), so converting would mean inventing a rate and mis-charging a
+> departing person real money. A mismatched advance produces a zero-amount line reading **"NOT
+> RECOVERED: no exchange rate to BDT, settle manually"** and is left unsettled. Proved live: a USD
+> advance against a BDT run was reported, not charged, and `settled_amount` stayed 0.
+>
+> **`MarkSettled` closes out the SOURCE, not just the trail.** Linking an audit line only records
+> that money was charged; without consuming the source the loan stays `active` and the advance stays
+> `disbursed`, and the next process to look charges them again. Reached only after every payslip and
+> line is persisted — never from `abortCompute` — so a loan can never be closed against a settlement
+> that was rolled back, and failures are RETURNED so `ComputeRun` aborts rather than committing
+> payslips with a loan still open. Proved by suppressing it: the loan stayed active with 12 schedule
+> rows open.
+>
+> **Verification:** all six architecture guards green, 7 new integration tests (**243 total**, up
+> from 236), four claims proved non-vacuous by injection (the `fnf` recovery gate, the encashment
+> sign, the currency guard, and source consumption), the entire pre-existing suite green throughout,
+> and a live smoke run settling 16 years: 30,000 salary + 480,000 gratuity + 5,000 encashment −
+> 12,000 loan − 15,000 clearance = **488,000 net**, with the loan foreclosed and its 12 schedule rows
+> closed. The advance recovery path is covered by integration test; the smoke run happened to
+> exercise the foreign-currency skip instead, because payroll runs default to BDT while the seeded
+> org's currency is USD.
+>
+> **⚠ Noted, not chased:** one full-suite run reported a single failure that did not reproduce on
+> two subsequent runs and could not be identified from the output. Recorded rather than ignored.
+>
+> **Phase 9B is complete.** Remaining in Phase 9: **9C** — exit interviews, the relieving letter, and
+> the access-revocation sweep. Phase 7 is COMMITTED (`f0eaf64`); 8A–8D, 9A and 9B remain uncommitted.
+>
+> ---
+>
+> r34 — **HRM Extended Phase 9B: full & final settlement.**
+> Migrations `00116`/`00117`, 2 new tables, 4 new routes, and the first change to already-committed
+> payroll code since r25.
+>
+> **⚠ CORRECTION TO THE APPROVED PLAN: F&F is the ADDS-ON shape, not REPLACES.** The plan said it
+> would follow `computeBonusPayslips`, which REPLACES the salary computation. That is wrong.
+> Bonus replaces because a bonus run must *not* pay regular salary; **an F&F run MUST pay prorated
+> final salary** — it is the largest credit in most settlements. Building it as REPLACES would have
+> duplicated the payroll engine. It is instead the additive shape loans, reimbursements, statutory
+> and benefits already use, with the **employee set narrowed to the leaver**. That difference
+> matters concretely: the per-employee body is a 367-line loop, and reusing it cost ~15 lines
+> instead of a large refactor of shipped code.
+>
+> **`payslips.FnFSource` is the sixth consumer-owned narrow interface**, after `BonusSource` /
+> `LoanSource` / `ReimbursementSource` / `StatutorySource` / `BenefitsSource`. Declared in
+> `payslips`, satisfied by `hrm/exits`, nil-safe like all five before it. `SettlementForRun` also
+> answers WHICH employee a run settles, which is how employee scoping works without adding an
+> `employee_id` column to `hrm_payslip_runs` that would be meaningless for every other run type.
+>
+> **An F&F run must bypass the org-wide eligibility filter.** That filter pays a terminated
+> employee only when their `termination_date` falls on or after the period start — precisely the
+> person a settlement run exists to pay, months after they left. `loadFnFEmployee` loads them by id
+> with the same SELECT list, so the computation downstream cannot tell which path produced its
+> input. Proved by settling an employee whose termination date is the year 2000.
+>
+> **The negative-net guard is now run-type-aware, and the exception is to the CONCLUSION, not the
+> reasoning.** For ordinary payroll a negative net means the inputs are wrong. For a settlement it
+> means the leaver owes more than they are due — a receivable, and refusing to approve would strand
+> the whole settlement. Every other run type keeps r25's guard exactly as written. Both directions
+> are proved by injection: dropping the exception makes the F&F test fail, and inverting it makes
+> BOTH the r25 guard test and the new 9B guard test fail — they cover the same line from opposite
+> sides and fail for different reasons.
+>
+> **Clearance gates the money leaving, not the arithmetic.** `ErrClearancePending` is checked at
+> APPROVAL, never at computation, so HR can compute a draft and answer "what will I actually
+> receive" while clearance is still open. 8B's `ApproveLine` lesson: locking too early leaves the
+> user with no remedy.
+>
+> **`hrm_exit_settlement_lines` is an audit trail, not the money.** The payslip remains the single
+> source of truth for what was paid; this records WHERE each figure came from, because six months
+> later "recovered 15,000" is unanswerable without it. One line per claim, never a lumped total — a
+> departing employee has to be able to dispute a specific department's specific claim. **Amounts
+> are ALWAYS positive**; direction lives in `is_credit`, because a sign convention every reader has
+> to know is one reader away from a settlement that adds up backwards.
+>
+> **Gratuity is effective-dated** (`SlabsAsOf` shape) and its arithmetic is pure, tested before any
+> caller. Partial years are NOT paid pro rata — the common statutory treatment, and paying a
+> fraction would need a rounding rule nobody has specified. Below the minimum is zero **with a
+> reason**, never an error: failing to qualify is an ordinary outcome, and a disputed zero has to be
+> explainable. Misconduct forfeits only when the rule opts in, because forfeiture is legally loaded.
+> The monthly-to-daily divisor is stored **per rule** (30 statutory vs 26 excluding weekly offs) —
+> a policy choice, not an obvious fact, and the same rate is reused by the notice-shortfall line so
+> one settlement cannot contain two different daily rates for the same person.
+>
+> **⚠ Two defects found, one by the smoke run and one by strengthening a weak test.**
+> (1) Clearance-blocked approval returned **500** rather than 409 — `ErrClearancePending` was
+> unmapped in the payslips handler. The service-level test passed because it asserts the sentinel;
+> only the HTTP path showed it. Third consecutive slice where the smoke run found what the tests
+> could not. (2) A test that only *logged* its result was rewritten to assert, and immediately
+> caught the settlement audit trail **doubling** on re-assembly: the delete spared rows that already
+> carried a `payslip_line_id`, so the same claim appeared twice and every figure read double.
+>
+> **⚠ And one of my own tests was tautological.** The effective-dating test asserted
+> `amount == amount * 2`, which can only hold at zero — it could never fire. It passed the
+> injection proof for the wrong reason. Rewritten to assert the exact expected figure derived from
+> the same dates the service used; it now correctly fails with 960,000 against an expected 480,000
+> when the date bound is removed. **An injection proof that does not go red is a finding about the
+> test, not a confirmation of the code.**
+>
+> **Verification:** all six architecture guards green, 32 unit subtests in `hrm/exits` (gratuity and
+> notice arithmetic, both written before any caller), 9 new integration tests (**236 total**, up
+> from 227), migration reversibility proved down×2/re-up with 9A's tables and permissions intact,
+> four claims proved non-vacuous by injection, the entire pre-existing payroll suite green
+> throughout, and a live HTTP smoke run settling a 16-year employee (30,000 salary + 480,000
+> gratuity − 15,000 clearance debt = 495,000 net) with cleanup.
+>
+> **⚠ Still open within 9B — three cross-module debit sources are NOT yet wired:** leave encashment
+> (needs the money computed from `leave.PostEncashment`'s days), loan foreclosure (needs
+> `loans.ForecloseLoan` triggered on exit) and travel-advance recovery. Each needs a read method on
+> its owning module that does not exist today. The settlement engine, the audit trail, gratuity, the
+> notice shortfall and clearance dues are complete and tested; those three are additional
+> `SettlementLine` sources plugged into the same seam. Phase 7 is COMMITTED (`f0eaf64`); 8A–8D, 9A
+> and 9B remain uncommitted.
+>
+> ---
+>
+> r33 — **HRM Extended Phase 9A: exit umbrella, clearance, rehire.**
+> New package `internal/hrm/exits`, migrations `00114`/`00115`, 3 new tables, 11 new routes. First
+> slice of Phase 9 (Exit Management), which the build plan calls "the architectural stress test for
+> everything above" — it is the first phase that mostly CONSUMES rather than creates.
+>
+> **`hrm_exits` is an umbrella over the existing decision records, not a replacement.**
+> `hrm_resignations` (`00033`) and `hrm_terminations` (`00034`) already own the DECISION to end
+> employment, with their own approval chains, dates and letters. The exit record owns the PROCESS
+> that follows: clearance, settlement, documents, access. Folding those two in would have thrown
+> away two shipped approval flows to gain nothing. `source_type`/`source_id` are polymorphic and
+> **FK-free**, the fourth instance of the pattern behind
+> `platform_checklist_instances.subject_type`, `platform_form_instances.subject_type` and
+> `platform_tickets.requester_type` — so `'abandonment'` or `'end_of_contract'` is a CHECK widening
+> later. The trade is that referential integrity is the service's job, and it does it: an exit
+> pointing at another employee's resignation is refused with `ErrSourceMismatch`, proved by
+> reverting the check.
+>
+> **There is deliberately NO `hrm_notice_periods` table, though the build plan named one.**
+> `hrm_resignations` already carries `notice_period_days`, `is_notice_waived` and
+> `last_working_date`, snapshotted from the active contract at submission. A second table holding
+> the same three facts is a second source of truth, and the first divergence between them is a
+> payroll dispute nobody can adjudicate. What genuinely did not exist is the SHORTFALL, so that is
+> the one new column — and it stores **DAYS, not money**: converting to an amount needs a daily
+> rate that belongs to the salary structure, and freezing one here would silently disagree with the
+> payslip. Phase 9B applies the rate.
+>
+> **A waived notice period is never a shortfall**, and that is the case worth naming because
+> getting it wrong bills a departing person for time the employer agreed to forgo.
+> `NoticeShortfallDays` is pure and was tested before any caller (the `Amortize` / `BookValue` /
+> `SettleAgainstAdvance` / `EvaluateSLA` precedent), with every degenerate case given a defined
+> answer: a waiver is zero, leaving LATER is zero rather than a negative that would quietly cancel
+> another debt, and only the calendar date counts so a wall-clock time cannot produce an
+> off-by-one.
+>
+> **Clearance completion is DERIVED, never stored.** It is "every blocking clearance item is
+> resolved", computed from the items on read — the `00076` rule. `hrm_terminations.exit_clearance_completed`
+> (`00034`) is exactly the denormalized boolean this avoids; it stays as a legacy column and Phase 9
+> neither reads nor writes it. An integration test introspects `information_schema` to prove eight
+> such columns stay absent from `hrm_exits`. Only a NON-ZERO amount blocks: an outstanding "return
+> your badge" step is incomplete but owes nothing.
+>
+> **`hrm_exit_clearance_items` is the seam between clearance and F&F.** The checklist engine already
+> owns who owns a step, whether it blocks and whether it is done (`00076`: `owner_type`,
+> `is_blocking`, `status`); what it has no concept of is MONEY, and clearance is where IT says the
+> laptop was never returned. Onboarding has no equivalent, which is why this is an overlay rather
+> than an engine change. **Resolving does NOT zero `blocking_amount`** — a forgiven debt must still
+> show what was forgiven, and rewriting it destroys the only record there was anything to forgive.
+>
+> **`hrm_terminations.is_rehire_eligible` finally has a reader.** It has existed since migration
+> `00034`, commented "blocks future rehire in HR tools", and **nothing had ever read it** — the same
+> shape as `hrm_salary_components.is_taxable`, which sat unread from `00023` until 7D needed it. A
+> boolean alone was never enough (a resignation can carry the same decision, and it cannot record
+> WHY or WHO decided, which is what a recruiter actually needs), so `hrm_rehire_eligibility` holds
+> the readable decision and the exit seeds it from the old column. `recruitment.RehireChecker` is
+> the consumer-owned narrow interface — declared in recruitment, naming exits' own types so
+> `exits.Service` satisfies it structurally with no adapter (the corrected
+> `certifications.SkillGranter` precedent, as used for `assets.HandoverAcknowledger`,
+> `expenses.ReimbursementCreator` and `email.TicketRaiser`), and **nil-safe** so an install without
+> exit management still recruits.
+>
+> **A flagged candidate is WARNED, never blocked**, and the flag is derived on read rather than
+> stored on the candidate row: HR can revise a rehire decision, and a stored copy would keep
+> warning about somebody already cleared. Only a NEGATIVE decision surfaces — flagging every former
+> employee as "eligible" is noise a recruiter learns to ignore, and the one that matters would go
+> unread with it. The check runs AFTER the insert, the same ordering 8B uses for expense-policy
+> violations.
+>
+> **⚠ A defect the smoke run caught, and a sharper version of 8D's stale-binary lesson.** The
+> rehire flag came back `null` over HTTP while the integration test for the same behaviour passed.
+> The source was correct; `air` was serving an older binary. r32 already said "force a rebuild
+> before a smoke run that follows red/green work" — that was not enough. The red/green injection
+> for this slice left `main.go` momentarily inconsistent, so two builds FAILED, and a failed build
+> leaves the PREVIOUS binary running. **Confirm the rebuild SUCCEEDED after the last restore**, not
+> merely that one was attempted. A temporary probe log settled it in one cycle after speculation
+> had not.
+>
+> **Also fixed while writing it:** `FindRehireEligibilityByEmail` derived its aliased column list
+> with `strings.ReplaceAll(rehireSel, "id,", "rh.id,")`, which mangles `public_id`, `org_id`,
+> `employee_id` and `exit_id` too. It failed silently because `attachRehireFlag` logs and skips on
+> error by design. The test now calls the checker directly in its failure message to say WHICH it
+> is — the 8D lesson about tests that swallow the reason they failed.
+>
+> **Verification:** all six architecture guards green, 11 unit subtests for the notice arithmetic
+> (written before any caller), 13 new integration tests (**227 total**, up from 214), migration
+> reversibility proved down×2/re-up with `hrm_terminations`' columns intact and the 8C/8D grants
+> untouched, four claims proved non-vacuous by injection (waived-notice handling, source ownership,
+> the scope tier, and the rehire flag), a new nil-safety unit test for the recruitment seam, and a
+> live HTTP smoke run with all test data cleaned up.
+>
+> **Still open:** 9B (F&F settlement, gratuity, the run-type-aware negative-net guard) and 9C
+> (exit interviews, relieving letter, access-revocation sweep). Phase 7 is COMMITTED (`f0eaf64`);
+> 8A–8D and 9A all remain uncommitted.
+>
+> ---
+>
+> r32 — **HRM Extended Phase 8D: knowledge base + email-to-ticket.**
+> New package `internal/platform/kb`, migrations `00112`/`00113`, 2 new tables, 9 new routes, plus
+> a generalized inbound-email pipeline. **Phase 8 (Operations) is now ✅ COMPLETE across all four
+> slices.**
+>
+> **⚠ A LIVE PRODUCTION DEFECT FOUND BEFORE ANY CODE WAS WRITTEN, AND FIXED HERE.**
+> `internal/capture/{email,social,visitors}` all call `leads.CreateLead(ctx, orgID, "", req)` —
+> an empty userID, because a system capture has no acting user — and `crm_leads.created_by` was
+> `uuid NOT NULL`. Every one of those inserts had been dying with
+> `invalid input syntax for type uuid: "" (22P02)`, the error swallowed into
+> `inbound_email_logs.error_message` while the webhook still returned 200. **Email, social and
+> visitor lead capture had never worked.** It surfaced because this slice's plan requires writing
+> the "lead capture still works" regression test FIRST and watching it pass against existing code
+> — it could not be made to pass, which is precisely what writing it first is for. `NOT NULL` was
+> the assertion that lied: a system-captured lead genuinely has no human creator, and
+> `capture_source` already records the origin. `created_by` is now nullable (`00112`) and
+> `Lead.CreatedBy` is `*string`; attributing the row to the org owner instead would put a person's
+> name on an action they did not take, in an audit column. One fix repairs all three capture paths,
+> since they share `CreateLead`.
+>
+> **The email pipeline is now a router, and `destination` defaults to `'lead'` at three
+> independent layers.** `ProcessInboundWebhook` hardcoded lead creation — a single-consumer
+> pipeline, not a router. `org_inbound_emails.destination` (`'lead' | 'ticket'`) branches it, and
+> the column default, the service default, and the router's fallback for an unrecognised value all
+> agree on `'lead'`, so migration `00112` alone changes no behaviour and every pre-8D address keeps
+> working. A test pins all three together, because if any one drifts every existing address
+> silently changes what it does. `GetOrgByAddress` became `GetRouteByAddress` — the org-only lookup
+> was only ever sufficient because there was one destination.
+>
+> **The ticket branch refuses rather than improvises.** `platform_tickets.requester_id` and
+> `.requester_user_id` are both NOT NULL, so an email from somebody who is not an employee of that
+> org produces no ticket — logged with a message naming the sender, not silently dropped.
+> Attaching a stranger's email to a fallback employee would put words in that person's mouth, and
+> in an HR helpdesk that may carry a grievance that is the worst available failure. The ticket is
+> created AS the sender, so it appears in their own list and they can comment on it. Sender →
+> employee resolution lives on **`capture/email`'s own repository**, not in `platform/tickets`,
+> which must never reference `hrm_*` — the 7D `benefits.FindEmployeeIDByUserID` precedent.
+> `email.TicketRaiser` is consumer-owned and names tickets' own types, so `tickets.Service`
+> satisfies it structurally with no adapter, and it is nil-safe: an install with no ticket engine
+> logs the address as unroutable rather than panicking inside a webhook handler.
+>
+> **The knowledge base is Platform Primitive #7**, `internal/platform/kb`. Two permissions only —
+> `platform.kb.view` reads published articles, `.manage` reads and writes everything including
+> drafts. The draft/published split is what makes two keys enough: a KB is org-wide reading
+> material with no "mine" to narrow to, unlike tickets. A third `.view_unpublished` key would imply
+> a contributor role this product does not have, and an unused key is one nobody notices is granted
+> wrongly.
+>
+> **Unpublished articles are excluded in SQL, and the SAFE state is the DEFAULT.**
+> `ArticleFilter.IncludeUnpublished` *adds* a `WHERE status = 'published'` clause when false rather
+> than removing one, so a zero-valued filter — the shape of every "forgot to configure it" bug —
+> returns published articles only. The failure mode is "too little", never "too much". The service
+> sets the flag from the caller's own `.manage` grant and never reads it off the request. A draft
+> reports NOT-FOUND rather than denied so the single-row read agrees with the list that hides it.
+>
+> **Search is a GIN expression index, with no `search_vector` column.** `to_tsvector('english',
+> title || ' ' || body)` is indexed as an expression, so Postgres recomputes it on write — the one
+> place a derived value genuinely cannot drift, unlike a stored vector somebody has to remember to
+> update. `plainto_tsquery` means a user typing `&` or `!` gets a search rather than a syntax
+> error. Proved live: editing a published article made the new wording searchable immediately.
+> There is deliberately **no `view_count`** either: a counter nothing can recompute is unauditable
+> the moment it drifts, and deriving one would need a view-event table no consumer has asked for.
+> The `00076` rule cuts both ways — don't store what can be derived, and don't invent state nothing
+> needs.
+>
+> **`published_at` records first publication, not last edit.** Editing a published article leaves
+> it published (correcting a live policy must not silently unpublish it and leave employees reading
+> nothing), and re-publishing an archived one restores it without pretending it is newly written —
+> otherwise it jumps to the top of a list ordered by `COALESCE(published_at, created_at)`. Archive
+> rather than delete, because superseded guidance still explains why somebody acted as they did.
+>
+> **Verification:** all six architecture guards green, 14 new integration tests (**214 total**, up
+> from 200), migration reversibility proved down×2/re-up including `created_by` restored to its
+> exact `NOT NULL` state and the 8C/checklists/forms grants confirmed untouched, four claims proved
+> non-vacuous by injection (removing the draft SQL restriction, neutralising the tsquery match,
+> forcing every address to `'lead'`, and letting the ticket branch fall back to an empty
+> requester), a new unit test covering the system-capture creator case, and a live HTTP smoke run
+> through both branches with all test data cleaned up.
+>
+> **⚠ Found but NOT fixed, deliberately:** `platform_notes.created_by` and
+> `platform_activities.created_by` are `NOT NULL` and carry the identical defect — `leads.CreateLead`'s
+> duplicate-capture path calls `engagementSvc.CreateNote(ctx, orgID, userID, …)` with the same empty
+> userID, discarding the error with `_, _ =`. So a repeat email from a known sender still fails to
+> record its duplicate-capture note, silently. Not fixed here because the engagement module has four
+> entity types with this shape across 8 repository sites; fixing `crm_leads` was required to verify
+> this slice, fixing engagement is its own piece of work.
+>
+> **Still open, unchanged:** `POST /platform/scheduler/jobs/:name/run` returns 400
+> `NO_BUSINESS_CONTEXT` for every job; a fresh API-created org has no `hrm_employee_statuses`;
+> `ComputeSlab`/`evalFormula` still operate on `float64`. Phase 7 is COMMITTED (`f0eaf64`); 8A, 8B,
+> 8C and 8D all remain uncommitted.
+>
+> ---
+>
+> r31 — **HRM Extended Phase 8C: helpdesk core.** New package
+> `internal/platform/tickets`, migrations `00110`/`00111`, 5 new tables, 17 new routes.
+>
+> **The architectural fork is resolved toward PLATFORM, and the codebase had already answered
+> it twice.** The build plan flagged HR Helpdesk vs the CRM list's customer-facing Ticketing as
+> "an architectural fork to decide before starting". `platform_checklist_instances.subject_type
+> CHECK IN ('employee')` and `platform_form_instances.subject_type CHECK IN
+> ('employee','candidate')` are both deliberately narrow polymorphic discriminators, widened
+> later. `platform_tickets.requester_type` is the third instance of that pattern, not a new one —
+> and because `requester_id` carries no FK, widening to `'contact'` when customer-facing ticketing
+> lands is a CHECK change with no `hrm_*` reference to untangle first.
+>
+> **This package never imports `internal/hrm/scope`, so it has no scope tiers at all.**
+> `scope.Predicate` hard-codes `FROM hrm_employees`; a platform primitive cannot use it, and
+> `TestPermissions_ScopeTiersSeeded` never fires because nothing calls `ResolveScope`. "See only
+> my own" is expressed instead as `ListFilter.CanViewAll`, resolved once in the service from
+> `platform.tickets.view_all` and applied in SQL — the `platform.checklists.complete` precedent,
+> where the route gate cannot express ownership so the service does. The single-row read restates
+> the same rule: a filtered list is worthless if fetching the hidden ticket by id returns it
+> anyway, and an invisible read reports NOT-FOUND rather than denied, because "you may not see
+> ticket X" still confirms ticket X exists — in a helpdesk carrying harassment reports that is
+> itself a disclosure.
+>
+> **`is_internal` comments are filtered at the REPOSITORY layer, in two separate read methods.**
+> `FindPublicComments` and `FindAllComments` differ by one `WHERE` clause, and that difference is
+> the whole of internal-comment protection. A single `FindComments` plus a caller-side filter is
+> the version that eventually leaks, because the filter is one forgotten branch away from being
+> skipped; the requester's path must never have an internal comment in memory at all. Structural,
+> not disciplinary — the exact shape 5C used for 360 anonymity and 6A for quiz answer keys. Two
+> tests prove it, one through the service as the requester and one calling the repository method
+> directly, and reverting the `WHERE` clause turns both red.
+>
+> **The SLA clock is pausable via an append-only ledger, never a counter.**
+> `platform_ticket_sla_events` holds pause/resume rows and elapsed time is computed from them on
+> every read. One ticket is routinely paused and resumed several times ("waiting on the
+> requester", twice), and a mutable `paused_minutes` shows the number but never how it got there —
+> the same reasoning as 7C's `hrm_loan_recovery_events`. There is deliberately no
+> `elapsed_minutes`, `paused_minutes` or `sla_breached` column, and an integration test
+> introspects `information_schema` to prove nine such columns absent. Each clock stops at the
+> event that satisfies it, not at `now`, so a ticket answered inside its window cannot drift into
+> breach because nobody looked at it since.
+>
+> **The pause arithmetic is pure and was written before anything called it** (the `Amortize` /
+> `BookValue` / `SettleAgainstAdvance` precedent), with every degenerate ledger given a defined
+> answer: consecutive pauses (first wins), a resume with no pause (ignored), a trailing pause
+> (runs to `now`), and an inverted interval contributing ZERO — never negative, which would
+> SUBTRACT from paused time, inflate elapsed time and mask a breach. A zero target is never a
+> breach: reporting every ticket in an org with no SLA policy as breached would make the signal
+> useless.
+>
+> **The governing policy is pinned at creation.** A later policy edit tightening the target must
+> not retroactively breach tickets raised under the old one — 7B's `calculation_snapshot` and 7D's
+> `employee_cost_snapshot` discipline, applied to a target rather than a price. Resolution order
+> is category-specific first, org-wide default (`NULL category_id`) as fallback.
+>
+> **Sensitive categories restrict the assignee pool**, resolved through
+> `AccessDirectory.UserRoleName` rather than a local query, so this package holds exactly one
+> notion of "what role does this user have" and it is authz's. The `is_sensitive` ↔
+> `restricted_role` pairing is enforced in Go, not as a CHECK — a CHECK would be the `00076` trap
+> the moment either column gained an `ON DELETE SET NULL` FK, and a sensitive category with no
+> restricted role restricts nothing while looking like it does.
+>
+> **Conversion to an HR complaint is one-way and has no route.** `MarkConverted` is called from
+> the HRM side, which reads the ticket, creates the complaint, then calls back — `hrm → platform`
+> is the allowed direction, and this package must never import hrm to close the loop itself. An
+> HTTP endpoint would have to trust a client-supplied `converted_to_id` (the same reasoning that
+> gives checklists no generic instantiate route). A second conversion is REFUSED rather than
+> silently accepted: two complaints believing they own the same ticket, with only the later
+> recorded, is worse than an error.
+>
+> **⚠ Two defects the live smoke run caught, not the tests.** (1) `SLAStatus` had no json tags, so
+> every duration went on the wire as a raw nanosecond count — `14400000000000` for four hours,
+> which every client would have to know to divide. Now serialised as minutes, the unit the policy
+> is configured in, with the minute fields DERIVED from the durations so the pair cannot disagree.
+> (2) `ErrAlreadyPaused` was unreachable: a paused ticket sits in status `paused`, and the status
+> guard ran ahead of the ledger check, so a second pause answered `WRONG_STATUS` — telling the
+> caller the ticket was in the wrong state rather than the one thing they needed to know. The
+> ledger is now consulted first, and the test asserts the specific sentinel rather than merely
+> that it errored. This is the second consecutive slice where the smoke run found what the tests
+> did not (r30's `ApproveLine`); the pattern is real and the smoke run is not optional.
+>
+> **A permission-prefix trap worth recording:** `authz.Can` builds its key as
+> `resource + "." + action`, so the resource argument must carry the FULL dotted prefix
+> (`"platform.tickets"`, not `"tickets"`). Passing the bare name denies everything silently and
+> uniformly — which nearly produced a suite of vacuously-passing negative tests, since a test
+> asserting "a member CANNOT do X" passes just as well when nobody can do anything.
+>
+> **Verification:** all six architecture guards green, 29 unit subtests for the pause arithmetic
+> (written before any caller), 20 new integration tests (**200 total**, up from 180), migration
+> reversibility proved down×2/re-up (zero tables, zero permission rows, zero role grants, with the
+> pre-existing `platform.checklists.*`/`platform.forms.*` grants confirmed untouched), all three
+> load-bearing claims proved non-vacuous by injection — dropping the `is_internal` filter, zeroing
+> `PausedDuration`, and forcing `CanViewAll` — and a live HTTP smoke run against real seeded data
+> with all test data cleaned up afterward.
+>
+> **Still open, unchanged:** `POST /platform/scheduler/jobs/:name/run` returns 400
+> `NO_BUSINESS_CONTEXT` for every job — an SLA-breach sweep job would hit this again, and none is
+> built; a fresh API-created org has no `hrm_employee_statuses`; `ComputeSlab`/`evalFormula` still
+> operate on `float64`. Phase 7 is COMMITTED (`f0eaf64`); 8A, 8B and 8C remain uncommitted.
+>
+> ---
+>
+> r30 — **HRM Extended Phase 8B: travel & expense.** New package
+> `internal/hrm/expenses`, migrations `00108`/`00109`, 9 new tables, 22 new routes.
+>
+> **Approval is per LINE, and the claim carries no total of its own.** The build plan is explicit
+> — "`amount` vs `approved_amount` per line, not claim-level" — so `hrm_expense_lines` holds both
+> and `hrm_expense_claims` holds NEITHER total. Both are `SUM(lines)` at read time (the `00076`
+> rule). A stored claim total would disagree with its own lines the moment one was trimmed, which
+> is precisely the failure r25 found in `hrm_payslip_runs`, where `TotalEmployees` counted rows
+> the money totals did not. An integration test introspects `information_schema` to assert four
+> forbidden total columns are absent.
+>
+> **`approved_amount` is nullable, and that is load-bearing.** `NULL` means "not yet reviewed";
+> `0` means "reviewed, nothing payable". Two genuinely different states — defaulting to `0` would
+> make an unreviewed line indistinguishable from a rejected one, and `SettleClaim` refuses while
+> any line is still undecided rather than silently paying it as zero.
+>
+> **Multi-currency without an FX subsystem.** The build plan requires currency here "regardless of
+> Phase 11", and no exchange-rate table exists in this codebase — building one is Phase 11 scope.
+> Each line snapshots the `exchange_rate` used and the resulting `base_amount` at claim time, so a
+> later rate change cannot rewrite a settled claim. Identical discipline to 7B's
+> `calculation_snapshot` and 7D's `employee_cost_snapshot`. A rate of 1 (the default) makes
+> `base_amount == amount`, so single-currency orgs never encounter it. Proved live: 500 EUR at
+> 1.08 became exactly 540 base, with the original 500 EUR preserved alongside.
+>
+> **Policy violations are recorded warnings, never blocks** — again the build plan's own words. A
+> breach writes a row to `hrm_expense_policy_violations` (with the cap snapshotted, so the warning
+> still reads correctly after the policy is re-priced), and the claim submits successfully. A
+> boolean on the line could say neither WHICH policy nor by how much; a hard block would make an
+> over-cap taxi fare unclaimable rather than reviewable. The check runs AFTER the line is
+> persisted, so a breach can never cost the employee their line.
+>
+> **All three advance-settlement outcomes, none of them an error state**: advance > claim
+> (employee returns the balance), advance < claim (org pays the difference), advance == claim
+> (clean). `SettleAgainstAdvance` is pure and takes the advance's OUTSTANDING balance, so a second
+> claim against a partly-used advance sees only what is left. Only a positive payable becomes a
+> reimbursement — creating a zero one would surface in a payroll run as a line nobody can explain.
+>
+> **The 7C boundary is honoured exactly: `internal/hrm/payslips` is untouched by 8B.** An approved
+> claim's shortfall calls `hrm/reimbursements.Service.Create` through `expenses.ReimbursementCreator`
+> — a consumer-owned narrow interface naming reimbursements' own types, so the service satisfies
+> it structurally with no adapter (the corrected `certifications.SkillGranter` precedent). 7C's
+> existing `payslips.ReimbursementSource` then pays it out. "Claim lifecycle here, payout via
+> payroll in compensation", with no new payroll coupling. Proved live end to end: 800 claimed →
+> 700 approved (one line trimmed 260→160) → 500 advance consumed → 200 reimbursement created.
+>
+> **Per-diem, mileage and policy caps are all effective-dated**, read with 7D's `SlabsAsOf` shape
+> (`MAX(effective_date) <= asOf`). A cap raised next month must not retroactively excuse this
+> month's breach, and a mileage line uses the rate in force on its EXPENSE date, not today's.
+> Proved non-vacuous by neutralising the date filter on both lookups and watching a future rate
+> leak into the past — a 2020 breach stopped being flagged and a 100km trip repriced from 45 to 90.
+>
+> **⚠ A usability defect the live smoke run caught, not the tests.** Deciding the LAST line flips
+> a claim to `approved`, and `ApproveLine` originally refused anything but `pending_approval` /
+> `partially_approved` — so an approver who mistyped that final line had no remedy at all. Now
+> revisable until `paid`, because only settlement actually hands money to payroll. Covered by a
+> test that corrects an approved claim and then confirms revision IS refused once settled.
+>
+> **Verification:** all six architecture guards green, 23 new unit subtests (FX conversion, claim
+> folding, and all three settlement outcomes — pure, tested before anything calls them), 17 new
+> integration tests (**179 total**, up from 163), migration reversibility proved down×2/re-up with
+> both widened CHECKs restored to their exact r29 state without over-reverting (`asset_request`
+> and `reimbursement` confirmed still present), and a live HTTP smoke run against real seeded data
+> with all test data cleaned up afterward.
+>
+> **Still open, unchanged:** `POST /platform/scheduler/jobs/:name/run` returns 400
+> `NO_BUSINESS_CONTEXT` for every job; a fresh API-created org has no `hrm_employee_statuses`;
+> `ComputeSlab`/`evalFormula` still operate on `float64`. Phase 7 is now COMMITTED (`f0eaf64`);
+> 8A and 8B remain uncommitted.
+>
+> ---
+>
+> r29 — **HRM Extended Phase 8A: asset management.** New package
+> `internal/hrm/assets`, migrations `00106`/`00107`, 7 new tables, 21 new routes. First slice of
+> Phase 8 (Operations), which is greenfield — exploration found no existing asset, ticketing or
+> helpdesk code anywhere in the repo.
+>
+> **The current holder is a derived query and there is no column for it.** The build plan is
+> emphatic ("assignment history where current holder is a derived query, never a stored column")
+> and this is the `00076` computed-not-stored rule: a denormalized holder is a second source of
+> truth that drifts the first time a return is recorded without updating it. The holder is the
+> `hrm_asset_assignments` row with `returned_at IS NULL`, and the partial unique index
+> `uq_hrm_asgn_active` is what makes that single-valued rather than a guess — assigning an
+> already-held asset returns `ALREADY_ASSIGNED`, proved live. Identically, a licence's
+> `seats_used` is `COUNT(*)` over unreleased seats, never a counter, and book value is computed
+> per read. An integration test introspects `information_schema` to assert **eight** forbidden
+> columns are absent (`current_holder_id`, `assigned_to`, `book_value`, `seats_used`, …) — the
+> only way to prove a column does NOT exist, the 6A completion-percentage precedent.
+>
+> **Software licences are a separate table, not an asset category.** A physical asset has one
+> holder and a serial number; a licence has N seats, a renewal date and a per-seat cost. Merging
+> them means every hardware query carries a `seats_total` it never reads. The build plan names
+> this distinction directly.
+>
+> **Depreciation is a book-value stub and says so.** Straight-line from `purchase_cost` over the
+> CATEGORY's `useful_life_months`, floored at zero — an asset past its life is worth nothing, not
+> a negative number. (Contrast r25's negative net pay, where a negative IS a real outcome that
+> must survive; here it is arithmetic running off the end of a schedule, so clamping is correct
+> rather than concealing.) Real fixed-asset accounting belongs to the Accounting module. 13 unit
+> tests cover it before anything calls it — the `ComputeSlab` / `ApplyIncrease` / `Amortize`
+> precedent — including day-of-month boundaries and a 120-month sweep asserting the value never
+> goes negative nor exceeds cost.
+>
+> **⚠ A real pre-existing defect found and fixed: `AckType` had drifted from its own DB CHECK for
+> two phases.** Migration `00086` (5B) added `'appraisal'` and `00094` (6B) added
+> `'course_completion'` to `hrm_acknowledgements_acknowledgeable_type_check` — but neither updated
+> the `AckType` enum in `internal/hrm/acknowledgements/model.go`, and `Create()` gates on
+> `AckType.IsValid()`. Both values were therefore **unreachable through the only typed write
+> path**: the DB permitted seven types, the Go service permitted five, and two migrations had
+> added values no code could ever produce. Found while adding `'asset_handover'` as the third such
+> widening — which would have been a third dead value. Fixed by widening the enum to match the
+> CHECK exactly, with an integration test that walks every permitted type through
+> `acknowledgements.Create` so the two can never silently diverge again. Proved non-vacuous by
+> reverting the enum: the red run names all three values explicitly. This is the same class as
+> r25's dropped `hrm_employees.status` and r28's unread `is_taxable` — schema and code moving
+> apart with nothing to catch it.
+>
+> **Handover sign-off reuses `hrm_acknowledgements`** via `assets.HandoverAcknowledger`, which
+> names acknowledgements' own types so `acknowledgements.Service` satisfies it structurally with
+> no adapter — the *corrected* `certifications.SkillGranter` precedent (r24 rewrote that
+> interface after an initial version hid real types behind aliases and `any`). A sign-off failure
+> does not unwind the assignment: the asset really is in the employee's hands, and losing that
+> record to keep a signature request atomic would be the worse outcome.
+>
+> **`.assign` is a separate permission from `.manage`**, and `.request` is self-service through
+> `member` — the route cannot express "for yourself only", so `Service.RequestAsset` resolves the
+> caller's own `employeeID` (the `hrm.goals.set_own` / `benefits.EnrollSelf` precedent, using this
+> package's own `FindEmployeeIDByUserID` rather than a shared service method). Fulfilment is a
+> distinct call from approval — `promotions.Apply` / `compensation.ApplyCycle` /
+> `loans.DisburseLoan` again: a decision and the thing it authorizes are never the same call.
+>
+> **⚠ Scope-tier asymmetry, same shape as `hrm.payroll`'s (00097):** `hrm.assets`' tiers govern
+> ASSIGNMENTS and REQUESTS, which carry `employee_id`; `hrm_assets` itself does not. An
+> *unassigned* asset is org inventory visible to any `hrm.assets.view` holder — only an assigned
+> one narrows to its holder's scope. `hrm.asset_config` (categories + licences) is catalog data
+> with no `employee_id` and is deliberately NOT tiered.
+>
+> **Verification:** all six architecture guards green, 13 new unit tests, 12 new integration tests
+> (**163 total**, up from 151), migration reversibility proved down×2/re-up with zero tables /
+> permission rows / role grants **and all three widened CHECKs restored to their exact r28 state
+> without over-reverting** (`reimbursement` and `course_completion` confirmed still present), and
+> a live HTTP smoke run against real seeded data — book value exactly 1200 on a 12-month-old 2400
+> asset with a 24-month life, holder derived correctly across assign→return, `ALREADY_ASSIGNED`
+> and `NO_SEATS_LEFT` both refused, damaged return routed to `in_maintenance`, handover
+> acknowledgement landed — all test data cleaned up afterward.
+>
+> **Still open, unchanged:** Phase 7 remains entirely uncommitted, and 8A now sits on top of it in
+> the same working tree. `POST /platform/scheduler/jobs/:name/run` still returns 400
+> `NO_BUSINESS_CONTEXT` for every job. A fresh API-created org still has no
+> `hrm_employee_statuses`.
+>
+> ---
+>
+> r28 — **HRM Extended Phase 7D: statutory compliance + benefits
 > administration — the final slice of Phase 7. Phase 7 (Compensation depth + Benefits) is now
 > ✅ COMPLETE.** Two new packages, `internal/hrm/statutory` (country-pluggable `Provider` +
 > `Registry`, one shipped data-driven `SlabProvider`) and `internal/hrm/benefits` (plans, tiers,
@@ -1587,6 +2190,168 @@ PRIMITIVES §5 for why the r21 "consumer #1" framing was superseded.
 
 ---
 
+### PLATFORM — TICKETS [✅ DONE — built 2026-08-27]
+
+Ticket/helpdesk engine in `internal/platform/tickets/`: categories → SLA policies → tickets →
+comments → an append-only SLA pause ledger. Migrations `00110` (schema) / `00111` (permissions),
+five tables, 17 routes. Platform Primitive #6.
+
+**Why platform and not `internal/hrm/helpdesk`.** The build plan called this "an architectural
+fork to decide before starting" — HR Helpdesk in the HRM list, customer-facing Ticketing in the
+CRM list. Building it as a platform primitive means the same engine serves both, and the codebase
+had already made this exact decision twice: `platform_checklist_instances.subject_type CHECK IN
+('employee')` and `platform_form_instances.subject_type CHECK IN ('employee','candidate')`.
+`platform_tickets.requester_type CHECK IN ('employee')` is the third instance of that pattern.
+`requester_id` carries **no FK**, so adding `'contact'` later is a CHECK widening with no `hrm_*`
+reference to untangle — an integration test asserts no `platform_ticket*` table has an FK into
+`hrm_*`.
+
+**No scope tiers, because `internal/hrm/scope` cannot be imported here.** `scope.Predicate`
+hard-codes `FROM hrm_employees`; a platform primitive must not reach into HRM tables, and
+`TestPermissions_ScopeTiersSeeded` never fires because nothing calls `ResolveScope`. Visibility is
+`ListFilter.CanViewAll` instead — resolved once in the service from `platform.tickets.view_all`
+and applied in SQL as `requester_user_id = caller OR assignee_user_id = caller`. The
+`platform.checklists.complete` precedent: the route gate cannot express ownership, so the service
+does. `FindTickets` and `CountTickets` share one `ticketWhere` builder so a list and its own total
+cannot drift. The single-row read restates the same rule and reports **NOT-FOUND** rather than
+denied for an invisible ticket — "you may not see ticket X" still confirms ticket X exists, which
+in a helpdesk carrying harassment reports is itself a disclosure.
+
+**`is_internal` comments are filtered at the REPOSITORY layer, in two read methods.**
+`FindPublicComments` (requester) and `FindAllComments` (agent) differ by one `WHERE` clause, and
+that difference is the whole of internal-comment protection — a single method plus a caller-side
+filter is one forgotten branch away from leaking, and the requester's path must never hold an
+internal comment in memory at all. Structural, not disciplinary: the 5C 360-anonymity and 6A
+answer-key shape. `idx_ptcmt_public` is a partial index on `is_internal = FALSE`, so the common
+path never scans internal rows. Writing an internal note needs `platform.tickets.comment_internal`
+separately from `.comment`, so a requester cannot author something they could not read back.
+
+**The SLA clock is pausable, and pauses live in an append-only ledger.**
+`platform_ticket_sla_events` holds pause/resume rows; there is deliberately no `elapsed_minutes`,
+`paused_minutes` or `sla_breached` column (an integration test introspects `information_schema` to
+prove nine such columns absent, plus no `updated_at` on the ledger itself). One ticket is routinely
+paused and resumed several times, and a mutable counter shows the total but never how it was
+reached — the `hrm_loan_recovery_events` reasoning. `sla.go` is pure and was written with its tests
+first: consecutive pauses (first wins), a resume with no pause (ignored), a trailing pause (runs to
+`now`), an inverted interval contributing zero rather than negative (a negative would subtract from
+paused time and mask a breach), and a zero target never counting as a breach. Each clock stops at
+the event that satisfies it — `first_response_at` or `resolved_at` — not at `now`, so a ticket
+answered inside its window cannot drift into breach unattended. Only a public reply from somebody
+other than the requester stamps `first_response_at`: the SLA measures what the requester actually
+received, so neither their own follow-up nor an internal note counts.
+
+**The governing policy is pinned at creation** (`sla_policy_id`), so tightening a policy later
+cannot retroactively breach older tickets — 7B's `calculation_snapshot` / 7D's
+`employee_cost_snapshot` discipline applied to a target rather than a price. `ResolvePolicy`
+prefers a category-specific row and falls back to the org-wide default (`NULL category_id`).
+
+**Sensitive categories restrict the assignee pool.** `restricted_role` is a role NAME, not an FK
+(roles are org-scoped and partly system-seeded — the `platform/checklists` `owner_type='role'`
+precedent), checked through `AccessDirectory.UserRoleName` so this package holds exactly one notion
+of "what role does this user have" and it is authz's. The `is_sensitive` ↔ `restricted_role`
+pairing is enforced in Go rather than as a CHECK, which would be the `00076` `ON DELETE SET NULL`
+trap.
+
+**Conversion to an HR complaint is one-way and has no route.** `MarkConverted` is called from the
+HRM side, which reads the ticket, creates the complaint, then calls back — `hrm → platform` is the
+allowed direction. A generic HTTP endpoint would have to trust a client-supplied
+`converted_to_id`, the same reasoning that gives checklists no generic instantiate route. A second
+conversion is refused rather than silently accepted.
+
+Permissions (`00111`): `platform.ticket_config.{view,manage}` and
+`platform.tickets.{view,create,comment,comment_internal,assign,resolve,pause,view_all}`. Owner and
+admin hold all ten; manager holds the agent keys but **not** `.view_all`; member holds
+view/create/comment; viewer holds none. `.view_all` and `.comment_internal` have no route of their
+own by design — both are read inside the service to widen what an existing route returns.
+
+⚠ **`authz.Can` builds its permission key as `resource + "." + action`**, so the resource argument
+must carry the full dotted prefix (`"platform.tickets"`, not `"tickets"`). Passing the bare name
+denies everything silently and uniformly, which nearly produced a suite of vacuously-passing
+negative tests.
+
+---
+
+### PLATFORM — KNOWLEDGE BASE [✅ DONE — built 2026-08-27]
+
+Article/documentation engine in `internal/platform/kb/`: categories → articles → publish/archive,
+with full-text search. Migrations `00112` (schema) / `00113` (permissions), two tables, 9 routes.
+Platform Primitive #7. Built alongside PLATFORM — TICKETS, which is what a knowledge base is for —
+deflecting the tickets nobody needed to raise.
+
+**Two permissions only.** `platform.kb.view` reads published articles; `platform.kb.manage` reads
+and writes everything including drafts. The draft/published split is what makes two keys enough: a
+KB is org-wide reading material with no "mine" to narrow to, unlike tickets. A third
+`.view_unpublished` would imply a contributor role this product does not have, and an unused key is
+one nobody notices is granted wrongly. `viewer` gets `.view` here (unlike tickets, where a
+read-only role has no business reading other people's helpdesk threads — published documentation is
+exactly what it should see); `manager` gets `.manage`, because helpdesk agents are who write and
+correct KB articles.
+
+**Unpublished articles are excluded in SQL, and the SAFE state is the DEFAULT.**
+`ArticleFilter.IncludeUnpublished` *adds* `WHERE status = 'published'` when false rather than
+removing it when true, so a zero-valued filter — the shape of every "forgot to configure it" bug —
+returns published articles only. The failure mode is "too little", never "too much". The service
+sets the flag from the caller's own `.manage` grant and never reads it off the request, and a draft
+reports NOT-FOUND rather than denied so the single-row read agrees with the list that hides it.
+Same intent as tickets' two comment read paths, expressed as a default rather than a second method
+because there is one query shape here, not two.
+
+**Search is a GIN EXPRESSION index — there is no `search_vector` column.**
+`to_tsvector('english', title || ' ' || body)` is indexed as an expression, so Postgres recomputes
+it on every write; a stored vector is a derived value somebody has to remember to update, and this
+one cannot go stale. `plainto_tsquery` treats the input as literal words, so a user typing `&` or
+`!` gets a search rather than a syntax error. There is deliberately **no `view_count`** either — a
+counter nothing can recompute is unauditable the moment it drifts, and deriving one needs a
+view-event table no consumer has asked for. The `00076` rule cuts both ways: don't store what can
+be derived, and don't invent state nothing needs.
+
+**`published_at` records first publication, not last edit.** Editing a published article leaves it
+published — correcting a live policy must not silently unpublish it and leave employees reading
+nothing — and re-publishing an archived article restores it without pretending it is newly written,
+which a list ordered by `COALESCE(published_at, created_at)` would otherwise show at the top.
+Articles are always born drafts: the first save is the least likely to be the one worth publishing.
+Archive rather than delete, because superseded guidance still explains why somebody acted as they
+did.
+
+---
+
+### CAPTURE — INBOUND EMAIL [🔵 EXTENDED r32 — now a router]
+
+`internal/capture/email/`. Was a single-consumer pipeline: `ProcessInboundWebhook` hardcoded
+`leads.CreateLead`. Phase 8D generalized it — `org_inbound_emails.destination`
+(`'lead' | 'ticket'`, migration `00112`) decides which module an inbound email becomes, and the
+receiving address is what carries that decision: `sales@` makes a lead, `support@` makes a ticket.
+
+**`'lead'` is the default at three independent layers** — the column default, the service default
+when the field is omitted, and the router's fallback for any value this build does not recognise.
+All three must agree or every pre-8D address silently changes behaviour, so one test pins them
+together. Migration `00112` alone changes nothing for an existing install.
+
+**The ticket branch refuses rather than improvises.** `platform_tickets.requester_id` and
+`.requester_user_id` are both NOT NULL, so an email from somebody who is not an employee of that
+org produces NO ticket — recorded in `inbound_email_logs.error_message` naming the sender. Attaching
+a stranger's email to a fallback employee would put words in that person's mouth; in an HR helpdesk
+carrying grievances that is the worst available failure. The ticket is created AS the sender, so it
+lands in their own list and they can comment on it.
+
+Sender → employee resolution lives on **this package's own repository**, not in `platform/tickets`,
+which must never reference `hrm_*` — the 7D `benefits.FindEmployeeIDByUserID` precedent that
+resolving your own subject is the consuming package's job. `email.TicketRaiser` is consumer-owned
+and names tickets' own types, so `tickets.Service` satisfies it structurally with no adapter, and
+it is nil-safe: an install with no ticket engine logs the address as unroutable rather than
+panicking inside a webhook handler.
+
+⚠ **Every failure in this pipeline is recorded and swallowed**, because the webhook provider must
+receive a 200 or it retries the same message forever. `inbound_email_logs.error_message` is the
+only place an operator can see what went wrong — which is exactly how the `created_by` defect
+below stayed invisible for so long.
+
+⚠ **`crm_leads.created_by` was `NOT NULL` and every system capture had been failing** (r32). See
+the changelog entry — one fix in `leads.CreateLead` repaired the email, social and visitor paths
+together.
+
+---
+
 ### CRM — LEADS [✅ DONE — extended r11]
 
 Routes:
@@ -1755,7 +2520,7 @@ _Fix Pass B — security, required before any public exposure:_ 8. Inbound email
 
 ### HRM MODULE [✅ DONE — verified r9; dynamic statuses added post-r10; route count corrected 2026-08-03; leave balance engine added r18; onboarding checklist consumer added r19; Recruitment/ATS Phase 4A added r20, Phase 4B added r21; Performance/Goals Phase 5A added r22; appraisals 5B + 360 feedback/PIP 5C added r23]
 
-All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **39 route-bearing sub-modules, 441 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount + 29 learning r24 + 9 skills r24 + 9 certifications r24 + 1 payroll preview r25 + 22 compensation r26 + 7 loans r27 + 5 reimbursements r27 + 7 statutory r28 + 11 benefits r28). Counts re-grepped from `internal/hrm/*/routes.go` at r28 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
+All routes live under `/api/v1/organizations/:orgId/hrm/...`, permission-gated (`hrm.<submodule>.<action>`), **41 route-bearing sub-modules, 484 routes** (218 as of r19 + 34 recruitment r20 + 25 recruitment r21 + 19 performance r22 + 21 appraisal r23 + 12 feedback r23 + 9 PIP r23 + 3 correcting an r22 undercount + 29 learning r24 + 9 skills r24 + 9 certifications r24 + 1 payroll preview r25 + 22 compensation r26 + 7 loans r27 + 5 reimbursements r27 + 7 statutory r28 + 11 benefits r28 + 21 assets r29 + 22 travel/expense r30). Counts re-grepped from `internal/hrm/*/routes.go` at r30 rather than carried forward — the doc's own update rule, since these drift every revision. `internal/hrm/scope` has no routes and is not counted. This entry summarizes; per-route detail belongs in a dedicated `docs/modules/hrm.md`.
 
 **Database:** 52 tables. 40 verified in r9 (migrations `00020`–`00050`, of which `00048` is unrelated CRM seed data) + `hrm_employee_statuses` (00053) + `hrm_legal_entities` (00070, previously undercounted here — Section 6 already had it) + `hrm_leave_policies`/`hrm_leave_transactions`/`hrm_leave_balances` (00074, r18) + `hrm_recruitment_pipelines`/`_stages`/`hrm_job_requisitions`/`_postings`/`hrm_candidates`/`hrm_applications`/`_stage_history` (00078, r20) + `hrm_interviews`/`_panelists`/`hrm_interview_scorecards`/`hrm_offers`/`hrm_referrals` (00080, r21).
 
@@ -1794,6 +2559,14 @@ Attendance's `resolveShift` had a column-name bug (`wsa.scope`/`wsa.entity_id` v
 **Loans + Reimbursements (r27) — Phase 7C:** `internal/hrm/loans/` (7 routes) and `internal/hrm/reimbursements/` (5 routes), `hrm.loans.*` (+ `.disburse`/`.foreclose`, distinct from `.manage`) and `hrm.reimbursements.*`, both scope-tiered. `loans.Amortize` is pure decimal arithmetic (no float pass-through) generating a reducing-balance schedule ONCE at disbursement, never recomputed — the last installment absorbs the rounding remainder, the `ComputeSlab` boundary shape. Both feed lines into every OTHER run type's EXISTING per-employee computation in `computePayslips` (not a dedicated branch the way 7B's bonus run is) via two more consumer-owned narrow interfaces on `payslips`: `LoanSource` and `ReimbursementSource` — `hrm/loans` and `hrm/reimbursements` both import `hrm/payslips`, never the reverse. Loan recovery is capped so it never drives net negative (`headroom = gross - deductions + reimbursements`; a shortfall carries to the next run rather than being written off), which is why `hrm_loan_schedules` tracks `recovered_amount` separately from the frozen `total_amount` and `hrm_loan_recovery_events` exists as an append-only ledger — one schedule row can be recovered across several runs. Reimbursements land straight in `NetPay` without inflating `GrossPay` (non-taxable pass-through, ahead of 7D's statutory engine). Foreclosure marks remaining schedule rows `foreclosed` rather than deleting them. The "resignation" edge case is resolved narrowly: an employee who has fully left simply is not in a later period's eligible set, so their remaining installments stay `pending` — a receivable, not silently recovered or written off — auto-foreclosure-on-exit is explicitly NOT built (it would require redesigning the negative-net guard around the still-unbuilt F&F module). See the r27 changelog entry.
 
 **Statutory + Benefits (r28) — Phase 7D, the final slice of Phase 7:** `internal/hrm/statutory/` (7 routes, `hrm.statutory.*`, untiered) and `internal/hrm/benefits/` (11 routes, `hrm.benefit_plans.*` untiered + `hrm.benefit_enrollments.*` scope-tiered). Statutory ships a country-pluggable `Provider` interface + `Registry` with ONE real, data-driven `SlabProvider` — reading effective-dated `hrm_statutory_slabs` and evaluating via `payslips.ComputeSlab`, the same function `hrm_salary_components`' slab components already use — rather than a bare interface with zero implementations. `computePayslips` grew a `taxableGross` accumulator (summing only earning components flagged `is_taxable`, `00023`) specifically for this: `GrossPay` stays gross salary, `TAXABLE_GROSS` is what a rule actually reads. Both statutory and benefits integrate into the SAME per-employee loop every non-bonus run already computes (the 7C loan/reimbursement shape) via two more consumer-owned narrow interfaces on `payslips` — `StatutorySource`/`BenefitsSource` — so `hrm/statutory` and `hrm/benefits` import `hrm/payslips`, never the reverse. Benefit tier costs are mutable catalog data; `employee_cost_snapshot`/`employer_cost_snapshot` freeze what an enrollment actually costs at signup (the `hrm_compensation_bands` pattern), proved by test: repricing a tier after enrollment leaves the existing payslip deduction unchanged. `benefits.activate_pending_enrollments` is the phase's scheduler consumer (the `certifications.expiry_sweep` shape). **Phase 7 (Compensation depth + Benefits) is now ✅ COMPLETE across all four slices.** See the r28 changelog entry.
+
+**Assets (r29) — Phase 8A:** `internal/hrm/assets/` (21 routes), `hrm.asset_config.*` (untiered catalog — categories + software licences) and `hrm.assets.*` (scope-tiered, with `.assign` and `.request` as keys distinct from `.manage`). Seven tables. **The current holder is a derived query with no backing column** — the assignment row where `returned_at IS NULL`, made single-valued by the partial unique index `uq_hrm_asgn_active`; likewise licence `seats_used` (`COUNT(*)`) and `book_value` (straight-line stub, floored at zero, computed from the CATEGORY's useful life). An integration test introspects `information_schema` to prove eight such columns stay absent. Software licences are a deliberately separate table from physical assets — N seats and a renewal date versus one holder and a serial number. Handover sign-off reuses `hrm_acknowledgements` via `assets.HandoverAcknowledger`, which names acknowledgements' own types so the service satisfies it structurally (the corrected `certifications.SkillGranter` precedent). Asset requests are approval-gated, and fulfilment is a distinct call from the approval decision. ⚠ Scope-tier asymmetry mirrors `hrm.payroll`'s: the tiers govern assignments/requests (which carry `employee_id`), not `hrm_assets` itself — an unassigned asset is org inventory. See the r29 changelog entry, including a two-phase-old `AckType` enum/CHECK drift found and fixed here.
+
+**Travel & Expense (r30) — Phase 8B:** `internal/hrm/expenses/` (22 routes), `hrm.expense_config.*` (untiered — policies, per-diem and mileage rates) plus `hrm.travel.*` and `hrm.expenses.*` (both scope-tiered; separate resources because approving a TRIP and settling the MONEY are different authorities). Nine tables. **Approval is per LINE**: `hrm_expense_lines` carries `amount` vs `approved_amount`, `hrm_expense_claims` carries neither total, and both are `SUM(lines)` at read time. `approved_amount` is nullable because NULL ("undecided") and 0 ("decided, nothing payable") are different states — `SettleClaim` refuses while any line is undecided rather than paying it as zero. Each line snapshots its `exchange_rate` and `base_amount` at claim time (no FX table exists; that is Phase 11), so a later rate change cannot rewrite a settled claim. Policy breaches are recorded warnings in `hrm_expense_policy_violations`, never blocks, checked AFTER the line persists. Per-diem, mileage and policy caps are all effective-dated via 7D's `SlabsAsOf` shape. All three advance-settlement outcomes are handled, and only a positive payable becomes a reimbursement — which is the 7C boundary: `expenses.ReimbursementCreator` (consumer-owned, naming reimbursements' own types) hands the shortfall to `hrm/reimbursements`, whose `payslips.ReimbursementSource` already pays it through payroll. **`internal/hrm/payslips` is untouched by 8B.** See the r30 changelog entry.
+
+**Exit Management (r33) — Phase 9A:** `internal/hrm/exits/` (11 routes), `hrm.exits.*` scope-tiered plus `hrm.exit_config.*` untiered. Three tables. **`hrm_exits` is an UMBRELLA over `hrm_resignations`/`hrm_terminations`, not a replacement** — those own the decision (with their approval chains), this owns the process that follows. `source_type`/`source_id` are polymorphic and FK-FREE (the fourth instance of the `platform_checklist_instances.subject_type` pattern), so ownership is validated in the service instead: an exit pointing at another employee's resignation is refused. **No `hrm_notice_periods` table** despite the build plan naming one — `hrm_resignations` already holds all three notice facts; only the SHORTFALL was new, and it stores DAYS not money (9B applies the rate). A WAIVED notice period is never a shortfall. **Clearance completion is derived, never stored** — `hrm_terminations.exit_clearance_completed` is exactly the denormalized boolean this avoids and Phase 9 never touches it; only a non-zero `blocking_amount` blocks, and resolving never zeroes the amount because a forgiven debt must still show what was forgiven. `hrm_exit_clearance_items` is the seam 9B reads as F&F debits. **`hrm_rehire_eligibility` gives `hrm_terminations.is_rehire_eligible` (unread since `00034`) its first reader**, surfaced to recruitment through the consumer-owned nil-safe `recruitment.RehireChecker` as a derived WARNING on the candidate — never a block, never stored. `hrm.exits.settle` is seeded here but gates F&F approval in 9B. See the r33 changelog entry.
+
+**F&F Settlement (r34) — Phase 9B:** `internal/hrm/exits/` gains gratuity + settlement (4 more routes), `hrm.gratuity.*` (untiered catalogue). Two tables. **F&F is an off-cycle payroll run (`run_type='fnf'`), not a separate calculator** — same line types, same statutory engine, same immutability — and it is the **ADDS-ON** integration shape, not REPLACES: the ordinary per-employee computation runs with the employee set narrowed to the leaver, and settlement credits/debits are appended alongside loan, reimbursement, statutory and benefit lines. `payslips.FnFSource` is the sixth consumer-owned narrow interface, nil-safe like the five before it, and it also answers WHICH employee a run settles — so no `employee_id` column was added to `hrm_payslip_runs`. An F&F run **bypasses the org-wide eligibility filter** (which drops anyone whose `termination_date` precedes the period start — exactly the person being settled). **The negative-net guard is run-type-aware**: negative net is a valid F&F outcome (a receivable), and r25's guard is unchanged for every other run type. **Clearance gates approval, never computation**, so HR can see the figure while clearance is open. `hrm_exit_settlement_lines` is an append-only audit trail with one line per claim and amounts always positive (direction in `is_credit`). Gratuity is effective-dated, partial years are not paid pro rata, below-minimum is zero *with a reason*, and the monthly-to-daily divisor is stored per rule and reused by the notice-shortfall line. **All three cross-module sources are wired (r35)**, each via a consumer-owned nil-safe narrow interface satisfied by the module that owns the data: leave encashment (F&F prices days `hrm/leave` recorded, using `encashment_rate_basis` — a Phase 2 column whose comment always said a future F&F phase would read it; a `fixed` basis produces a zero line saying so, because no column stores the amount), loan foreclosure (the FULL outstanding from schedule rows, never `principal_amount`, with the ordinary per-installment recovery **skipped for `fnf` runs** or the due installment is charged twice) and travel-advance recovery (same-currency only; no FX table exists, so a foreign advance is reported unrecovered rather than converted at a guessed rate). `MarkSettled` closes out the SOURCE, not just the audit trail — otherwise the loan stays active for the next process to charge again. See the r34 and r35 changelog entries.
 
 **Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences now genuinely run (see Section 5 → PLATFORM — SCHEDULER) — `milestones.generate_upcoming` previously errored on every run against a column `00053` had already dropped, silently, so it never generated anything despite being "wired."
 
@@ -1983,7 +2756,7 @@ Internal only. Append-only log for security-sensitive events. No public API endp
 - Transactions for multi-step operations (org creation, membership changes, lead conversion, approval decisions)
 - Audit logs and webhook logs are append-only
 
-### Migration Count: 105
+### Migration Count: 109
 
 Files live in `backend/internal/migrations/`. Run via `goose` or `make migrate`.
 r11 ended at 64. Post-r11: `00065` tasks `related_type`/`related_id` context + `tasks.view_all`
@@ -2080,13 +2853,44 @@ untiered, owner/admin only.
 `hrm_dependents` (manually verified) · `00105` seeds `hrm.benefit_plans.*` (untiered) and
 `hrm.benefit_enrollments.*` (scope-tiered + `.enroll_self` + `.verify_dependent`).
 
+`00106` Phase 8A assets — 7 new tables: `hrm_asset_categories`, `hrm_assets`,
+`hrm_asset_assignments`, `hrm_asset_maintenance_logs`, `hrm_asset_requests`,
+`hrm_software_licenses`, `hrm_license_seat_assignments`; widens
+`hrm_acknowledgements.acknowledgeable_type` with `'asset_handover'` AND both approval CHECKs with
+`'asset_request'` · `00107` seeds `hrm.asset_config.*` (untiered) and `hrm.assets.*`
+(scope-tiered, + `.assign` / `.request` as distinct keys).
+
+⚠ `00106` deliberately creates NO `current_holder` column on `hrm_assets` and NO `seats_used` on
+`hrm_software_licenses`. Both are derived; `uq_hrm_asgn_active` (a partial unique index over
+`returned_at IS NULL`) is what makes the derived holder single-valued. An integration test
+introspects `information_schema` to assert eight such columns stay absent — see the r29 entry.
+
+`00108` Phase 8B travel & expense — 9 new tables: `hrm_travel_requests`,
+`hrm_travel_itinerary_items`, `hrm_travel_advances`, `hrm_expense_claims`, `hrm_expense_lines`,
+`hrm_expense_policies`, `hrm_per_diem_rates`, `hrm_mileage_rates`,
+`hrm_expense_policy_violations`; widens both approval CHECKs with `'travel_request'` /
+`'expense_claim'` · `00109` seeds `hrm.expense_config.*` (untiered) plus `hrm.travel.*` and
+`hrm.expenses.*` (both scope-tiered, with `.approve_lines` and `.disburse_advance` as distinct keys).
+
+⚠ `00108` deliberately gives `hrm_expense_claims` NO total columns — approval is per-line, so both
+totals are `SUM(hrm_expense_lines)` at read time. `hrm_expense_lines.approved_amount` is nullable
+on purpose: NULL is "undecided", 0 is "decided, nothing payable". An integration test introspects
+`information_schema` to assert four forbidden total columns stay absent.
+
+⚠ `00108`'s Down block drops lines BEFORE mileage rates, because `fk_hrm_expl_mileage_rate` is
+added after both tables exist — not the mirror of CREATE order.
+
+⚠ `00106` widens THREE constraints, and its Down block restores each to its exact r28 state —
+verified by asserting `reimbursement` and `course_completion` are still present after rollback,
+not just that the new values are gone. Over-reverting is as broken as under-reverting.
+
 ⚠ A statutory rule's bracket table is revised by inserting a WHOLE NEW SET of `hrm_statutory_slabs`
 rows sharing one `effective_date` — never by editing a bracket in place. `SlabsAsOf` groups by
 `MAX(effective_date) <= asOf`, which is what makes "the current table" well-defined instead of a
 mix of brackets from different revisions; this grouping is the exact mechanism the r28 changelog's
 mandatory effective-dating test proved non-vacuous by breaking.
 
-### Key Tables (145 total)
+### Key Tables (161 total)
 
 **Core / auth / org (14):**
 `users` · `organizations` · `organization_members` · `organization_invitations` · `permissions` · `roles` · `auth_accounts` · `sessions` · `login_events` · `verification_tokens` · `subscriptions` · `organization_usage` · `audit_logs` · `tasks`
@@ -2112,6 +2916,8 @@ Performance (3): `hrm_goal_cycles` · `hrm_goals` · `hrm_goal_checkins`
 Recruitment (12): `hrm_recruitment_pipelines` · `hrm_recruitment_stages` · `hrm_job_requisitions` · `hrm_job_postings` · `hrm_candidates` · `hrm_applications` · `hrm_application_stage_history` · `hrm_interviews` · `hrm_interview_panelists` · `hrm_interview_scorecards` · `hrm_offers` · `hrm_referrals`
 Compensation (5): `hrm_compensation_bands` · `hrm_merit_matrix_cells` · `hrm_salary_revision_cycles` · `hrm_salary_revisions` · `hrm_bonuses`
 Loans + Reimbursements (4): `hrm_loans` · `hrm_loan_schedules` · `hrm_loan_recovery_events` · `hrm_reimbursements`
+Travel & Expense (9): `hrm_travel_requests` · `hrm_travel_itinerary_items` · `hrm_travel_advances` · `hrm_expense_claims` · `hrm_expense_lines` · `hrm_expense_policies` · `hrm_per_diem_rates` · `hrm_mileage_rates` · `hrm_expense_policy_violations`
+Assets (7): `hrm_asset_categories` · `hrm_assets` · `hrm_asset_assignments` · `hrm_asset_maintenance_logs` · `hrm_asset_requests` · `hrm_software_licenses` · `hrm_license_seat_assignments`
 Statutory (2): `hrm_statutory_rules` · `hrm_statutory_slabs`
 Benefits (4): `hrm_benefit_plans` · `hrm_benefit_tiers` · `hrm_benefit_enrollments` · `hrm_dependents`
 
@@ -2457,9 +3263,16 @@ PLATFORM PRIMITIVES and PREP MIGRATIONS sit first because most entries below ref
 
 ---
 
-### PLATFORM PRIMITIVES [✅ DONE — all five built, see Section 5; #5 shipped r23 with its first two real consumers]
+### PLATFORM PRIMITIVES [✅ DONE — all seven built, see Section 5; #6 (tickets) r31, #7 (knowledge base) r32]
 
-Five pieces of shared infrastructure that multiple modules need, all now built. They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
+Seven pieces of shared infrastructure that multiple modules need, all now built. The last two were
+not in the original five: `internal/platform/tickets` (r31) exists because the helpdesk fork
+resolved toward platform rather than `internal/hrm/helpdesk`, so one engine serves both HR helpdesk
+and the CRM list's customer-facing ticketing; `internal/platform/kb` (r32) is its companion, since
+a knowledge base is what deflects the tickets nobody needed to raise. See Section 5 →
+PLATFORM — TICKETS and PLATFORM — KNOWLEDGE BASE.
+
+They live in `internal/platform/` for the same reason contacts and engagement do: building them per-module means schema duplication across CRM, HRM, and everything after.
 
 Two of these (notification, scheduler) were previously named only inside the CRM Advanced Functionality Pass entry below, as a parenthetical dependency. That mention is now superseded by this entry — one fact, one owner. The CRM entry keeps the dependency note but not the description.
 
@@ -2667,15 +3480,13 @@ Everything below depends on PLATFORM PRIMITIVES above. Those dependencies are st
 
 **Operations**
 
-- **Asset Management** — categories with a `requires_return` flag, asset instances, assignment history (current holder is a derived query, never a stored column), maintenance log, requests, software license seats as a separate shape. Depreciation stays a stub here — book value only; real fixed-asset accounting belongs to the ACCOUNTING MODULE.
-  Reuses `hrm_acknowledgements` for handover sign-off. Feeds exit clearance and payroll recovery.
+- **Asset Management — ✅ DONE (r29, Phase 8A), see Section 5 → HRM MODULE → Assets.** Categories with `requires_return`, asset instances, assignment history (current holder derived, never stored — proved by `information_schema` introspection), maintenance log, approval-gated requests, and software licence seats as the separate shape the build plan called for. Depreciation is a book-value stub, computed per read. Handover sign-off reuses `hrm_acknowledgements` via a new `'asset_handover'` type. Feeds exit clearance (Phase 9) and payroll recovery — `requires_return` is the flag those will read.
 
-- **Travel & Expense** — travel requests, itineraries, advances, expense claims with **line-level** approval (`amount` vs `approved_amount` per line), policy violations recorded as warnings not hard blocks, per-diem and effective-dated mileage rates. Multi-currency is unavoidable here regardless of when multi-country lands. OCR is a vendor bolt-on; leave a nullable column and do manual entry first.
-  Boundary: claim lifecycle here, payout via payroll in compensation.
+- **Travel & Expense — ✅ DONE (r30, Phase 8B), see Section 5 → HRM MODULE → Travel & Expense.** Travel requests with itineraries, advances with all three settlement outcomes, and expense claims with genuine **line-level** approval (`amount` vs `approved_amount` per line; the claim stores no total at all). Policy violations recorded as warnings, never blocks. Per-diem, mileage and policy caps effective-dated. Multi-currency handled by snapshotting the rate onto each line rather than introducing an FX rate table — real conversion infrastructure remains Phase 11. OCR is a nullable `ocr_raw` column with manual entry, as scoped; no vendor integration. The boundary holds: claim lifecycle here, payout via 7C's reimbursement seam into payroll.
 
-- **HR Helpdesk** — employee-facing tickets with SLA (clock pausable), internal-only comments, sensitive categories with a restricted assignee pool, knowledge base.
-  ⚠️ Two boundaries: distinct from `hrm_complaints` (formal disciplinary complaints, legal weight) with a one-way convert path; and distinct from the customer-facing Ticketing/Helpdesk noted in the CRM entry above. Same data shape as that one, which is an argument for building it generic in `internal/platform/` rather than inside HRM — an open architectural fork, not a decision.
-  Reuses the capture inbound-email pipeline for email-to-ticket.
+- **HR Helpdesk — ✅ DONE (r31 core, r32 knowledge base + email-to-ticket).** Employee-facing tickets with a pausable SLA clock, internal-only comments, and sensitive categories with a restricted assignee pool shipped as **Platform Primitive #6**, `internal/platform/tickets/`; the knowledge base is **Platform Primitive #7**, `internal/platform/kb/`; email-to-ticket routes through `org_inbound_emails.destination`. See Section 5 → PLATFORM — TICKETS, PLATFORM — KNOWLEDGE BASE and CAPTURE — INBOUND EMAIL.
+  ✅ **The architectural fork is decided: platform, not HRM.** The same data shape serves the customer-facing Ticketing/Helpdesk noted in the CRM entry above; `requester_type` is FK-free and CHECK-narrowed to `'employee'`, so widening to `'contact'` is a CHECK change rather than a rewrite. The `hrm_complaints` boundary holds: `MarkConverted` is a ONE-WAY path called from the HRM side (`hrm → platform` is the allowed direction), and a second conversion is refused — a formal complaint carries legal weight and must never degrade back into a ticket. The HRM-side caller that creates the complaint is **not built yet**; `MarkConverted` exists and is tested, with no consumer.
+  ⏳ Still open: an HRM-side caller for the ticket→complaint conversion. `MarkConverted` is built and tested; `hrm/complaints` must create the complaint and call back.
 
 - **Exit Management** — upgrade over the existing resignations/terminations decision records: an umbrella exit record, notice period tracking, exit interviews (confidential, aggregate-only, often sent post-departure), clearance checklists, F&F settlement, document issuance, rehire eligibility. Access revocation on last working date is scheduler-driven, not manual.
   F&F is an off-cycle payroll run (`run_type = 'fnf'`), not a separate calculator — same line types, same statutory engine, same immutability. It pulls from seven modules; negative net is a valid outcome and must be handled. Clearance blocking items gate finalization.

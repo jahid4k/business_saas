@@ -111,6 +111,10 @@ func (s *serviceImpl) CreateCandidate(ctx context.Context, orgID string, created
 	if err := s.repo.CreateCandidate(ctx, c); err != nil {
 		return nil, fmt.Errorf("recruitment: CreateCandidate: %w", err)
 	}
+	// AFTER the insert, deliberately. The flag is a warning for the recruiter,
+	// not a gate — a candidate must never fail to be created because of it,
+	// which is the same ordering 8B uses for expense-policy violations.
+	s.attachRehireFlag(ctx, orgID, c)
 	return c, nil
 }
 

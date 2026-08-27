@@ -254,6 +254,44 @@ func (s *stubRepo) SumTransactionsSince(ctx context.Context, orgID, employeeID, 
 	return sum, nil
 }
 
+// SumEncashmentsByLeaveType mirrors the real query's sign handling:
+// encashment rows are stored with NEGATIVE days, and the sum is negated so
+// callers get the positive day count. Getting that backwards would turn an
+// F&F credit into a debit.
+func (s *stubRepo) SumEncashmentsByLeaveType(ctx context.Context, orgID, employeeID string) ([]*leave.EncashmentSummary, error) {
+	byType := map[string]float64{}
+	order := []string{}
+	for _, t := range s.transactions {
+		if t.OrgID != orgID || t.EmployeeID != employeeID {
+			continue
+		}
+		if t.TransactionType != leave.TransactionEncashment {
+			continue
+		}
+		if _, seen := byType[t.LeaveTypeID]; !seen {
+			order = append(order, t.LeaveTypeID)
+		}
+		byType[t.LeaveTypeID] += -t.Days
+	}
+	out := make([]*leave.EncashmentSummary, 0, len(order))
+	for _, id := range order {
+		if byType[id] <= 0 {
+			continue
+		}
+		e := &leave.EncashmentSummary{LeaveTypeID: id, LeaveTypeName: id, Days: byType[id]}
+		// policies is keyed by policy id, not leave type — find by
+		// LeaveTypeID exactly as FindPolicyByLeaveType does.
+		for _, p := range s.policies {
+			if p.OrgID == orgID && p.LeaveTypeID == id && p.IsActive {
+				e.RateBasis = p.EncashmentRateBasis
+				break
+			}
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 func (s *stubRepo) SumTransactionsByType(ctx context.Context, orgID, employeeID, leaveTypeID string, sinceDate *string, throughDate string) (*leave.PeriodTransactionSums, error) {
 	sums := &leave.PeriodTransactionSums{}
 	for _, t := range s.transactions {

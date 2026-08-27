@@ -19,15 +19,30 @@ const (
 )
 
 type AckType string
+
+// ⚠ This enum and the hrm_acknowledgements_acknowledgeable_type_check CHECK
+// must be widened TOGETHER. They drifted twice: migration 00086 (5B) added
+// 'appraisal' and 00094 (6B) added 'course_completion' to the DB, but neither
+// updated this enum — and Create() gates on IsValid(), so both values were
+// unreachable through the only typed write path. Fixed in 8A alongside
+// 'asset_handover' (00106); widening the DB alone just adds a dead value.
 const (
-	TypeWarning       AckType = "warning"
-	TypeDocument      AckType = "document"
-	TypeAnnouncement  AckType = "announcement"
-	TypeCalendarEvent AckType = "calendar_event"
-	TypePolicy        AckType = "policy"
+	TypeWarning          AckType = "warning"
+	TypeDocument         AckType = "document"
+	TypeAnnouncement     AckType = "announcement"
+	TypeCalendarEvent    AckType = "calendar_event"
+	TypePolicy           AckType = "policy"
+	TypeAppraisal        AckType = "appraisal"
+	TypeCourseCompletion AckType = "course_completion"
+	TypeAssetHandover    AckType = "asset_handover"
 )
+
 func (t AckType) IsValid() bool {
-	switch t { case TypeWarning, TypeDocument, TypeAnnouncement, TypeCalendarEvent, TypePolicy: return true }
+	switch t {
+	case TypeWarning, TypeDocument, TypeAnnouncement, TypeCalendarEvent, TypePolicy,
+		TypeAppraisal, TypeCourseCompletion, TypeAssetHandover:
+		return true
+	}
 	return false
 }
 

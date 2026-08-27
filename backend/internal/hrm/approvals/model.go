@@ -32,6 +32,13 @@ const (
 	// two-CHECK widening, see migration 00100's header.
 	ActionTypeLoan          ActionType = "loan"
 	ActionTypeReimbursement ActionType = "reimbursement"
+	// ActionTypeAssetRequest backs Phase 8A — same two-CHECK widening, see
+	// migration 00106's header.
+	ActionTypeAssetRequest ActionType = "asset_request"
+	// ActionTypeTravelRequest and ActionTypeExpenseClaim back Phase 8B —
+	// same two-CHECK widening, see migration 00108's header.
+	ActionTypeTravelRequest ActionType = "travel_request"
+	ActionTypeExpenseClaim  ActionType = "expense_claim"
 )
 
 func (a ActionType) IsValid() bool {
@@ -39,7 +46,8 @@ func (a ActionType) IsValid() bool {
 	case ActionTypeLeave, ActionTypeResignation, ActionTypePromotion, ActionTypeTransfer,
 		ActionTypeWarning, ActionTypeDocument, ActionTypeTermination,
 		ActionTypeAttendanceRegularization, ActionTypeAward, ActionTypeJobRequisition, ActionTypeOffer, ActionTypeCustom,
-		ActionTypeSalaryRevision, ActionTypeBonus, ActionTypeLoan, ActionTypeReimbursement:
+		ActionTypeSalaryRevision, ActionTypeBonus, ActionTypeLoan, ActionTypeReimbursement,
+		ActionTypeAssetRequest, ActionTypeTravelRequest, ActionTypeExpenseClaim:
 		return true
 	}
 	return false

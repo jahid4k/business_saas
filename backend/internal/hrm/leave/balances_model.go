@@ -176,6 +176,21 @@ type CurrentBalance struct {
 	IsNegative         bool    `json:"is_negative"`
 }
 
+// EncashmentSummary is one leave type's recorded-but-unpriced encashment for
+// an employee, for the F&F settlement to price.
+//
+// This package records encashed DAYS and deliberately never computes money —
+// see PostEncashment. encashment_rate_basis has been stored since Phase 2
+// with the note that "a future F&F phase reads this"; Phase 9B is that phase,
+// and this type is the handover. Leave still owns how many days; F&F owns
+// what a day is worth.
+type EncashmentSummary struct {
+	LeaveTypeID   string               `json:"leave_type_id"`
+	LeaveTypeName string               `json:"leave_type_name"`
+	Days          float64              `json:"days"`
+	RateBasis     *EncashmentRateBasis `json:"encashment_rate_basis,omitempty"`
+}
+
 // ─────────────────────────────────────────────────────────
 // Leave Transactions (append-only ledger)
 // ─────────────────────────────────────────────────────────

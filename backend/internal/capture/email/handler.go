@@ -65,12 +65,18 @@ func (h *Handler) CreateOrgEmail(c fiber.Ctx) error {
 
 	var req struct {
 		Address string `json:"address"`
+		// Omitted means "lead", matching the column default — an existing
+		// client that does not send this field keeps its behaviour.
+		Destination Destination `json:"destination"`
 	}
 	if err := c.Bind().Body(&req); err != nil {
 		return response.BadRequest(c, "BAD_REQUEST", "Invalid payload")
 	}
+	if req.Destination != "" && !req.Destination.IsValid() {
+		return response.BadRequest(c, "INVALID_DESTINATION", "destination must be either 'lead' or 'ticket'")
+	}
 
-	email, err := h.service.CreateOrgEmail(c.Context(), orgID, req.Address)
+	email, err := h.service.CreateOrgEmail(c.Context(), orgID, req.Address, req.Destination)
 	if err != nil {
 		log.Error("email: CreateOrgEmail", slog.Any("error", err))
 		return response.InternalServerError(c)

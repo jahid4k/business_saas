@@ -44,6 +44,12 @@ type Service interface {
 	PostAdjustment(ctx context.Context, orgID, employeeID, leaveTypeID, actorID string, req PostAdjustmentRequest) (*LeaveTransaction, error)
 	PostEncashment(ctx context.Context, orgID, employeeID, leaveTypeID, actorID string, req PostEncashmentRequest) (*LeaveTransaction, error)
 
+	// EncashmentsForSettlement satisfies exits.LeaveEncashmentSource.
+	// Declared on the interface so main.go can pass this service where that
+	// source is wanted — satisfaction is structural, so the method must be
+	// visible here and not only on serviceImpl.
+	EncashmentsForSettlement(ctx context.Context, orgID, employeeID string) ([]*EncashmentSummary, error)
+
 	// Scheduler entry points — asOfDate is an explicit param (mirrors
 	// attendance.RunAbsenceSweep's own `date string` arg) so both jobs are
 	// testable without manipulating wall-clock time.

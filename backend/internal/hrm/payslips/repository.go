@@ -46,6 +46,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const runSel = `id, public_id, org_id, period_year, period_month, run_type,
@@ -63,17 +64,29 @@ func scanRun(row pgx.Row) (*PayslipRun, error) {
 		&r.Status, &r.ComputedAt, &r.ComputedBy, &r.ApprovedAt, &r.ApprovedBy, &r.PaidAt, &r.PaidBy,
 		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
 func (r *repoImpl) FindRuns(ctx context.Context, orgID string) ([]*PayslipRun, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+runSel+` FROM hrm_payslip_runs WHERE org_id=$1 ORDER BY period_year DESC, period_month DESC`, orgID)
-	if err != nil { return nil, fmt.Errorf("payslips: FindRuns: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: FindRuns: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*PayslipRun, 0)
-	for rows.Next() { run, err := scanRun(rows); if err != nil { return nil, err }; list = append(list, run) }
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, run)
+	}
 	return list, rows.Err()
 }
 
@@ -129,8 +142,12 @@ func scanSlip(row pgx.Row) (*Payslip, error) {
 		&p.Currency, &p.Status, &p.PaymentReference, &p.PaymentDate, &p.PaidAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -159,10 +176,18 @@ func (r *repoImpl) FindPayslips(ctx context.Context, orgID string, filter SlipLi
 	q := fmt.Sprintf(`SELECT %s FROM hrm_payslips WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		slipSel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("payslips: FindPayslips: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: FindPayslips: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Payslip, 0)
-	for rows.Next() { s, err := scanSlip(rows); if err != nil { return nil, err }; list = append(list, s) }
+	for rows.Next() {
+		s, err := scanSlip(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
 	return list, rows.Err()
 }
 
@@ -210,7 +235,9 @@ func (r *repoImpl) CreatePayslipLines(ctx context.Context, lines []*PayslipLine)
 			l.CalcMethod, l.FormulaUsed, l.ComputedAmount, l.DisplayOrder,
 			l.LineType, l.IsEmployerContribution, l.SourcePeriodID,
 		).Scan(&l.ID, &l.CreatedAt)
-		if err != nil { return fmt.Errorf("payslips: CreatePayslipLines: %w", err) }
+		if err != nil {
+			return fmt.Errorf("payslips: CreatePayslipLines: %w", err)
+		}
 	}
 	return nil
 }
@@ -240,7 +267,9 @@ func (r *repoImpl) LoadPayslipLines(ctx context.Context, payslipID string) ([]*P
 		line_type, is_employer_contribution, source_period_id
 		FROM hrm_payslip_lines WHERE payslip_id=$1 ORDER BY display_order`,
 		payslipID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	list := make([]*PayslipLine, 0)
 	for rows.Next() {

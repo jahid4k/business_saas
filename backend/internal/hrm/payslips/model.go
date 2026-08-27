@@ -121,6 +121,13 @@ type PayslipLine struct {
 	// the correlation directly to the line it belongs to is what's robust).
 	sourceLoanScheduleID  string
 	sourceReimbursementID string
+	// sourceSettlementType / sourceSettlementID do the same job for an F&F
+	// settlement line, correlating it back to the loan, advance or clearance
+	// item that produced it so MarkSettled can mark that source consumed.
+	// A type as well as an id, because a settlement's sources live in four
+	// different tables and an id alone is ambiguous between them.
+	sourceSettlementType string
+	sourceSettlementID   string
 }
 
 // CreateRunRequest creates a new payroll run.
@@ -425,6 +432,75 @@ type BenefitsSource interface {
 	PendingDeductionsForEmployee(ctx context.Context, orgID, employeeID string, year, month int) ([]PendingBenefitDeduction, error)
 }
 
+// ── F&F settlement (Phase 9B) ────────────────────────────────────────────────
+
+// SettlementLine is one F&F credit or debit, as reported by an FnFSource.
+//
+// Amount is ALWAYS POSITIVE; direction lives in IsCredit. Storing debits as
+// negatives means every reader has to know the sign convention, and the first
+// one who does not produces a settlement that adds up backwards.
+type SettlementLine struct {
+	// SourceType names the origin: leave_encashment, gratuity,
+	// notice_shortfall, loan_foreclosure, travel_advance, clearance_due.
+	SourceType  string
+	SourceID    string
+	Description string
+	Amount      decimal.Decimal
+	IsCredit    bool
+}
+
+// FnFSettlement is everything an F&F run needs that ordinary payroll does not
+// already know: WHO is being settled, and what one-off credits and debits
+// apply on top of their final prorated salary.
+type FnFSettlement struct {
+	ExitID     string
+	EmployeeID string
+	Lines      []SettlementLine
+}
+
+// AppliedSettlementLine reports which settlement lines actually became
+// payslip lines, so the provider can mark their sources consumed — a loan
+// foreclosed, an advance recovered.
+type AppliedSettlementLine struct {
+	SourceType string
+	SourceID   string
+	LineID     string
+	Amount     decimal.Decimal
+}
+
+// FnFSource supplies the exit-specific half of a run_type='fnf' run.
+//
+// ⚠ F&F IS THE 'ADDS-ON' SHAPE, NOT 'REPLACES'. computeBonusPayslips replaces
+// the salary computation because a bonus run must not pay regular salary. An
+// F&F run MUST pay prorated final salary — it is the largest credit in most
+// settlements — so the ordinary per-employee computation runs unchanged with
+// the EMPLOYEE SET narrowed to the leaver, and these lines are appended
+// exactly as loan, reimbursement, statutory and benefit lines already are.
+//
+// Declared here for the same reason as the other five sources: payslips is
+// the CONSUMER, hrm/exits imports hrm/payslips to satisfy it, never the
+// reverse. A nil FnFSource makes an F&F run compute to nothing rather than
+// panicking — the established nil-source precedent.
+type FnFSource interface {
+	// SettlementForRun answers which employee this run settles and what extra
+	// credits and debits apply. A nil result means no exit is attached to the
+	// run, which the caller reports rather than silently computing an empty
+	// settlement — an F&F run that pays nobody is always a mistake.
+	SettlementForRun(ctx context.Context, orgID, runID string) (*FnFSettlement, error)
+	// MarkSettled is called ONLY after every payslip and line in the run has
+	// been persisted successfully — never from inside abortCompute. Same
+	// contract as BonusSource.MarkBonusesPaid and for the same reason: a loan
+	// marked foreclosed with no payslip behind it is money written off that
+	// nobody ever collected.
+	MarkSettled(ctx context.Context, runID string, applied []AppliedSettlementLine) error
+	// ClearanceComplete reports whether every blocking clearance item on the
+	// attached exit is resolved. Checked at APPROVAL, never at computation:
+	// HR must be able to compute a draft and see what a leaver will actually
+	// receive while clearance is still open. Locking earlier leaves them with
+	// no way to answer that — 8B's ApproveLine lesson.
+	ClearanceComplete(ctx context.Context, orgID, runID string) (bool, error)
+}
+
 var (
 	ErrNotFound               = errors.New("payslip run not found")
 	ErrPayslipNotFound        = errors.New("payslip not found")
@@ -443,4 +519,19 @@ var (
 	// is what stops it being paid out.
 	ErrInvalidRunType = errors.New("run_type must be one of regular, off_cycle, bonus, arrears, fnf")
 	ErrNegativeNetPay = errors.New("payroll run contains payslips with negative net pay and cannot be approved")
+
+	// ErrNoExitForFnFRun fires when a run_type='fnf' run has no exit record
+	// attached. Reported rather than computed as an empty run: an F&F run
+	// that settles nobody is always a mistake, and silently producing zero
+	// payslips would look like a successful settlement.
+	ErrNoExitForFnFRun = errors.New("this full & final run has no exit record attached")
+	// ErrFnFEmployeeNotFound fires when the exit names an employee who does
+	// not exist in this org — the FK-free source_id's failure mode.
+	ErrFnFEmployeeNotFound = errors.New("the employee this settlement names was not found")
+	// ErrClearancePending blocks APPROVAL of an F&F run whose exit still has
+	// unresolved blocking clearance items. Deliberately not checked at
+	// computation: HR must be able to see the settlement figure while
+	// clearance is still open, and locking earlier leaves them with no way to
+	// answer "what will I actually receive" — 8B's ApproveLine lesson.
+	ErrClearancePending = errors.New("clearance is incomplete: resolve all blocking items before approving the settlement")
 )
