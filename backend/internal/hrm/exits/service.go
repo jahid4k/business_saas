@@ -14,6 +14,7 @@ import (
 	"github.com/mridha/businesssaas/internal/hrm/payslips"
 	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
+	"github.com/mridha/businesssaas/internal/platform/forms"
 )
 
 // Caller carries the caller's identity and resolved scope tier. The handler
@@ -24,6 +25,10 @@ type Caller struct {
 	Scope  authz.Scope
 	// CanManage gates the write paths the route gate cannot express.
 	CanManage bool
+	// CanViewInterviews gates reading what a departing employee actually said.
+	// Deliberately separate from CanManage: a manager may administer an exit
+	// and must still never read the interview about themselves.
+	CanViewInterviews bool
 }
 
 // Service is exit management's business layer.
@@ -67,6 +72,26 @@ type Service interface {
 	MarkSettled(ctx context.Context, runID string, applied []payslips.AppliedSettlementLine) error
 	ClearanceComplete(ctx context.Context, orgID, runID string) (bool, error)
 
+	// Exit interviews (9C)
+	ScheduleInterview(ctx context.Context, orgID string, caller Caller, ref string, req ScheduleInterviewRequest) (*ExitInterview, error)
+	GetInterview(ctx context.Context, orgID string, caller Caller, ref string) (*ExitInterview, error)
+	SendInterview(ctx context.Context, orgID string, caller Caller, ref string) (*ExitInterview, error)
+	// ReadInterviewResponses is the CONFIDENTIAL path — gated on
+	// hrm.exits.interview_view, which managers do not hold.
+	ReadInterviewResponses(ctx context.Context, orgID string, caller Caller, ref string) (*forms.InstanceWithResponses, error)
+
+	// Documents (9C)
+	DocumentIssuanceEligibility(ctx context.Context, orgID string, caller Caller, ref string) ([]*DocumentEligibility, error)
+
+	// Access revocation (9C)
+	RevokeAccessNow(ctx context.Context, orgID string, caller Caller, ref string) (*Exit, error)
+
+	// Scheduler entry points (9C) — asOf is an explicit param, the
+	// leave.RunAccrual / attendance.RunAbsenceSweep shape, so both sweeps are
+	// testable without manipulating wall-clock time.
+	RunInterviewSweep(ctx context.Context, asOf time.Time) (int, error)
+	RunAccessRevocationSweep(ctx context.Context, asOf time.Time) (int, error)
+
 	// CheckRehireEligibility satisfies recruitment.RehireChecker. Declared on
 	// the interface so main.go can pass this service where a RehireChecker is
 	// wanted — satisfaction is structural, so the method must be visible here
@@ -84,16 +109,23 @@ type serviceImpl struct {
 	leaveSource   LeaveEncashmentSource
 	loanSource    LoanSettlementSource
 	advanceSource AdvanceSettlementSource
+	// 9C offboarding dependencies, all nil-safe: forms for the exit
+	// interview, and the two halves of access revocation.
+	forms     forms.Service
+	suspender MembershipSuspender
+	sessions  SessionRevoker
 }
 
 func NewService(
 	repo Repository, checklistsSvc checklists.Service, resolver *scope.Resolver,
 	leaveSource LeaveEncashmentSource, loanSource LoanSettlementSource,
 	advanceSource AdvanceSettlementSource,
+	formsSvc forms.Service, suspender MembershipSuspender, sessions SessionRevoker,
 ) Service {
 	return &serviceImpl{
 		repo: repo, checklists: checklistsSvc, resolver: resolver,
 		leaveSource: leaveSource, loanSource: loanSource, advanceSource: advanceSource,
+		forms: formsSvc, suspender: suspender, sessions: sessions,
 	}
 }
 

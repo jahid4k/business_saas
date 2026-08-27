@@ -1,6 +1,88 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-08-27 (r35 — **HRM Extended Phase 9B-2: the three cross-module settlement
+> Last updated: 2026-08-27 (r36 — **HRM Extended Phase 9C: exit interviews, documents, access
+> revocation.** Migrations `00118`/`00119`, 1 new table, 6 new routes, 2 scheduler jobs.
+> **PHASE 9 IS COMPLETE, and so is the HRM Extended build plan through Phase 9.**
+>
+> **⚠ THE MOST IMPORTANT FINDING IS ABOUT TOOLING, NOT THIS FEATURE: `touch` DOES NOT TRIGGER AN
+> `air` REBUILD.** Air compares file CONTENT and logs `skipping <file> because contents unchanged`.
+> Every "force a rebuild before the smoke run" I have done since r32 by touching a file has been a
+> **no-op** — it only ever appeared to work because a real edit usually happened just before. This
+> slice's smoke run reported the relieving letter as issuable with clearance outstanding; the source
+> was correct and the integration test passed, and the cause was a binary still carrying a
+> red/green injection. **The rule is now: make a real content change, and confirm the count of
+> `running...` lines actually INCREASED before trusting a smoke run.** This also retroactively
+> explains r33's stale-binary incident more precisely than "a failed build leaves the previous
+> binary running" did.
+>
+> **The exit interview is confidential, and confidentiality is a SEPARATE PERMISSION from
+> administering it.** `hrm.exits.interview` schedules and sends; `hrm.exits.interview_view` reads
+> what was actually said. A manager holds `view_team` over exits and can therefore see that an
+> interview happened — they must not see its contents, and `interview_view` is granted to
+> owner/admin and deliberately **not** to manager. Splitting read from schedule at the permission
+> layer is what makes that structural rather than a matter of who remembers to check — the 5C
+> 360-feedback precedent, where protection is which query the caller can reach. The service
+> re-checks the same key the route gates on, so no future non-HTTP caller can bypass it.
+>
+> **`platform_form_instances.form_type` already permitted `'exit_interview'`** in both the Go enum
+> and the `00084` CHECK — built ahead of this consumer and, unlike `AckType` in r29, verified NOT
+> to have drifted apart. Fourth instance of something written ahead of its consumer, after
+> `is_taxable` (7D), `is_rehire_eligible` (9A) and `encashment_rate_basis` (r35).
+>
+> **The interview is sent POST-DEPARTURE, and the timing is the mechanism, not a convenience.**
+> `scheduled_for` defaults to the day AFTER the last working date; sending earlier is refused with
+> `ErrInterviewNotDue` on both the manual path and the sweep. An interview answered while still on
+> the payroll gets a different answer, and the honest one is the entire point of asking.
+> `hrm_exit_interviews` stores **no responses** — the form engine owns them, and a second copy would
+> disagree with the first the moment one was edited.
+>
+> **`relieving_letter` required BOTH `document_type` CHECKs widened — the fourth occurrence of that
+> trap.** `hrm_document_templates` (11 values) and `hrm_employee_documents` (14, including
+> `passport`/`visa`/`certificate`/`id_proof`) are separate constraints with deliberately different
+> vocabularies; widening one leaves a template creatable but never issuable. The Go `DocumentType`
+> enum **and** its `IsValid()` switch were widened alongside, because r29 found `AckType` had gone
+> two phases with DB-legal values unreachable through the only typed write path. Reversibility was
+> proved by restoring both lists to their exact differing prior states — over-reverting into one
+> merged list would have been as much a defect as under-reverting.
+>
+> **The relieving letter waits for clearance AND settlement; the experience letter does not.** That
+> is the one place two independently-tracked states must agree, because the relieving letter is the
+> document saying the organization considers the person fully departed and owed nothing. The
+> experience letter states employment dates, true regardless of what is owed — withholding it would
+> punish somebody for a money dispute by making them unemployable while it is resolved.
+>
+> **Access revocation is idempotent by construction and REVERSIBLE.** The sweep filters on
+> `access_revoked_at IS NULL` and stamps only after success, so a revoked exit leaves the set
+> permanently instead of being re-revoked nightly; both underlying operations (suspending an
+> already-suspended member, logging out an already-logged-out user) are no-ops anyway. The
+> membership is **suspended, not deleted** — an admin can re-activate it, the user account survives,
+> and no HR record is touched. `auth.Service.LogoutAll` already had exactly the shape needed, so no
+> provider method was invented; `authz.SuspendMembership` is new and deliberately narrow (no caller
+> id — a scheduler has none). An employee with **no platform account is still stamped**: there was
+> nothing to revoke, and leaving them unstamped would make the sweep retry them every night forever.
+>
+> ⚠ **The stamp is written LAST and only on success.** Writing it first would mean a failure halfway
+> leaves an exit marked revoked with access still live — the sweep would then skip it forever, the
+> worst possible outcome for a feature whose whole job is closing off access.
+>
+> **Verification:** all six architecture guards green, 10 new integration tests (**253 total**, up
+> from 243), migration reversibility proved down×2/re-up with both `document_type` CHECKs restored
+> to their exact differing prior states and 9A/9B permissions intact, three claims proved
+> non-vacuous by injection, both scheduler jobs confirmed registered, and a live HTTP smoke run
+> covering the document gate, the confidentiality refusal, and immediate revocation with cleanup.
+>
+> ⚠ **One test was strengthened after its own proof exposed it as weak.** The confidentiality test
+> originally scheduled an interview but never SENT it, so the read failed with "not found" and would
+> have passed with the permission check removed. It now creates a real form template, sends the
+> interview, asserts a caller WITH the key can read it, and only then asserts the caller without it
+> is refused — the third time in this phase that an injection proof has been a finding about the
+> test rather than the code.
+>
+> **Phase 9 is COMPLETE.** 8A–9B are COMMITTED (`59d1e3e`); 9C is uncommitted.
+>
+> ---
+>
+> r35 — **HRM Extended Phase 9B-2: the three cross-module settlement
 > sources.** No migration — all three read tables that already existed. **Phase 9B is now complete.**
 >
 > **Three consumer-owned narrow interfaces, one per owning module**, each naming the provider's own
@@ -2567,6 +2649,8 @@ Attendance's `resolveShift` had a column-name bug (`wsa.scope`/`wsa.entity_id` v
 **Exit Management (r33) — Phase 9A:** `internal/hrm/exits/` (11 routes), `hrm.exits.*` scope-tiered plus `hrm.exit_config.*` untiered. Three tables. **`hrm_exits` is an UMBRELLA over `hrm_resignations`/`hrm_terminations`, not a replacement** — those own the decision (with their approval chains), this owns the process that follows. `source_type`/`source_id` are polymorphic and FK-FREE (the fourth instance of the `platform_checklist_instances.subject_type` pattern), so ownership is validated in the service instead: an exit pointing at another employee's resignation is refused. **No `hrm_notice_periods` table** despite the build plan naming one — `hrm_resignations` already holds all three notice facts; only the SHORTFALL was new, and it stores DAYS not money (9B applies the rate). A WAIVED notice period is never a shortfall. **Clearance completion is derived, never stored** — `hrm_terminations.exit_clearance_completed` is exactly the denormalized boolean this avoids and Phase 9 never touches it; only a non-zero `blocking_amount` blocks, and resolving never zeroes the amount because a forgiven debt must still show what was forgiven. `hrm_exit_clearance_items` is the seam 9B reads as F&F debits. **`hrm_rehire_eligibility` gives `hrm_terminations.is_rehire_eligible` (unread since `00034`) its first reader**, surfaced to recruitment through the consumer-owned nil-safe `recruitment.RehireChecker` as a derived WARNING on the candidate — never a block, never stored. `hrm.exits.settle` is seeded here but gates F&F approval in 9B. See the r33 changelog entry.
 
 **F&F Settlement (r34) — Phase 9B:** `internal/hrm/exits/` gains gratuity + settlement (4 more routes), `hrm.gratuity.*` (untiered catalogue). Two tables. **F&F is an off-cycle payroll run (`run_type='fnf'`), not a separate calculator** — same line types, same statutory engine, same immutability — and it is the **ADDS-ON** integration shape, not REPLACES: the ordinary per-employee computation runs with the employee set narrowed to the leaver, and settlement credits/debits are appended alongside loan, reimbursement, statutory and benefit lines. `payslips.FnFSource` is the sixth consumer-owned narrow interface, nil-safe like the five before it, and it also answers WHICH employee a run settles — so no `employee_id` column was added to `hrm_payslip_runs`. An F&F run **bypasses the org-wide eligibility filter** (which drops anyone whose `termination_date` precedes the period start — exactly the person being settled). **The negative-net guard is run-type-aware**: negative net is a valid F&F outcome (a receivable), and r25's guard is unchanged for every other run type. **Clearance gates approval, never computation**, so HR can see the figure while clearance is open. `hrm_exit_settlement_lines` is an append-only audit trail with one line per claim and amounts always positive (direction in `is_credit`). Gratuity is effective-dated, partial years are not paid pro rata, below-minimum is zero *with a reason*, and the monthly-to-daily divisor is stored per rule and reused by the notice-shortfall line. **All three cross-module sources are wired (r35)**, each via a consumer-owned nil-safe narrow interface satisfied by the module that owns the data: leave encashment (F&F prices days `hrm/leave` recorded, using `encashment_rate_basis` — a Phase 2 column whose comment always said a future F&F phase would read it; a `fixed` basis produces a zero line saying so, because no column stores the amount), loan foreclosure (the FULL outstanding from schedule rows, never `principal_amount`, with the ordinary per-installment recovery **skipped for `fnf` runs** or the due installment is charged twice) and travel-advance recovery (same-currency only; no FX table exists, so a foreign advance is reported unrecovered rather than converted at a guessed rate). `MarkSettled` closes out the SOURCE, not just the audit trail — otherwise the loan stays active for the next process to charge again. See the r34 and r35 changelog entries.
+
+**Exit Interviews, Documents & Access Revocation (r36) — Phase 9C:** `internal/hrm/exits/` gains 6 routes and 2 scheduler jobs; `hrm.exits.{interview,interview_view,revoke_access}` (actions on the existing resource, so its scope tiers are untouched). One table, `hrm_exit_interviews`, which stores **no responses** — the Phase 5 form engine owns those. **Confidentiality is a separate permission from administration**: `.interview` schedules and sends, `.interview_view` reads what was said, and `.interview_view` is granted to owner/admin and deliberately NOT to manager (who holds `view_team` over exits and is the most likely unwanted reader). Sent **post-departure** via `exits.send_exit_interviews` — `scheduled_for` defaults to the day after last working date and earlier sends are refused, because the timing IS the mechanism. **`relieving_letter` required BOTH `document_type` CHECKs widened** (fourth occurrence of that trap) plus the Go enum AND `IsValid()`; the relieving letter waits for clearance AND settlement, the experience letter never does. **`exits.revoke_departed_access`** suspends `organization_members.status` and calls the existing `auth.LogoutAll` — idempotent (filters on `access_revoked_at IS NULL`, stamps only on success), reversible (suspended not deleted, account intact), and it stamps employees with no platform account so the sweep does not retry them forever. See the r36 changelog entry.
 
 **Group E — Recognition & Communication** (`awards, announcements, calendar, milestones`): 25 routes. Nightly crons for milestones/absences now genuinely run (see Section 5 → PLATFORM — SCHEDULER) — `milestones.generate_upcoming` previously errored on every run against a column `00053` had already dropped, silently, so it never generated anything despite being "wired."
 

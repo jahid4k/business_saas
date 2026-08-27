@@ -25,11 +25,11 @@ type fakeTx struct {
 	onQueryRow func() pgx.Row
 }
 
-func (t *fakeTx) Begin(ctx context.Context) (pgx.Tx, error)   { return t, nil }
-func (t *fakeTx) Commit(ctx context.Context) error            { return nil }
-func (t *fakeTx) Rollback(ctx context.Context) error          { return nil }
-func (t *fakeTx) Conn() *pgx.Conn                             { return nil }
-func (t *fakeTx) LargeObjects() pgx.LargeObjects              { return pgx.LargeObjects{} }
+func (t *fakeTx) Begin(ctx context.Context) (pgx.Tx, error)                    { return t, nil }
+func (t *fakeTx) Commit(ctx context.Context) error                             { return nil }
+func (t *fakeTx) Rollback(ctx context.Context) error                           { return nil }
+func (t *fakeTx) Conn() *pgx.Conn                                              { return nil }
+func (t *fakeTx) LargeObjects() pgx.LargeObjects                               { return pgx.LargeObjects{} }
 func (t *fakeTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults { return nil }
 func (t *fakeTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
 	return 0, nil
@@ -179,7 +179,9 @@ func (r *stubAuthzRepo) GetOrganizationMaxSeats(_ context.Context, _ string) (*i
 	return &val, nil
 }
 func (r *stubAuthzRepo) SetUserPasswordHash(_ context.Context, _, _ string) error { return nil }
-func (r *stubAuthzRepo) GetRoleByID(_ context.Context, _ string) (*authz.Role, error) { return nil, nil }
+func (r *stubAuthzRepo) GetRoleByID(_ context.Context, _ string) (*authz.Role, error) {
+	return nil, nil
+}
 func (r *stubAuthzRepo) GetRoleByRef(_ context.Context, _, _ string) (*authz.Role, error) {
 	return nil, nil
 }
@@ -188,6 +190,11 @@ func (r *stubAuthzRepo) UserRoleName(_ context.Context, _, _ string) (string, er
 	return "", nil
 }
 func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, _, _, _ string) error { return nil }
+
+// SetMembershipStatus is a no-op here: these tests are about organization
+// creation, not membership lifecycle. The offboarding sweep that uses it is
+// covered by the exits integration tests against a real database.
+func (r *stubAuthzRepo) SetMembershipStatus(_ context.Context, _, _, _ string) error { return nil }
 func (r *stubAuthzRepo) UpdateMembership(_ context.Context, _, _ string, _ *authz.Role, _ authz.UpdateMemberRequest) (*authz.Membership, error) {
 	return nil, nil
 }
@@ -195,7 +202,7 @@ func (r *stubAuthzRepo) UpdateMemberPermissions(_ context.Context, _, _ string, 
 	return nil, nil
 }
 func (r *stubAuthzRepo) CreateMembership(_ context.Context, _ *authz.Membership) error { return nil }
-func (r *stubAuthzRepo) ListRoles(_ context.Context) ([]*authz.Role, error)             { return nil, nil }
+func (r *stubAuthzRepo) ListRoles(_ context.Context) ([]*authz.Role, error)            { return nil, nil }
 func (r *stubAuthzRepo) ListRolesForOrg(_ context.Context, _ string) ([]*authz.Role, error) {
 	return nil, nil
 }

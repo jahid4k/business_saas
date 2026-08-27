@@ -162,6 +162,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	taskRepo := task.NewRepository(db)
 	notifRepo := notifications.NewRepository(db)
 	notifSvc := notifications.NewService(config.NotificationsConfig{}, notifRepo)
+	// Hoisted out of the return block so exits can consume it: auth.Service
+	// satisfies exits.SessionRevoker structurally via LogoutAll.
+	authSvc := auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc)
 
 	authzSvc := authz.NewService(authzRepo, rdb, auditSvc, authRepo)
 
@@ -203,8 +206,13 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmApprovalsSvc.RegisterCallback("travel_request", hrmExpensesSvc.HandleTravelApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("expense_claim", hrmExpensesSvc.HandleClaimApprovalDecision)
 
+	// formsSvc / authzSvc / authSvc back the 9C offboarding paths, mirroring
+	// main.go. formsSvc is constructed further down for the appraisal/360
+	// consumers, so it is built here instead and reused there.
+	formsSvc := forms.NewService(forms.NewRepository(db), authzSvc)
 	hrmExitsSvc := hrmexits.NewService(hrmexits.NewRepository(db), checklistsSvc, hrmScopeResolver,
-		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc)
+		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc,
+		formsSvc, authzSvc, authSvc)
 
 	hrmRecruitmentRepo := hrmrecruitment.NewRepository(db)
 	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc, hrmExitsSvc)
@@ -215,8 +223,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationSvc.HandleApprovalDecision)
 	hrmResignationSvc := hrmresignations.NewService(hrmresignations.NewRepository(db), db)
 
-	// authzSvc satisfies forms.AccessDirectory structurally, mirroring main.go.
-	formsSvc := forms.NewService(forms.NewRepository(db), authzSvc)
+	// formsSvc is built above (exits consumes it); authzSvc satisfies
+	// forms.AccessDirectory structurally, mirroring main.go.
 	// authzSvc satisfies tickets.AccessDirectory structurally too, mirroring
 	// main.go — Can plus UserRoleName, the latter backing the
 	// sensitive-category assignee gate.
@@ -290,7 +298,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		db:                   db,
 		redis:                rdb,
-		authSvc:              auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc),
+		authSvc:              authSvc,
 		userSvc:              user.NewService(userRepo),
 		authzSvc:             authzSvc,
 		orgSvc:               organizations.NewService(orgRepo, authzRepo, jwtMgr),

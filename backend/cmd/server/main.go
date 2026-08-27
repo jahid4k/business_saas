@@ -485,8 +485,13 @@ func main() {
 	// leave / loans / expenses each satisfy one of exits' settlement sources
 	// structurally, naming their own types, so all three are passed directly
 	// with no adapter. All three are nil-safe on the exits side.
+	// formsSvc backs the exit interview; authzSvc and authSvc are the two
+	// halves of access revocation — authz.SuspendMembership and
+	// auth.LogoutAll each satisfy their narrow interface structurally, so
+	// both are passed directly with no adapter.
 	hrmExitsSvc := hrmexits.NewService(hrmexits.NewRepository(pgPool), checklistsSvc, hrmScopeResolver,
-		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc)
+		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc,
+		formsSvc, authzSvc, authSvc)
 
 	hrmPayslipsSvc := hrmpayslips.NewService(
 		hrmPayslipsRepo, pgPool, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
@@ -978,6 +983,38 @@ func main() {
 		n, err := hrmBenefitsSvc.ActivatePendingEnrollments(jCtx)
 		if err != nil {
 			return n, fmt.Errorf("benefits enrollment activation sweep: %w", err)
+		}
+		return n, nil
+	})
+
+	// exits.send_exit_interviews — instance-wide, the
+	// benefits.activate_pending_enrollments shape. Sends every interview whose
+	// scheduled date has arrived, which is normally the day AFTER the last
+	// working date: an interview answered while still on the payroll gets a
+	// different answer from one answered after leaving, and the honest one is
+	// the entire point of asking.
+	schedulerSvc.Register("exits.send_exit_interviews", "0 6 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmExitsSvc.RunInterviewSweep(jCtx, time.Now())
+		if err != nil {
+			return n, fmt.Errorf("exit interview sweep: %w", err)
+		}
+		return n, nil
+	})
+
+	// exits.revoke_departed_access — instance-wide. Suspends org membership
+	// and kills live sessions for anyone whose last working date has passed.
+	//
+	// ⚠ Destructive but REVERSIBLE and IDEMPOTENT: the membership is
+	// suspended rather than deleted (an admin can re-activate it), no user
+	// account or HR record is touched, and the query filters on
+	// access_revoked_at IS NULL so a revoked exit leaves the set permanently
+	// instead of being re-revoked every night. Runs at 07:00 rather than
+	// alongside the others so its log line is easy to find when somebody asks
+	// why their access stopped.
+	schedulerSvc.Register("exits.revoke_departed_access", "0 7 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmExitsSvc.RunAccessRevocationSweep(jCtx, time.Now())
+		if err != nil {
+			return n, fmt.Errorf("exit access revocation sweep: %w", err)
 		}
 		return n, nil
 	})

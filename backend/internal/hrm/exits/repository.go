@@ -94,6 +94,26 @@ type Repository interface {
 	// employee, so there is no id to join on.
 	FindRehireEligibilityByEmail(ctx context.Context, orgID, email string) (*RehireEligibility, error)
 
+	// Exit interviews (9C)
+	CreateInterview(ctx context.Context, i *ExitInterview) error
+	FindInterviewByExit(ctx context.Context, orgID, exitID string) (*ExitInterview, error)
+	FindInterviewByRef(ctx context.Context, orgID, ref string) (*ExitInterview, error)
+	UpdateInterview(ctx context.Context, i *ExitInterview) error
+	// FindDueInterviews backs the send sweep: scheduled interviews whose date
+	// has arrived. Instance-wide (no orgID) because the scheduler runs once
+	// for the whole deployment, the benefits.activate_pending_enrollments
+	// shape.
+	FindDueInterviews(ctx context.Context, asOf time.Time, limit int) ([]*ExitInterview, error)
+
+	// Access revocation (9C)
+	// FindExitsDueForRevocation backs the revocation sweep — exits whose last
+	// working date has passed and whose access has not yet been cut.
+	// Instance-wide, same reason as above.
+	FindExitsDueForRevocation(ctx context.Context, asOf time.Time, limit int) ([]*Exit, error)
+	// FindEmployeeUserID resolves the platform account to suspend. Returns ""
+	// when the employee has none, which is normal and not an error.
+	FindEmployeeUserID(ctx context.Context, orgID, employeeID string) (string, error)
+
 	// FindSubject supplies what the checklist engine needs to instantiate an
 	// offboarding checklist for this employee. Mirrors onboarding's
 	// FindSubject; the anchor date differs (last working date, not hire
@@ -792,4 +812,131 @@ func (r *repoImpl) LinkSettlementLineToPayslip(ctx context.Context, exitID, sour
 		return fmt.Errorf("exits: LinkSettlementLineToPayslip: %w", err)
 	}
 	return nil
+}
+
+// ── Exit interviews (9C) ─────────────────────────────────────────────────────
+
+const interviewSel = `id, public_id, org_id, exit_id, form_instance_id, status,
+	scheduled_for, sent_at, completed_at, created_by, created_at, updated_at`
+
+func scanInterview(row pgx.Row) (*ExitInterview, error) {
+	i := &ExitInterview{}
+	err := row.Scan(&i.ID, &i.PublicID, &i.OrgID, &i.ExitID, &i.FormInstanceID, &i.Status,
+		&i.ScheduledFor, &i.SentAt, &i.CompletedAt, &i.CreatedBy, &i.CreatedAt, &i.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return i, nil
+}
+
+func (r *repoImpl) CreateInterview(ctx context.Context, i *ExitInterview) error {
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO hrm_exit_interviews (org_id, exit_id, scheduled_for, created_by)
+		 VALUES ($1,$2::uuid,$3,$4)
+		 RETURNING id, public_id, status, created_at, updated_at`,
+		i.OrgID, i.ExitID, i.ScheduledFor, i.CreatedBy,
+	).Scan(&i.ID, &i.PublicID, &i.Status, &i.CreatedAt, &i.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("exits: CreateInterview: %w", err)
+	}
+	return nil
+}
+
+func (r *repoImpl) FindInterviewByExit(ctx context.Context, orgID, exitID string) (*ExitInterview, error) {
+	return scanInterview(r.db.QueryRow(ctx,
+		`SELECT `+interviewSel+` FROM hrm_exit_interviews WHERE org_id=$1 AND exit_id=$2::uuid`,
+		orgID, exitID))
+}
+
+func (r *repoImpl) FindInterviewByRef(ctx context.Context, orgID, ref string) (*ExitInterview, error) {
+	return scanInterview(r.db.QueryRow(ctx,
+		`SELECT `+interviewSel+` FROM hrm_exit_interviews
+		  WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref))
+}
+
+func (r *repoImpl) UpdateInterview(ctx context.Context, i *ExitInterview) error {
+	ct, err := r.db.Exec(ctx,
+		`UPDATE hrm_exit_interviews
+		    SET form_instance_id=$3, status=$4, scheduled_for=$5, sent_at=$6,
+		        completed_at=$7, updated_at=NOW()
+		  WHERE org_id=$1 AND id=$2::uuid`,
+		i.OrgID, i.ID, i.FormInstanceID, i.Status, i.ScheduledFor, i.SentAt, i.CompletedAt)
+	if err != nil {
+		return fmt.Errorf("exits: UpdateInterview: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrInterviewNotFound
+	}
+	return nil
+}
+
+func (r *repoImpl) FindDueInterviews(ctx context.Context, asOf time.Time, limit int) ([]*ExitInterview, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+interviewSel+` FROM hrm_exit_interviews
+		  WHERE status='scheduled' AND scheduled_for <= $1
+		  ORDER BY scheduled_for
+		  LIMIT $2`,
+		asOf, limit)
+	if err != nil {
+		return nil, fmt.Errorf("exits: FindDueInterviews: %w", err)
+	}
+	defer rows.Close()
+	list := make([]*ExitInterview, 0)
+	for rows.Next() {
+		i, err := scanInterview(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, i)
+	}
+	return list, rows.Err()
+}
+
+// ── Access revocation (9C) ───────────────────────────────────────────────────
+
+func (r *repoImpl) FindExitsDueForRevocation(ctx context.Context, asOf time.Time, limit int) ([]*Exit, error) {
+	// Matches idx_hrm_exit_revocation_due exactly. access_revoked_at IS NULL
+	// is what makes the sweep idempotent: a revoked exit drops out of the set
+	// permanently rather than being re-revoked every night.
+	rows, err := r.db.Query(ctx,
+		`SELECT `+exitSel+` FROM hrm_exits
+		  WHERE access_revoked_at IS NULL
+		    AND status NOT IN ('cancelled')
+		    AND last_working_date <= $1
+		  ORDER BY last_working_date
+		  LIMIT $2`,
+		asOf, limit)
+	if err != nil {
+		return nil, fmt.Errorf("exits: FindExitsDueForRevocation: %w", err)
+	}
+	defer rows.Close()
+	list := make([]*Exit, 0)
+	for rows.Next() {
+		e, err := scanExit(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, rows.Err()
+}
+
+func (r *repoImpl) FindEmployeeUserID(ctx context.Context, orgID, employeeID string) (string, error) {
+	var userID *string
+	err := r.db.QueryRow(ctx,
+		`SELECT user_id::text FROM hrm_employees WHERE org_id=$1 AND id=$2::uuid`,
+		orgID, employeeID).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("exits: FindEmployeeUserID: %w", err)
+	}
+	if userID == nil {
+		return "", nil
+	}
+	return *userID, nil
 }

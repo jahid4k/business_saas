@@ -256,3 +256,74 @@ var (
 	ErrAccessDenied          = errors.New("access denied")
 	ErrInvalidGratuityRule   = errors.New("gratuity rule requires a positive days_per_year, a non-negative minimum service period, a positive divisor and a valid effective_date")
 )
+
+// ── Exit interviews (9C) ─────────────────────────────────────────────────────
+
+type InterviewStatus string
+
+const (
+	InterviewScheduled InterviewStatus = "scheduled"
+	InterviewSent      InterviewStatus = "sent"
+	InterviewCompleted InterviewStatus = "completed"
+	InterviewDeclined  InterviewStatus = "declined"
+	InterviewCancelled InterviewStatus = "cancelled"
+)
+
+func (s InterviewStatus) IsValid() bool {
+	switch s {
+	case InterviewScheduled, InterviewSent, InterviewCompleted, InterviewDeclined, InterviewCancelled:
+		return true
+	}
+	return false
+}
+
+// ExitInterview is the lifecycle of one departing employee's interview.
+//
+// It carries NO responses. The Phase 5 form engine owns those; a second copy
+// here would disagree with the first the moment one was edited (the 00076
+// rule). What this holds is when it may be sent, whether it has been, and the
+// link to the form instance that has the answers.
+type ExitInterview struct {
+	ID             string          `db:"id"                 json:"id"`
+	PublicID       string          `db:"public_id"           json:"public_id"`
+	OrgID          string          `db:"org_id"              json:"org_id"`
+	ExitID         string          `db:"exit_id"             json:"exit_id"`
+	FormInstanceID *string         `db:"form_instance_id"    json:"form_instance_id,omitempty"`
+	Status         InterviewStatus `db:"status"              json:"status"`
+	ScheduledFor   time.Time       `db:"scheduled_for"       json:"scheduled_for"`
+	SentAt         *time.Time      `db:"sent_at"             json:"sent_at,omitempty"`
+	CompletedAt    *time.Time      `db:"completed_at"        json:"completed_at,omitempty"`
+	CreatedBy      string          `db:"created_by"          json:"created_by"`
+	CreatedAt      time.Time       `db:"created_at"          json:"created_at"`
+	UpdatedAt      time.Time       `db:"updated_at"          json:"updated_at"`
+}
+
+type ScheduleInterviewRequest struct {
+	// ScheduledFor defaults to the day AFTER last_working_date when omitted —
+	// an interview answered while still on the payroll is not the honest one.
+	ScheduledFor *string `json:"scheduled_for"`
+}
+
+// ── Document issuance (9C) ───────────────────────────────────────────────────
+
+// DocumentEligibility answers whether an exit document may be issued yet, and
+// says why not when it may not.
+//
+// The relieving letter is the one place clearance and F&F — tracked
+// independently — have to agree. The experience letter is NOT blocked: it
+// states employment dates, which are true regardless of what is owed, and
+// withholding it would punish somebody for a dispute about money by making
+// them unemployable.
+type DocumentEligibility struct {
+	DocumentType string `json:"document_type"`
+	Eligible     bool   `json:"eligible"`
+	Reason       string `json:"reason,omitempty"`
+}
+
+var (
+	ErrInterviewNotFound   = errors.New("exit interview not found")
+	ErrInterviewExists     = errors.New("this exit already has an interview")
+	ErrInterviewNotDue     = errors.New("the interview's scheduled date has not arrived")
+	ErrNoInterviewTemplate = errors.New("no default exit interview form template is configured for this organization")
+	ErrDocumentBlocked     = errors.New("this document cannot be issued until clearance and the final settlement are complete")
+)

@@ -30,6 +30,10 @@ type Repository interface {
 	// error) when there is no live membership.
 	UserRoleName(ctx context.Context, organizationID, userID string) (string, error)
 	UpdateMembershipRole(ctx context.Context, userID, organizationID, roleID string) error
+	// SetMembershipStatus changes only the status column. Backs
+	// authz.SuspendMembership (the offboarding sweep) — idempotent, and a
+	// missing membership is not an error.
+	SetMembershipStatus(ctx context.Context, organizationID, userID, status string) error
 	UpdateMembership(ctx context.Context, organizationID, memberRef string, role *Role, req UpdateMemberRequest) (*Membership, error)
 	UpdateMemberPermissions(ctx context.Context, organizationID, memberRef string, customPermissions, deniedPermissions []string) (*Membership, error)
 	CreateMembership(ctx context.Context, m *Membership) error
@@ -320,6 +324,21 @@ func (r *repoImpl) UserRoleName(ctx context.Context, organizationID, userID stri
 		return "", fmt.Errorf("authz: UserRoleName: %w", err)
 	}
 	return name, nil
+}
+
+// SetMembershipStatus is deliberately a no-op when the membership does not
+// exist or already holds the target status: the offboarding sweep re-reads
+// the same set nightly until each exit is stamped, so anything that errored
+// on a repeat would become a permanent false alarm.
+func (r *repoImpl) SetMembershipStatus(ctx context.Context, organizationID, userID, status string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE organization_members SET status = $3, updated_at = NOW()
+		  WHERE org_id = $1 AND user_id = $2 AND status <> $3`,
+		organizationID, userID, status)
+	if err != nil {
+		return fmt.Errorf("authz: SetMembershipStatus: %w", err)
+	}
+	return nil
 }
 
 func (r *repoImpl) UpdateMembershipRole(ctx context.Context, userID, organizationID, roleID string) error {

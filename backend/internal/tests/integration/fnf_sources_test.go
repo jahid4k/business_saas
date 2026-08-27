@@ -383,7 +383,7 @@ func TestIntegration_FnFSources_AllThreeAreNilSafe(t *testing.T) {
 
 	// An exits service with every cross-module source nil.
 	bare := exits.NewService(exits.NewRepository(env.db), env.checklistsSvc, env.hrmScopeResolver,
-		nil, nil, nil)
+		nil, nil, nil, nil, nil, nil)
 	settlement, err := bare.SettlementForRun(ctx, fx.orgID, fx.runID)
 	if err != nil {
 		t.Fatalf("SettlementForRun with all three sources nil: %v", err)

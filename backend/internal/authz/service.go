@@ -46,6 +46,12 @@ type Service interface {
 	GetMember(ctx context.Context, organizationID, memberRef string) (*MemberWithUser, error)
 	AssignRole(ctx context.Context, callerID, targetUserID, organizationID, roleName string) error
 	UpdateMember(ctx context.Context, callerID, organizationID, memberRef string, req UpdateMemberRequest) (*Membership, error)
+	// SuspendMembership satisfies exits.MembershipSuspender — the offboarding
+	// sweep cutting a departed employee's org access. Separate from
+	// UpdateMember because that path takes a callerID for audit and a whole
+	// request body; a scheduler has neither. IDEMPOTENT: suspending an
+	// already-suspended member is a no-op, which the nightly sweep relies on.
+	SuspendMembership(ctx context.Context, organizationID, userID string) error
 	InviteMember(ctx context.Context, callerID, organizationID string, req InviteMemberRequest) (*InviteMemberResponse, error)
 	AcceptInvitation(ctx context.Context, userID, organizationID, rawToken string) (*Membership, *OrganizationInvitation, error)
 	ResendInvitation(ctx context.Context, organizationID, invitationRef string) (*ResendInvitationResponse, error)
@@ -248,6 +254,26 @@ func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, or
 		return fmt.Errorf("authz: AssignRole: update: %w", err)
 	}
 	s.invalidateUser(ctx, targetUserID, organizationID)
+	return nil
+}
+
+// SuspendMembership sets a member's status to 'suspended'.
+//
+// Deliberately narrow and idempotent: it names no caller (the offboarding
+// sweep has none), touches nothing but status, and a member who is already
+// suspended — or who has no membership in this org at all — is not an error.
+// The nightly sweep re-reads the same set until each exit is stamped, so
+// anything that errors on a repeat would turn into a permanent alarm.
+//
+// Suspension is REVERSIBLE: the membership row survives, an admin can
+// re-activate it, and no HR record is touched.
+func (s *serviceImpl) SuspendMembership(ctx context.Context, organizationID, userID string) error {
+	if err := s.repo.SetMembershipStatus(ctx, organizationID, userID, MemberStatusSuspended); err != nil {
+		return fmt.Errorf("authz: SuspendMembership: %w", err)
+	}
+	// The permission cache keys on (user, org) and would otherwise keep
+	// answering from a membership that is no longer active.
+	s.invalidateUser(ctx, userID, organizationID)
 	return nil
 }
 

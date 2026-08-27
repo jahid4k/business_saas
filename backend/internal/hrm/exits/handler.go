@@ -53,7 +53,16 @@ func (h *Handler) caller(c fiber.Ctx) (Caller, error) {
 	if err != nil {
 		return Caller{}, err
 	}
-	return Caller{UserID: userID, Scope: tier, CanManage: canManage}, nil
+	// Resolved here, once, rather than inside the service — the service holds
+	// no authz.Service of its own.
+	canViewInterviews, err := h.authz.Can(c.Context(), userID, orgID(c), "hrm.exits", "interview_view")
+	if err != nil {
+		return Caller{}, err
+	}
+	return Caller{
+		UserID: userID, Scope: tier,
+		CanManage: canManage, CanViewInterviews: canViewInterviews,
+	}, nil
 }
 
 func mapError(c fiber.Ctx, log *slog.Logger, op string, err error) error {
@@ -81,6 +90,19 @@ func mapError(c fiber.Ctx, log *slog.Logger, op string, err error) error {
 		return response.BadRequest(c, "INVALID_REHIRE_STATUS", "status must be one of eligible, not_eligible, conditional")
 	case errors.Is(err, ErrExitAlreadyOpen):
 		return response.Conflict(c, "EXIT_ALREADY_OPEN", "This employee already has an exit in progress")
+	case errors.Is(err, ErrInterviewNotFound):
+		return response.NotFound(c, "INTERVIEW_NOT_FOUND", "Exit interview not found")
+	case errors.Is(err, ErrInterviewExists):
+		return response.Conflict(c, "INTERVIEW_EXISTS", "This exit already has an interview")
+	case errors.Is(err, ErrInterviewNotDue):
+		return response.Conflict(c, "INTERVIEW_NOT_DUE",
+			"The interview's scheduled date has not arrived — an interview answered while still employed is not the one worth having")
+	case errors.Is(err, ErrNoInterviewTemplate):
+		return response.BadRequest(c, "NO_INTERVIEW_TEMPLATE",
+			"No default exit interview form template is configured for this organization")
+	case errors.Is(err, ErrDocumentBlocked):
+		return response.Conflict(c, "DOCUMENT_BLOCKED",
+			"This document cannot be issued until clearance and the final settlement are complete")
 	case errors.Is(err, ErrAlreadyResolved):
 		return response.Conflict(c, "ALREADY_RESOLVED", "Clearance item is already resolved")
 	case errors.Is(err, ErrWrongStatus):
@@ -371,4 +393,106 @@ func (h *Handler) CreateGratuityRule(c fiber.Ctx) error {
 		return mapError(c, log, "CreateGratuityRule", err)
 	}
 	return response.Created(c, fiber.Map{"gratuity_rule": rule}, "Gratuity rule created")
+}
+
+// ============================================================
+// Exit interviews (9C)
+// ============================================================
+
+// ScheduleInterview handles POST /organizations/:orgId/hrm/exits/:exitId/interview
+func (h *Handler) ScheduleInterview(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "ScheduleInterview", err)
+	}
+	var req ScheduleInterviewRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+	i, err := h.service.ScheduleInterview(c.Context(), orgID(c), caller, c.Params("exitId"), req)
+	if err != nil {
+		return mapError(c, log, "ScheduleInterview", err)
+	}
+	return response.Created(c, fiber.Map{"interview": i}, "Exit interview scheduled")
+}
+
+// GetInterview handles GET /organizations/:orgId/hrm/exits/:exitId/interview
+func (h *Handler) GetInterview(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "GetInterview", err)
+	}
+	i, err := h.service.GetInterview(c.Context(), orgID(c), caller, c.Params("exitId"))
+	if err != nil {
+		return mapError(c, log, "GetInterview", err)
+	}
+	return response.OK(c, fiber.Map{"interview": i}, "OK")
+}
+
+// SendInterview handles POST /organizations/:orgId/hrm/exits/:exitId/interview/send
+func (h *Handler) SendInterview(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "SendInterview", err)
+	}
+	i, err := h.service.SendInterview(c.Context(), orgID(c), caller, c.Params("exitId"))
+	if err != nil {
+		return mapError(c, log, "SendInterview", err)
+	}
+	return response.OK(c, fiber.Map{"interview": i}, "Exit interview sent")
+}
+
+// ReadInterviewResponses handles
+// GET /organizations/:orgId/hrm/exits/:exitId/interview/responses
+//
+// Gated at the ROUTE on hrm.exits.interview_view AND re-checked in the
+// service, because the two protect different things: the route stops a caller
+// without the key reaching the handler at all, and the service check means no
+// future caller of the service — a report, a sweep — can bypass it.
+func (h *Handler) ReadInterviewResponses(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "ReadInterviewResponses", err)
+	}
+	out, err := h.service.ReadInterviewResponses(c.Context(), orgID(c), caller, c.Params("exitId"))
+	if err != nil {
+		return mapError(c, log, "ReadInterviewResponses", err)
+	}
+	return response.OK(c, fiber.Map{"interview_responses": out}, "OK")
+}
+
+// ============================================================
+// Documents and access (9C)
+// ============================================================
+
+// DocumentEligibility handles GET /organizations/:orgId/hrm/exits/:exitId/documents
+func (h *Handler) DocumentEligibility(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "DocumentEligibility", err)
+	}
+	out, err := h.service.DocumentIssuanceEligibility(c.Context(), orgID(c), caller, c.Params("exitId"))
+	if err != nil {
+		return mapError(c, log, "DocumentEligibility", err)
+	}
+	return response.OK(c, fiber.Map{"documents": out}, "OK")
+}
+
+// RevokeAccess handles POST /organizations/:orgId/hrm/exits/:exitId/revoke-access
+func (h *Handler) RevokeAccess(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	caller, err := h.caller(c)
+	if err != nil {
+		return mapError(c, log, "RevokeAccess", err)
+	}
+	e, err := h.service.RevokeAccessNow(c.Context(), orgID(c), caller, c.Params("exitId"))
+	if err != nil {
+		return mapError(c, log, "RevokeAccess", err)
+	}
+	return response.OK(c, fiber.Map{"exit": e}, "System access revoked")
 }

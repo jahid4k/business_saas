@@ -462,10 +462,10 @@ the riskiest change in this phase, since `internal/capture/email` hardcodes lead
 
 ## PHASE 9 — Exit Management
 
-> **Status: 2 of 3 slices shipped, uncommitted.**
+> **Status: ✅ PHASE 9 COMPLETE — all 3 slices shipped. 8A–9B committed (`59d1e3e`); 9C uncommitted.**
 > 9A Exit umbrella + clearance + rehire ✅ (r33, `internal/hrm/exits`, migrations `00114`/`00115`) ·
-> 9B F&F settlement + gratuity ✅ COMPLETE (r34 core, r35 the three cross-module sources) ·
-> 9C Exit interviews + documents + access revocation ⏳ not started (`00118`/`00119`).
+> 9B F&F settlement + gratuity ✅ (r34 core, r35 the three cross-module sources, `00116`/`00117`) ·
+> 9C Exit interviews + documents + access revocation ✅ (r36, `00118`/`00119`).
 >
 > ⚠ **F&F turned out to be the ADDS-ON integration shape, NOT the REPLACES shape** the plan
 > assumed. Bonus replaces the salary computation because a bonus run must not pay salary; an F&F

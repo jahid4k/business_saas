@@ -18,9 +18,9 @@ import (
 // ── In-memory stub repository ─────────────────────────────────────────────────
 
 type stubAuthzRepo struct {
-	memberships map[string]*authz.Membership           // key: userID+":"+orgID
-	members     map[string]*authz.Membership           // key: orgID+":"+memberRef
-	roles       map[string]*authz.Role                 // key: roleID or name
+	memberships map[string]*authz.Membership // key: userID+":"+orgID
+	members     map[string]*authz.Membership // key: orgID+":"+memberRef
+	roles       map[string]*authz.Role       // key: roleID or name
 	permissions []*authz.Permission
 	invitations map[string]*authz.OrganizationInvitation // key: tokenHash
 	seq         int
@@ -207,6 +207,19 @@ func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, userID, orgID, r
 	}
 	m.RoleID = &roleID
 	m.RoleKey = role.Name
+	return nil
+}
+
+// SetMembershipStatus mirrors the real query's idempotence: a missing
+// membership is not an error, because the offboarding sweep re-reads the same
+// set nightly and anything that errored on a repeat would become a permanent
+// false alarm.
+func (r *stubAuthzRepo) SetMembershipStatus(_ context.Context, orgID, userID, status string) error {
+	m := r.memberships[userID+":"+orgID]
+	if m == nil {
+		return nil
+	}
+	m.Status = status
 	return nil
 }
 
