@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,13 @@ import (
 type Repository interface {
 	ListRules(ctx context.Context, orgID string) ([]*Rule, error)
 	ListActiveRules(ctx context.Context, orgID string) ([]*Rule, error)
+	// ListActiveRulesForCountry narrows to one country's rules.
+	//
+	// ⚠ hrm_statutory_rules.country_code is NOT NULL, so unlike
+	// hrm_per_diem_rates there is no "applies everywhere" wildcard row to
+	// fall back to. That is exactly why ComputeForEmployee only calls this
+	// when a legal entity has actually declared a country.
+	ListActiveRulesForCountry(ctx context.Context, orgID, countryCode string) ([]*Rule, error)
 	FindRuleByRef(ctx context.Context, orgID, ref string) (*Rule, error)
 	CreateRule(ctx context.Context, r *Rule) error
 	UpdateRule(ctx context.Context, r *Rule) error
@@ -171,6 +179,26 @@ func (r *repoImpl) SlabsAsOf(ctx context.Context, ruleID string, asOf time.Time)
 			return nil, err
 		}
 		list = append(list, s)
+	}
+	return list, rows.Err()
+}
+
+func (r *repoImpl) ListActiveRulesForCountry(ctx context.Context, orgID, countryCode string) ([]*Rule, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT `+ruleSel+` FROM hrm_statutory_rules
+		  WHERE org_id=$1 AND is_active=TRUE AND country_code=$2 ORDER BY name`,
+		orgID, strings.ToUpper(strings.TrimSpace(countryCode)))
+	if err != nil {
+		return nil, fmt.Errorf("statutory: ListActiveRulesForCountry: %w", err)
+	}
+	defer rows.Close()
+	list := make([]*Rule, 0)
+	for rows.Next() {
+		rr, err := scanRule(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, rr)
 	}
 	return list, rows.Err()
 }

@@ -14,6 +14,7 @@ import (
 )
 
 type Handler struct{ service Service }
+
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 // ListCalendars godoc
@@ -35,9 +36,14 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) ListCalendars(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.ListCalendars(c.Context(), orgID, strings.ToLower(c.Query("active")) == "true")
-	if err != nil { log.Error("holidays: ListCalendars", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("holidays: ListCalendars", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -62,13 +68,21 @@ func (h *Handler) ListCalendars(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars [post]
 func (h *Handler) CreateCalendar(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateCalendarRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	cal, err := h.service.CreateCalendar(c.Context(), orgID, userID, req)
-	if err != nil { return h.calError(c, err) }
+	if err != nil {
+		return h.calError(c, err)
+	}
 	return response.Created(c, fiber.Map{"calendar": cal}, "Holiday calendar created")
 }
 
@@ -91,9 +105,13 @@ func (h *Handler) CreateCalendar(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId} [get]
 func (h *Handler) GetCalendar(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	cal, err := h.service.GetCalendar(c.Context(), orgID, c.Params("calendarId"))
-	if err != nil { return h.calError(c, err) }
+	if err != nil {
+		return h.calError(c, err)
+	}
 	return response.OK(c, fiber.Map{"calendar": cal}, "OK")
 }
 
@@ -120,11 +138,17 @@ func (h *Handler) GetCalendar(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId} [patch]
 func (h *Handler) UpdateCalendar(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateCalendarRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	cal, err := h.service.UpdateCalendar(c.Context(), orgID, c.Params("calendarId"), req)
-	if err != nil { return h.calError(c, err) }
+	if err != nil {
+		return h.calError(c, err)
+	}
 	return response.OK(c, fiber.Map{"calendar": cal}, "Calendar updated")
 }
 
@@ -147,8 +171,12 @@ func (h *Handler) UpdateCalendar(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId} [delete]
 func (h *Handler) DeleteCalendar(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.DeleteCalendar(c.Context(), orgID, c.Params("calendarId")); err != nil { return h.calError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.DeleteCalendar(c.Context(), orgID, c.Params("calendarId")); err != nil {
+		return h.calError(c, err)
+	}
 	return response.NoContent(c)
 }
 
@@ -172,9 +200,14 @@ func (h *Handler) DeleteCalendar(c fiber.Ctx) error {
 func (h *Handler) ListHolidays(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.ListHolidays(c.Context(), orgID, c.Params("calendarId"))
-	if err != nil { log.Error("holidays: ListHolidays", slog.Any("error", err)); return h.calError(c, err) }
+	if err != nil {
+		log.Error("holidays: ListHolidays", slog.Any("error", err))
+		return h.calError(c, err)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -201,11 +234,17 @@ func (h *Handler) ListHolidays(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId}/holidays [post]
 func (h *Handler) CreateHoliday(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateHolidayRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	hol, err := h.service.CreateHoliday(c.Context(), orgID, c.Params("calendarId"), req)
-	if err != nil { return h.holError(c, err) }
+	if err != nil {
+		return h.holError(c, err)
+	}
 	return response.Created(c, fiber.Map{"holiday": hol}, "Holiday added")
 }
 
@@ -232,11 +271,17 @@ func (h *Handler) CreateHoliday(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId}/holidays/{holidayId} [patch]
 func (h *Handler) UpdateHoliday(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateHolidayRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	hol, err := h.service.UpdateHoliday(c.Context(), orgID, c.Params("calendarId"), c.Params("holidayId"), req)
-	if err != nil { return h.holError(c, err) }
+	if err != nil {
+		return h.holError(c, err)
+	}
 	return response.OK(c, fiber.Map{"holiday": hol}, "Holiday updated")
 }
 
@@ -260,8 +305,12 @@ func (h *Handler) UpdateHoliday(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/{calendarId}/holidays/{holidayId} [delete]
 func (h *Handler) DeleteHoliday(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.DeleteHoliday(c.Context(), orgID, c.Params("calendarId"), c.Params("holidayId")); err != nil { return h.holError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.DeleteHoliday(c.Context(), orgID, c.Params("calendarId"), c.Params("holidayId")); err != nil {
+		return h.holError(c, err)
+	}
 	return response.NoContent(c)
 }
 
@@ -288,40 +337,66 @@ func (h *Handler) DeleteHoliday(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/holiday-calendars/assignments [post]
 func (h *Handler) AssignCalendar(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req AssignCalendarRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	a, err := h.service.AssignCalendar(c.Context(), orgID, userID, req)
-	if err != nil { return h.calError(c, err) }
+	if err != nil {
+		return h.calError(c, err)
+	}
 	return response.OK(c, fiber.Map{"assignment": a}, "Calendar assigned")
 }
 
 func (h *Handler) calError(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrCalendarNotFound): return response.NotFound(c, "CALENDAR_NOT_FOUND", "Holiday calendar not found")
-	case errors.Is(err, ErrNameRequired): return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
-	case errors.Is(err, ErrNameConflict): return response.Conflict(c, "CALENDAR_NAME_CONFLICT", "A calendar with this name and year already exists")
-	case errors.Is(err, ErrInvalidYear): return response.BadRequest(c, "INVALID_YEAR", "year must be between 2000 and 2100")
-	case errors.Is(err, ErrInvalidAssigneeType): return response.BadRequest(c, "INVALID_ASSIGNEE_TYPE", "assignee_type must be: organization, department, or employee")
-	case errors.Is(err, ErrAssigneeIDRequired): return response.BadRequest(c, "ASSIGNEE_ID_REQUIRED", "assignee_id is required")
-	case errors.Is(err, ErrEffectiveDateRequired): return response.BadRequest(c, "EFFECTIVE_DATE_REQUIRED", "effective_date is required in YYYY-MM-DD format")
-	default: log.Error("holidays: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrCalendarNotFound):
+		return response.NotFound(c, "CALENDAR_NOT_FOUND", "Holiday calendar not found")
+	case errors.Is(err, ErrNameRequired):
+		return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
+	case errors.Is(err, ErrNameConflict):
+		return response.Conflict(c, "CALENDAR_NAME_CONFLICT", "A calendar with this name and year already exists")
+	case errors.Is(err, ErrInvalidYear):
+		return response.BadRequest(c, "INVALID_YEAR", "year must be between 2000 and 2100")
+	case errors.Is(err, ErrInvalidAssigneeType):
+		return response.BadRequest(c, "INVALID_ASSIGNEE_TYPE", "assignee_type must be: organization, department, or employee")
+	case errors.Is(err, ErrAssigneeIDRequired):
+		return response.BadRequest(c, "ASSIGNEE_ID_REQUIRED", "assignee_id is required")
+	case errors.Is(err, ErrEffectiveDateRequired):
+		return response.BadRequest(c, "EFFECTIVE_DATE_REQUIRED", "effective_date is required in YYYY-MM-DD format")
+	default:
+		log.Error("holidays: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }
 
 func (h *Handler) holError(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrHolidayNotFound): return response.NotFound(c, "HOLIDAY_NOT_FOUND", "Holiday not found")
-	case errors.Is(err, ErrCalendarNotFound): return response.NotFound(c, "CALENDAR_NOT_FOUND", "Holiday calendar not found")
-	case errors.Is(err, ErrNameRequired): return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
-	case errors.Is(err, ErrDateRequired): return response.BadRequest(c, "DATE_REQUIRED", "date is required (YYYY-MM-DD)")
-	case errors.Is(err, ErrInvalidDate): return response.BadRequest(c, "INVALID_DATE", "date must be a valid YYYY-MM-DD")
-	case errors.Is(err, ErrDateConflict): return response.Conflict(c, "DATE_CONFLICT", "A holiday on this date already exists in this calendar")
-	case errors.Is(err, ErrInvalidHolidayType): return response.BadRequest(c, "INVALID_HOLIDAY_TYPE", "holiday_type must be: public, company, or optional")
-	default: log.Error("holidays: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrHolidayNotFound):
+		return response.NotFound(c, "HOLIDAY_NOT_FOUND", "Holiday not found")
+	case errors.Is(err, ErrCalendarNotFound):
+		return response.NotFound(c, "CALENDAR_NOT_FOUND", "Holiday calendar not found")
+	case errors.Is(err, ErrNameRequired):
+		return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
+	case errors.Is(err, ErrDateRequired):
+		return response.BadRequest(c, "DATE_REQUIRED", "date is required (YYYY-MM-DD)")
+	case errors.Is(err, ErrInvalidDate):
+		return response.BadRequest(c, "INVALID_DATE", "date must be a valid YYYY-MM-DD")
+	case errors.Is(err, ErrDateConflict):
+		return response.Conflict(c, "DATE_CONFLICT", "A holiday on this date already exists in this calendar")
+	case errors.Is(err, ErrInvalidHolidayType):
+		return response.BadRequest(c, "INVALID_HOLIDAY_TYPE", "holiday_type must be: public, company, or optional")
+	default:
+		log.Error("holidays: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }

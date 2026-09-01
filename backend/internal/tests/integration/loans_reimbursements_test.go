@@ -318,12 +318,7 @@ func TestIntegration_Loans_ResignedEmployeeStopsAccruingRecovery(t *testing.T) {
 	// Terminate the employee well before the 3rd installment's period, and
 	// give a terminated status category (not just a status_id swap) — the
 	// "who gets paid" rule (r25) reads est.category.
-	var terminatedStatusID string
-	if err := env.db.QueryRow(ctx,
-		`INSERT INTO hrm_employee_statuses (org_id, name, category) VALUES ($1,'Terminated','terminated') RETURNING id`,
-		fx.orgID).Scan(&terminatedStatusID); err != nil {
-		t.Fatalf("seed terminated status: %v", err)
-	}
+	terminatedStatusID := statusIDFor(t, env, fx.orgID, "Terminated", "terminated")
 	termDate := time.Date(y1, time.Month(m1), 15, 0, 0, 0, 0, time.UTC) // leaves during period 1
 	if _, err := env.db.Exec(ctx,
 		`UPDATE hrm_employees SET status_id=$1, termination_date=$2 WHERE id=$3`,

@@ -9,18 +9,24 @@ import (
 )
 
 type TransferType string
+
 const (
 	TransferTypeDepartment TransferType = "department"
 	TransferTypeLocation   TransferType = "location"
 	TransferTypeReporting  TransferType = "reporting"
 	TransferTypeFull       TransferType = "full"
 )
+
 func (t TransferType) IsValid() bool {
-	switch t { case TransferTypeDepartment, TransferTypeLocation, TransferTypeReporting, TransferTypeFull: return true }
+	switch t {
+	case TransferTypeDepartment, TransferTypeLocation, TransferTypeReporting, TransferTypeFull:
+		return true
+	}
 	return false
 }
 
 type TransferStatus string
+
 const (
 	StatusDraft           TransferStatus = "draft"
 	StatusPendingApproval TransferStatus = "pending_approval"

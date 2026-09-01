@@ -38,7 +38,9 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) ListTemplates(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	result, err := h.service.ListTemplates(c.Context(), orgID, c.Query("action_type"))
 	if err != nil {
 		log.Error("approvals: ListTemplates", slog.Any("error", err))
@@ -73,15 +75,21 @@ func (h *Handler) ListTemplates(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals [post]
 func (h *Handler) CreateTemplate(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateTemplateRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
 	t, err := h.service.CreateTemplate(c.Context(), orgID, userID, req)
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.Created(c, fiber.Map{"template": t}, "Approval template created")
 }
 
@@ -104,9 +112,13 @@ func (h *Handler) CreateTemplate(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/{templateId} [get]
 func (h *Handler) GetTemplate(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	t, err := h.service.GetTemplate(c.Context(), orgID, c.Params("templateId"))
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.OK(c, fiber.Map{"template": t}, "OK")
 }
 
@@ -132,13 +144,17 @@ func (h *Handler) GetTemplate(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/{templateId} [patch]
 func (h *Handler) UpdateTemplate(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateTemplateRequest
 	if err := c.Bind().JSON(&req); err != nil {
 		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
 	}
 	t, err := h.service.UpdateTemplate(c.Context(), orgID, c.Params("templateId"), req)
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.OK(c, fiber.Map{"template": t}, "Approval template updated")
 }
 
@@ -162,7 +178,9 @@ func (h *Handler) UpdateTemplate(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/{templateId} [delete]
 func (h *Handler) DeleteTemplate(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	if err := h.service.DeleteTemplate(c.Context(), orgID, c.Params("templateId")); err != nil {
 		return h.tmplError(c, err)
 	}
@@ -192,18 +210,22 @@ func (h *Handler) DeleteTemplate(c fiber.Ctx) error {
 func (h *Handler) ListInstances(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+
 	limitStr := c.Query("limit", "50")
 	offsetStr := c.Query("offset", "0")
-	
+
 	limit, _ := strconv.Atoi(limitStr)
 	offset, _ := strconv.Atoi(offsetStr)
-	if limit == 0 { limit = 50 }
-	
+	if limit == 0 {
+		limit = 50
+	}
+
 	status := c.Query("status")
 	requesterID := c.Query("requester_id")
-	
+
 	result, err := h.service.ListInstances(c.Context(), orgID, limit, offset, status, requesterID)
 	if err != nil {
 		log.Error("approvals: ListInstances", slog.Any("error", err))
@@ -231,9 +253,13 @@ func (h *Handler) ListInstances(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/instances/{instanceId} [get]
 func (h *Handler) GetInstance(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	inst, err := h.service.GetInstance(c.Context(), orgID, c.Params("instanceId"))
-	if err != nil { return h.instError(c, err) }
+	if err != nil {
+		return h.instError(c, err)
+	}
 	return response.OK(c, fiber.Map{"instance": inst}, "OK")
 }
 
@@ -260,15 +286,21 @@ func (h *Handler) GetInstance(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/instances/{instanceId}/approve [post]
 func (h *Handler) Approve(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req DecisionRequest
 	req.Action = "approved"
 	_ = c.Bind().JSON(&req)
 	req.Action = "approved" // enforce correct action
 	inst, err := h.service.Decide(c.Context(), orgID, c.Params("instanceId"), userID, req)
-	if err != nil { return h.instError(c, err) }
+	if err != nil {
+		return h.instError(c, err)
+	}
 	return response.OK(c, fiber.Map{"instance": inst}, "Approved")
 }
 
@@ -294,15 +326,21 @@ func (h *Handler) Approve(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/approvals/instances/{instanceId}/reject [post]
 func (h *Handler) Reject(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req DecisionRequest
 	req.Action = "rejected"
 	_ = c.Bind().JSON(&req)
 	req.Action = "rejected"
 	inst, err := h.service.Decide(c.Context(), orgID, c.Params("instanceId"), userID, req)
-	if err != nil { return h.instError(c, err) }
+	if err != nil {
+		return h.instError(c, err)
+	}
 	return response.OK(c, fiber.Map{"instance": inst}, "Rejected")
 }
 

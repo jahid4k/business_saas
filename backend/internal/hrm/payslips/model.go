@@ -33,14 +33,22 @@ const (
 
 // PayslipRun is the monthly payroll batch for an organization.
 type PayslipRun struct {
-	ID                 string          `db:"id"                    json:"id"`
-	PublicID           string          `db:"public_id"             json:"public_id"`
-	OrgID              string          `db:"org_id"                json:"org_id"`
-	PeriodYear         int             `db:"period_year"           json:"period_year"`
-	PeriodMonth        int             `db:"period_month"          json:"period_month"`
-	RunType            RunType         `db:"run_type"              json:"run_type"`
-	Description        *string         `db:"description"           json:"description,omitempty"`
-	Currency           string          `db:"currency"              json:"currency"`
+	ID          string  `db:"id"                    json:"id"`
+	PublicID    string  `db:"public_id"             json:"public_id"`
+	OrgID       string  `db:"org_id"                json:"org_id"`
+	PeriodYear  int     `db:"period_year"           json:"period_year"`
+	PeriodMonth int     `db:"period_month"          json:"period_month"`
+	RunType     RunType `db:"run_type"              json:"run_type"`
+	Description *string `db:"description"           json:"description,omitempty"`
+	Currency    string  `db:"currency"              json:"currency"`
+	// LegalEntityID scopes the run to ONE company within the organization
+	// (11B-2). This column was planted by Phase 0.4 and had no reader until
+	// now.
+	//
+	// ⚠ NIL MEANS THE WHOLE ORGANIZATION, which is every run that already
+	// exists. Entity scoping that failed closed here would produce an empty
+	// payroll run for every organization in this database.
+	LegalEntityID      *string         `db:"legal_entity_id"       json:"legal_entity_id,omitempty"`
 	AttendancePeriodID *string         `db:"attendance_period_id"  json:"attendance_period_id,omitempty"`
 	TotalEmployees     int             `db:"total_employees"       json:"total_employees"`
 	TotalGrossPay      decimal.Decimal `db:"total_gross_pay"       json:"total_gross_pay"`
@@ -223,11 +231,13 @@ type RunPreview struct {
 }
 
 type CreateRunRequest struct {
-	Year               int     `json:"year"`
-	Month              int     `json:"month"`
-	RunType            *string `json:"run_type"` // defaults to 'regular'
-	Description        *string `json:"description"`
-	Currency           *string `json:"currency"`
+	Year        int     `json:"year"`
+	Month       int     `json:"month"`
+	RunType     *string `json:"run_type"` // defaults to 'regular'
+	Description *string `json:"description"`
+	Currency    *string `json:"currency"`
+	// LegalEntityID scopes the run to one company. Omit for an org-wide run.
+	LegalEntityID      *string `json:"legal_entity_id"`
 	AttendancePeriodID *string `json:"attendance_period_id"` // optional D1 link
 }
 

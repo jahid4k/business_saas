@@ -21,7 +21,7 @@ type Repository interface {
 	// FindRunByPeriod backs the friendly duplicate check. It takes a runType
 	// because only 'regular' is unique per period — see
 	// uq_hrm_pr_org_month_regular and RunType.IsUniquePerPeriod.
-	FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType) (*PayslipRun, error)
+	FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType, legalEntityID *string) (*PayslipRun, error)
 	CreateRun(ctx context.Context, r *PayslipRun) error
 	UpdateRun(ctx context.Context, r *PayslipRun) error
 	// Payslips
@@ -50,7 +50,7 @@ type repoImpl struct{ db *pgxpool.Pool }
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const runSel = `id, public_id, org_id, period_year, period_month, run_type,
-	description, currency, attendance_period_id,
+	description, currency, legal_entity_id, attendance_period_id,
 	total_employees, total_gross_pay, total_deductions, total_net_pay,
 	status, computed_at, computed_by, approved_at, approved_by, paid_at, paid_by,
 	created_by, created_at, updated_at`
@@ -59,7 +59,7 @@ func scanRun(row pgx.Row) (*PayslipRun, error) {
 	r := &PayslipRun{}
 	err := row.Scan(
 		&r.ID, &r.PublicID, &r.OrgID, &r.PeriodYear, &r.PeriodMonth, &r.RunType,
-		&r.Description, &r.Currency, &r.AttendancePeriodID,
+		&r.Description, &r.Currency, &r.LegalEntityID, &r.AttendancePeriodID,
 		&r.TotalEmployees, &r.TotalGrossPay, &r.TotalDeductions, &r.TotalNetPay,
 		&r.Status, &r.ComputedAt, &r.ComputedBy, &r.ApprovedAt, &r.ApprovedBy, &r.PaidAt, &r.PaidBy,
 		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
@@ -96,19 +96,21 @@ func (r *repoImpl) FindRunByRef(ctx context.Context, orgID, ref string) (*Paysli
 		orgID, ref))
 }
 
-func (r *repoImpl) FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType) (*PayslipRun, error) {
+func (r *repoImpl) FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType, legalEntityID *string) (*PayslipRun, error) {
 	return scanRun(r.db.QueryRow(ctx,
 		`SELECT `+runSel+` FROM hrm_payslip_runs
-		 WHERE org_id=$1 AND period_year=$2 AND period_month=$3 AND run_type=$4`,
-		orgID, year, month, runType))
+		 WHERE org_id=$1 AND period_year=$2 AND period_month=$3 AND run_type=$4
+		   AND COALESCE(legal_entity_id, '00000000-0000-0000-0000-000000000000'::uuid)
+		       = COALESCE($5::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+		orgID, year, month, runType, legalEntityID))
 }
 
 func (r *repoImpl) CreateRun(ctx context.Context, run *PayslipRun) error {
 	return r.db.QueryRow(ctx,
-		`INSERT INTO hrm_payslip_runs (org_id, period_year, period_month, run_type, description, currency, attendance_period_id, status, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		`INSERT INTO hrm_payslip_runs (org_id, period_year, period_month, run_type, description, currency, legal_entity_id, attendance_period_id, status, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9,$10)
 		RETURNING id, public_id, created_at, updated_at`,
-		run.OrgID, run.PeriodYear, run.PeriodMonth, run.RunType, run.Description, run.Currency, run.AttendancePeriodID, run.Status, run.CreatedBy,
+		run.OrgID, run.PeriodYear, run.PeriodMonth, run.RunType, run.Description, run.Currency, run.LegalEntityID, run.AttendancePeriodID, run.Status, run.CreatedBy,
 	).Scan(&run.ID, &run.PublicID, &run.CreatedAt, &run.UpdatedAt)
 }
 

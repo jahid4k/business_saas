@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/mridha/businesssaas/internal/authz"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 )
@@ -95,6 +97,19 @@ func (s *serviceImpl) Create(ctx context.Context, ownerID string, req CreateBusi
 	}
 	if err := s.authzRepo.CreateMembershipTx(ctx, tx, membership); err != nil {
 		return nil, fmt.Errorf("organization: Create: insert owner membership: %w", err)
+	}
+
+	// Seed the HRM employee statuses this org will need before it can create
+	// its first employee.
+	//
+	// Migration 00053 seeded these per-org, but only for orgs that existed
+	// when it ran — so every org created through this endpoint since then had
+	// none, and POST /hrm/employees failed on a NOT NULL status_id. Inside the
+	// same transaction as the membership, so an org either exists fully usable
+	// or not at all; a half-created org that cannot hire anyone is worse than
+	// a failed create.
+	if err := seedEmployeeStatusesTx(ctx, tx, b.ID); err != nil {
+		return nil, fmt.Errorf("organization: Create: seed employee statuses: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -234,6 +249,37 @@ func validateCreateRequest(req CreateBusinessRequest) error {
 	}
 	if !slugPattern.MatchString(slug) {
 		return ErrInvalidSlug
+	}
+	return nil
+}
+
+// defaultEmployeeStatuses mirrors migration 00053 exactly — same names, same
+// categories, same colors — so an org created here is indistinguishable from
+// one the migration seeded.
+//
+// 'Resigned' and 'Terminated' deliberately share the 'terminated' category:
+// they are different names for one lifecycle state, and HRM code filters on
+// CATEGORY, never on name. Names are org-customisable; categories are
+// CHECK-constrained, which is why payroll's eligible-employee filter reads the
+// category and would silently unpay people if these were miscategorised.
+var defaultEmployeeStatuses = []struct{ Name, Category, Color string }{
+	{"Active", "active", "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"},
+	{"Inactive", "inactive", "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"},
+	{"On Leave", "on_leave", "bg-amber-500/10 text-amber-400 border-amber-500/20"},
+	{"Resigned", "terminated", "bg-orange-500/10 text-orange-400 border-orange-500/20"},
+	{"Terminated", "terminated", "bg-red-500/10 text-red-400 border-red-500/20"},
+}
+
+// seedEmployeeStatusesTx inserts the default statuses for a new organization
+// within the caller's transaction.
+func seedEmployeeStatusesTx(ctx context.Context, tx pgx.Tx, orgID string) error {
+	for _, st := range defaultEmployeeStatuses {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO hrm_employee_statuses (org_id, name, category, color)
+			 VALUES ($1::uuid, $2, $3, $4)`,
+			orgID, st.Name, st.Category, st.Color); err != nil {
+			return fmt.Errorf("insert %q: %w", st.Name, err)
+		}
 	}
 	return nil
 }

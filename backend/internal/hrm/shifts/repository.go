@@ -25,6 +25,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const shiftSel = `id, public_id, org_id, name, description, shift_type,
@@ -40,22 +41,32 @@ func scanShift(row pgx.Row) (*Shift, error) {
 		&s.WeeklyHoursTarget, &s.BreakMinutes, &s.WorkingDays,
 		&s.TrackOvertime, &s.OvertimeThresholdHours, &s.TrackBreaks,
 		&s.IsDefault, &s.IsActive, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 func (r *repoImpl) FindAll(ctx context.Context, orgID string, activeOnly bool) ([]*Shift, error) {
 	q := `SELECT ` + shiftSel + ` FROM hrm_shifts WHERE org_id=$1`
-	if activeOnly { q += ` AND is_active=TRUE` }
+	if activeOnly {
+		q += ` AND is_active=TRUE`
+	}
 	q += ` ORDER BY is_default DESC, name`
 	rows, err := r.db.Query(ctx, q, orgID)
-	if err != nil { return nil, fmt.Errorf("shifts: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("shifts: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Shift, 0)
 	for rows.Next() {
 		s, err := scanShift(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, s)
 	}
 	return list, rows.Err()
@@ -96,8 +107,12 @@ func (r *repoImpl) Update(ctx context.Context, s *Shift) error {
 
 func (r *repoImpl) Delete(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_shifts WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("shifts: Delete: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrShiftNotFound }
+	if err != nil {
+		return fmt.Errorf("shifts: Delete: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrShiftNotFound
+	}
 	return nil
 }
 
@@ -114,11 +129,19 @@ func (r *repoImpl) FindAssignments(ctx context.Context, orgID, assigneeType, ass
 		to_char(effective_date,'YYYY-MM-DD'),to_char(end_date,'YYYY-MM-DD'),created_by,created_at
 		FROM hrm_work_schedule_assignments WHERE org_id=$1`
 	args := []any{orgID}
-	if assigneeType != "" { args = append(args, assigneeType); q += fmt.Sprintf(` AND assignee_type=$%d`, len(args)) }
-	if assigneeID != "" { args = append(args, assigneeID); q += fmt.Sprintf(` AND assignee_id=$%d`, len(args)) }
+	if assigneeType != "" {
+		args = append(args, assigneeType)
+		q += fmt.Sprintf(` AND assignee_type=$%d`, len(args))
+	}
+	if assigneeID != "" {
+		args = append(args, assigneeID)
+		q += fmt.Sprintf(` AND assignee_id=$%d`, len(args))
+	}
 	q += ` ORDER BY effective_date DESC`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("shifts: FindAssignments: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("shifts: FindAssignments: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*WorkScheduleAssignment, 0)
 	for rows.Next() {
@@ -144,8 +167,12 @@ func (r *repoImpl) FindActiveAssignment(ctx context.Context, assigneeType, assig
 		assigneeType, assigneeID,
 	).Scan(&a.ID, &a.PublicID, &a.OrgID, &a.ShiftID, &a.AssigneeType,
 		&a.AssigneeID, &a.EffectiveDate, &a.EndDate, &a.CreatedBy, &a.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, fmt.Errorf("shifts: FindActiveAssignment: %w", err) }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("shifts: FindActiveAssignment: %w", err)
+	}
 	return a, nil
 }
 
@@ -159,7 +186,11 @@ func (r *repoImpl) CreateAssignment(ctx context.Context, a *WorkScheduleAssignme
 
 func (r *repoImpl) DeleteAssignment(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_work_schedule_assignments WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("shifts: DeleteAssignment: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrAssignmentNotFound }
+	if err != nil {
+		return fmt.Errorf("shifts: DeleteAssignment: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrAssignmentNotFound
+	}
 	return nil
 }

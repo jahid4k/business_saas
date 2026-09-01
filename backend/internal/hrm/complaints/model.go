@@ -9,30 +9,36 @@ import (
 )
 
 type ComplaintType string
+
 const (
-	TypeHarassment     ComplaintType = "harassment"
-	TypeDiscrimination ComplaintType = "discrimination"
-	TypeSafety         ComplaintType = "workplace_safety"
+	TypeHarassment      ComplaintType = "harassment"
+	TypeDiscrimination  ComplaintType = "discrimination"
+	TypeSafety          ComplaintType = "workplace_safety"
 	TypePolicyViolation ComplaintType = "policy_violation"
-	TypeManagerConduct ComplaintType = "manager_conduct"
-	TypeWageDispute    ComplaintType = "wage_dispute"
-	TypeRetaliation    ComplaintType = "retaliation"
-	TypeGeneral        ComplaintType = "general"
+	TypeManagerConduct  ComplaintType = "manager_conduct"
+	TypeWageDispute     ComplaintType = "wage_dispute"
+	TypeRetaliation     ComplaintType = "retaliation"
+	TypeGeneral         ComplaintType = "general"
 )
+
 func (t ComplaintType) IsValid() bool {
-	switch t { case TypeHarassment, TypeDiscrimination, TypeSafety, TypePolicyViolation,
-		TypeManagerConduct, TypeWageDispute, TypeRetaliation, TypeGeneral: return true }
+	switch t {
+	case TypeHarassment, TypeDiscrimination, TypeSafety, TypePolicyViolation,
+		TypeManagerConduct, TypeWageDispute, TypeRetaliation, TypeGeneral:
+		return true
+	}
 	return false
 }
 
 type ComplaintStatus string
+
 const (
-	StatusSubmitted   ComplaintStatus = "submitted"
-	StatusUnderReview ComplaintStatus = "under_review"
+	StatusSubmitted     ComplaintStatus = "submitted"
+	StatusUnderReview   ComplaintStatus = "under_review"
 	StatusInvestigating ComplaintStatus = "investigating"
-	StatusResolved    ComplaintStatus = "resolved"
-	StatusDismissed   ComplaintStatus = "dismissed"
-	StatusWithdrawn   ComplaintStatus = "withdrawn"
+	StatusResolved      ComplaintStatus = "resolved"
+	StatusDismissed     ComplaintStatus = "dismissed"
+	StatusWithdrawn     ComplaintStatus = "withdrawn"
 )
 
 type Complaint struct {
@@ -72,11 +78,11 @@ type CreateComplaintRequest struct {
 }
 
 type UpdateComplaintRequest struct {
-	Title             *string `json:"title"`
-	Description       *string `json:"description"`
-	IncidentDate      *string `json:"incident_date"`
-	AgainstDetails    *string `json:"against_details"`
-	DocumentID        *string `json:"document_id"`
+	Title          *string `json:"title"`
+	Description    *string `json:"description"`
+	IncidentDate   *string `json:"incident_date"`
+	AgainstDetails *string `json:"against_details"`
+	DocumentID     *string `json:"document_id"`
 }
 
 type StartReviewRequest struct{}
@@ -139,12 +145,12 @@ func (f *ComplaintListFilter) Normalise() {
 }
 
 var (
-	ErrNotFound            = errors.New("complaint not found")
-	ErrTitleRequired       = errors.New("title is required")
-	ErrDescriptionRequired = errors.New("description is required")
-	ErrInvalidType         = errors.New("invalid complaint_type")
-	ErrInvalidDate         = errors.New("date must be a valid YYYY-MM-DD")
-	ErrWrongStatus         = errors.New("action not allowed in current complaint status")
+	ErrNotFound             = errors.New("complaint not found")
+	ErrTitleRequired        = errors.New("title is required")
+	ErrDescriptionRequired  = errors.New("description is required")
+	ErrInvalidType          = errors.New("invalid complaint_type")
+	ErrInvalidDate          = errors.New("date must be a valid YYYY-MM-DD")
+	ErrWrongStatus          = errors.New("action not allowed in current complaint status")
 	ErrInvestigatorRequired = errors.New("investigator_id is required")
 	ErrResolutionRequired   = errors.New("resolution text is required")
 )

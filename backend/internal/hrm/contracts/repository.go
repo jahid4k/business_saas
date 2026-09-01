@@ -20,6 +20,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const cSel = `id, public_id, org_id, employee_id, contract_type,
@@ -33,8 +34,12 @@ func sc(row pgx.Row) (*EmployeeContract, error) {
 		&c.StartDate, &c.EndDate, &c.ProbationEndDate,
 		&c.NoticePeriodDays, &c.SalaryStructureID, &c.WorkHoursPerWeek,
 		&c.DocumentID, &c.IsActive, &c.Notes, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -42,10 +47,18 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID string) ([]*Em
 	rows, err := r.db.Query(ctx,
 		`SELECT `+cSel+` FROM hrm_employee_contracts WHERE org_id=$1 AND employee_id=$2 ORDER BY start_date DESC`,
 		orgID, employeeID)
-	if err != nil { return nil, fmt.Errorf("contracts: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("contracts: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*EmployeeContract, 0)
-	for rows.Next() { c, err := sc(rows); if err != nil { return nil, err }; list = append(list, c) }
+	for rows.Next() {
+		c, err := sc(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
 	return list, rows.Err()
 }
 
@@ -86,7 +99,11 @@ func (r *repoImpl) Deactivate(ctx context.Context, orgID, employeeID, ref string
 		`UPDATE hrm_employee_contracts SET is_active=FALSE, updated_at=NOW()
 		WHERE org_id=$1 AND employee_id=$2 AND (id::text=$3 OR public_id=$3)`,
 		orgID, employeeID, ref)
-	if err != nil { return fmt.Errorf("contracts: Deactivate: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrContractNotFound }
+	if err != nil {
+		return fmt.Errorf("contracts: Deactivate: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrContractNotFound
+	}
 	return nil
 }

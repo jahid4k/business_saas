@@ -75,14 +75,24 @@ func (h *Handler) resolveListFilter(c fiber.Ctx, orgID, userID string) (WarningL
 func (h *Handler) ListAll(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	filter, err := h.resolveListFilter(c, orgID, userID)
-	if err != nil { log.Error("warnings: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("warnings: ListAll", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	filter.EmployeeID = c.Query("employee_id")
 	res, err := h.service.List(c.Context(), orgID, filter)
-	if err != nil { log.Error("warnings: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("warnings: ListAll", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -107,14 +117,24 @@ func (h *Handler) ListAll(c fiber.Ctx) error {
 func (h *Handler) ListForEmployee(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	filter, err := h.resolveListFilter(c, orgID, userID)
-	if err != nil { log.Error("warnings: ListForEmployee", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("warnings: ListForEmployee", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	filter.EmployeeID = c.Params("employeeId")
 	res, err := h.service.List(c.Context(), orgID, filter)
-	if err != nil { log.Error("warnings: ListForEmployee", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("warnings: ListForEmployee", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -143,13 +163,21 @@ func (h *Handler) ListForEmployee(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings [post]
 func (h *Handler) Create(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateWarningRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	w, err := h.service.Create(c.Context(), orgID, c.Params("employeeId"), userID, req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.Created(c, fiber.Map{"warning": w}, "Warning record created")
 }
 
@@ -171,17 +199,31 @@ func (h *Handler) Create(c fiber.Ctx) error {
 func (h *Handler) Get(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	employeeID := c.Params("employeeId")
 	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.warnings")
-	if err != nil { log.Error("warnings: Get", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("warnings: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, employeeID)
-	if err != nil { log.Error("warnings: Get", slog.Any("error", err)); return response.InternalServerError(c) }
-	if !allowed { return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record") }
+	if err != nil {
+		log.Error("warnings: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
+	}
 	w, err := h.service.Get(c.Context(), orgID, employeeID, c.Params("warningId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "OK")
 }
 
@@ -204,11 +246,17 @@ func (h *Handler) Get(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId} [patch]
 func (h *Handler) Update(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateWarningRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	w, err := h.service.Update(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Warning updated")
 }
 
@@ -232,13 +280,19 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId}/issue [post]
 func (h *Handler) Issue(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req IssueRequest
 	_ = c.Bind().JSON(&req)
 	w, err := h.service.Issue(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"), userID, req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Warning issued")
 }
 
@@ -261,11 +315,15 @@ func (h *Handler) Issue(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId}/acknowledge [post]
 func (h *Handler) Acknowledge(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req AcknowledgeRequest
 	_ = c.Bind().JSON(&req)
 	w, err := h.service.Acknowledge(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Warning acknowledged")
 }
 
@@ -288,11 +346,17 @@ func (h *Handler) Acknowledge(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId}/appeal [post]
 func (h *Handler) Appeal(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req AppealRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	w, err := h.service.Appeal(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Appeal submitted")
 }
 
@@ -315,11 +379,15 @@ func (h *Handler) Appeal(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId}/close [post]
 func (h *Handler) Close(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CloseRequest
 	_ = c.Bind().JSON(&req)
 	w, err := h.service.Close(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Warning closed")
 }
 
@@ -340,9 +408,13 @@ func (h *Handler) Close(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/warnings/{warningId}/cancel [post]
 func (h *Handler) Cancel(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	w, err := h.service.Cancel(c.Context(), orgID, c.Params("employeeId"), c.Params("warningId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning": w}, "Warning cancelled")
 }
 

@@ -122,7 +122,12 @@ func (s *serviceImpl) CreateLead(ctx context.Context, orgID, userID string, req 
 				}
 
 				noteReq := engagement.CreateNoteRequest{
-					RelatedType: "lead",
+					// ⚠ Was the bare "lead", which is not a valid RelatedType —
+					// the vocabulary is "<module>.<entity>". CreateNote rejected
+					// it with "invalid related_type value" and the error was
+					// discarded below, so this note has NEVER been written.
+					// Use the exported constant so a typo cannot recur.
+					RelatedType: string(engagement.RelatedCRMLead),
 					RelatedID:   existing.ID,
 					Content:     fmt.Sprintf("Duplicate lead capture attempt via %s. Name: %s %s, Company: %s", source, req.FirstName, lastName, company),
 				}

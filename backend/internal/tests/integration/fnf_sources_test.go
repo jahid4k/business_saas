@@ -322,9 +322,15 @@ func TestIntegration_FnFSources_AdvanceRecoveredAndMarkedSettled(t *testing.T) {
 	}
 }
 
-// TestIntegration_FnFSources_ForeignCurrencyAdvanceIsReportedNotGuessed — no
-// FX rate table exists anywhere (Phase 11 scope). Converting would mean
-// inventing a rate and mis-charging a departing person real money.
+// TestIntegration_FnFSources_ForeignCurrencyAdvanceIsReportedNotGuessed —
+// this org has recorded NO rate for the pair, so nothing may be converted.
+//
+// ⚠ The FX table now exists (11B-1), which makes this test MORE important
+// rather than obsolete: giving settlement a rate source must not weaken its
+// refusal to invent one. Converting at parity would mis-charge a departing
+// person real money. Its counterpart —
+// TestIntegration_FX_FnFForeignAdvanceIsRecoveredWhenARateExists — records a
+// rate and asserts the advance does convert.
 func TestIntegration_FnFSources_ForeignCurrencyAdvanceIsReportedNotGuessed(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := context.Background()

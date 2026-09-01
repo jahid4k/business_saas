@@ -169,17 +169,31 @@ type EmployeeTenure struct {
 // SettlementLineRow mirrors hrm_exit_settlement_lines. Amount is ALWAYS
 // positive; direction is IsCredit.
 type SettlementLineRow struct {
-	ID            string          `db:"id"                json:"id"`
-	PublicID      string          `db:"public_id"          json:"public_id"`
-	ExitID        string          `db:"exit_id"            json:"exit_id"`
-	SourceType    string          `db:"source_type"        json:"source_type"`
-	SourceID      *string         `db:"source_id"          json:"source_id,omitempty"`
-	Description   string          `db:"description"        json:"description"`
-	Amount        decimal.Decimal `db:"amount"             json:"amount"`
-	IsCredit      bool            `db:"is_credit"          json:"is_credit"`
-	Currency      string          `db:"currency"           json:"currency"`
-	PayslipLineID *string         `db:"payslip_line_id"    json:"payslip_line_id,omitempty"`
-	CreatedAt     time.Time       `db:"created_at"         json:"created_at"`
+	ID          string          `db:"id"                json:"id"`
+	PublicID    string          `db:"public_id"          json:"public_id"`
+	ExitID      string          `db:"exit_id"            json:"exit_id"`
+	SourceType  string          `db:"source_type"        json:"source_type"`
+	SourceID    *string         `db:"source_id"          json:"source_id,omitempty"`
+	Description string          `db:"description"        json:"description"`
+	Amount      decimal.Decimal `db:"amount"             json:"amount"`
+	IsCredit    bool            `db:"is_credit"          json:"is_credit"`
+	Currency    string          `db:"currency"           json:"currency"`
+
+	// The conversion audit set (11B-1). All four are nil together or set
+	// together — chk_hrm_esl_conversion_complete enforces it in the database
+	// too, because a half-recorded conversion is the converted-only case
+	// wearing four columns.
+	//
+	// ⚠ Amount and Currency above stay the CONVERTED pair. Redefining them
+	// to mean the original would have silently changed what every
+	// already-settled row means.
+	OriginalAmount   *decimal.Decimal `db:"original_amount"     json:"original_amount,omitempty"`
+	OriginalCurrency *string          `db:"original_currency"   json:"original_currency,omitempty"`
+	ExchangeRate     *decimal.Decimal `db:"exchange_rate"       json:"exchange_rate,omitempty"`
+	ExchangeRateDate *time.Time       `db:"exchange_rate_date"  json:"exchange_rate_date,omitempty"`
+
+	PayslipLineID *string   `db:"payslip_line_id"    json:"payslip_line_id,omitempty"`
+	CreatedAt     time.Time `db:"created_at"         json:"created_at"`
 }
 
 // SubjectRef is the employee identity the checklist engine needs.
@@ -759,9 +773,11 @@ func (r *repoImpl) InsertSettlementLines(ctx context.Context, exitID string, lin
 	for _, l := range lines {
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO hrm_exit_settlement_lines
-			   (exit_id, source_type, source_id, description, amount, is_credit, currency)
-			 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7)`,
-			exitID, l.SourceType, l.SourceID, l.Description, l.Amount, l.IsCredit, l.Currency); err != nil {
+			   (exit_id, source_type, source_id, description, amount, is_credit, currency,
+			    original_amount, original_currency, exchange_rate, exchange_rate_date)
+			 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			exitID, l.SourceType, l.SourceID, l.Description, l.Amount, l.IsCredit, l.Currency,
+			l.OriginalAmount, l.OriginalCurrency, l.ExchangeRate, l.ExchangeRateDate); err != nil {
 			return fmt.Errorf("exits: InsertSettlementLines: %w", err)
 		}
 	}
@@ -771,7 +787,9 @@ func (r *repoImpl) InsertSettlementLines(ctx context.Context, exitID string, lin
 func (r *repoImpl) FindSettlementLines(ctx context.Context, orgID, exitID string) ([]*SettlementLineRow, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT sl.id, sl.public_id, sl.exit_id, sl.source_type, sl.source_id, sl.description,
-		        sl.amount, sl.is_credit, sl.currency, sl.payslip_line_id, sl.created_at
+		        sl.amount, sl.is_credit, sl.currency,
+		        sl.original_amount, sl.original_currency, sl.exchange_rate, sl.exchange_rate_date,
+		        sl.payslip_line_id, sl.created_at
 		   FROM hrm_exit_settlement_lines sl
 		   JOIN hrm_exits e ON e.id = sl.exit_id
 		  WHERE e.org_id=$1 AND sl.exit_id=$2::uuid
@@ -785,7 +803,9 @@ func (r *repoImpl) FindSettlementLines(ctx context.Context, orgID, exitID string
 	for rows.Next() {
 		l := &SettlementLineRow{}
 		if err := rows.Scan(&l.ID, &l.PublicID, &l.ExitID, &l.SourceType, &l.SourceID,
-			&l.Description, &l.Amount, &l.IsCredit, &l.Currency, &l.PayslipLineID, &l.CreatedAt); err != nil {
+			&l.Description, &l.Amount, &l.IsCredit, &l.Currency,
+			&l.OriginalAmount, &l.OriginalCurrency, &l.ExchangeRate, &l.ExchangeRateDate,
+			&l.PayslipLineID, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, l)

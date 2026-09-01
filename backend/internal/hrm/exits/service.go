@@ -33,6 +33,13 @@ type Caller struct {
 
 // Service is exit management's business layer.
 type Service interface {
+	// SetRateSource attaches the FX layer (11B-1). Optional: without it a
+	// foreign-currency advance is reported unconverted with its reason.
+	SetRateSource(rates RateSource)
+	// SetBaseCurrencySource attaches the legal-entity layer so a currency is
+	// resolved rather than assumed (11B-2). Optional.
+	SetBaseCurrencySource(src BaseCurrencySource)
+
 	Create(ctx context.Context, orgID string, caller Caller, req CreateExitRequest) (*Exit, error)
 	List(ctx context.Context, orgID string, caller Caller, f ListFilter) (*ExitListResponse, error)
 	Get(ctx context.Context, orgID string, caller Caller, ref string) (*Exit, error)
@@ -114,6 +121,12 @@ type serviceImpl struct {
 	forms     forms.Service
 	suspender MembershipSuspender
 	sessions  SessionRevoker
+	// rateSource is OPTIONAL (11B-1). Nil means a foreign-currency advance
+	// is reported at zero with its reason, exactly as before the FX table
+	// existed — never converted at parity.
+	rateSource RateSource
+	// baseCurrency is OPTIONAL (11B-2); nil keeps the historical default.
+	baseCurrency BaseCurrencySource
 }
 
 func NewService(
@@ -127,6 +140,34 @@ func NewService(
 		leaveSource: leaveSource, loanSource: loanSource, advanceSource: advanceSource,
 		forms: formsSvc, suspender: suspender, sessions: sessions,
 	}
+}
+
+// SetRateSource attaches the FX layer.
+//
+// Separate from NewService so the existing construction sites keep compiling
+// unchanged, the SetBonusSource shape used throughout payslips.
+func (s *serviceImpl) SetRateSource(rates RateSource) { s.rateSource = rates }
+
+// SetBaseCurrencySource attaches the legal-entity layer (11B-2).
+func (s *serviceImpl) SetBaseCurrencySource(src BaseCurrencySource) { s.baseCurrency = src }
+
+// resolveCurrency applies: what the caller asked for → the organization's or
+// entity's base currency → the historical default.
+//
+// ⚠ "BDT" survives only as the LAST resort, so an organization that has
+// configured no currency keeps exactly what it had before 11B-2.
+func (s *serviceImpl) resolveCurrency(ctx context.Context, orgID string, requested *string) string {
+	if requested != nil && strings.TrimSpace(*requested) != "" {
+		return strings.ToUpper(strings.TrimSpace(*requested))
+	}
+	if s.baseCurrency != nil {
+		if resolved, err := s.baseCurrency.DeclaredCurrency(ctx, orgID, nil); err == nil {
+			if c := strings.ToUpper(strings.TrimSpace(resolved)); c != "" {
+				return c
+			}
+		}
+	}
+	return "BDT"
 }
 
 // ── Access ───────────────────────────────────────────────────────────────────
@@ -466,10 +507,7 @@ func (s *serviceImpl) AddClearanceItem(ctx context.Context, orgID string, caller
 			return nil, ErrInvalidAmount
 		}
 	}
-	currency := "BDT"
-	if req.Currency != nil && strings.TrimSpace(*req.Currency) != "" {
-		currency = strings.ToUpper(strings.TrimSpace(*req.Currency))
-	}
+	currency := s.resolveCurrency(ctx, orgID, req.Currency)
 
 	item := &ClearanceItem{
 		ExitID: e.ID, ChecklistItemID: req.ChecklistItemID,

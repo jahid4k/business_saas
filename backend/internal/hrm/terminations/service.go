@@ -20,6 +20,10 @@ const dateLayout = "2006-01-02"
 // Service defines business logic for employee terminations.
 // Termination is always HR-initiated — employees use resignations.
 type Service interface {
+	// SetBaseCurrencySource attaches the legal-entity layer so a currency is
+	// resolved rather than assumed (11B-2). Optional.
+	SetBaseCurrencySource(src BaseCurrencySource)
+
 	List(ctx context.Context, orgID string, filter TerminationListFilter) (*TerminationListResponse, error)
 	Get(ctx context.Context, orgID, employeeID, ref string) (*Termination, error)
 	Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTerminationRequest) (*Termination, error)
@@ -45,6 +49,8 @@ type serviceImpl struct {
 	repo         Repository
 	db           *pgxpool.Pool // for cross-table Apply transaction
 	approvalsSvc approvals.Service
+	// baseCurrency is OPTIONAL (11B-2); nil keeps the historical default.
+	baseCurrency BaseCurrencySource
 }
 
 func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
@@ -104,10 +110,7 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy s
 		return nil, ErrAlreadyActiveTermination
 	}
 
-	currency := "BDT"
-	if req.SeveranceCurrency != nil && strings.TrimSpace(*req.SeveranceCurrency) != "" {
-		currency = *req.SeveranceCurrency
-	}
+	currency := s.resolveCurrency(ctx, orgID, req.SeveranceCurrency)
 	rehireEligible := true
 	if req.IsRehireEligible != nil {
 		rehireEligible = *req.IsRehireEligible
@@ -377,4 +380,28 @@ func (s *serviceImpl) CreateDraftFromPIP(ctx context.Context, orgID, employeeID,
 		return "", err
 	}
 	return t.ID, nil
+}
+
+// SetBaseCurrencySource attaches the legal-entity layer (11B-2).
+func (s *serviceImpl) SetBaseCurrencySource(src BaseCurrencySource) { s.baseCurrency = src }
+
+// resolveCurrency applies: what the caller asked for → the organization's or
+// entity's base currency → the historical default.
+//
+// ⚠ "BDT" survives only as the LAST resort. It was the unconditional default
+// until 11B-2, so an organization that has configured no currency at all
+// keeps getting exactly what it got before — changing that would be a second
+// behaviour change riding along with the fix.
+func (s *serviceImpl) resolveCurrency(ctx context.Context, orgID string, requested *string) string {
+	if requested != nil && strings.TrimSpace(*requested) != "" {
+		return strings.ToUpper(strings.TrimSpace(*requested))
+	}
+	if s.baseCurrency != nil {
+		if resolved, err := s.baseCurrency.DeclaredCurrency(ctx, orgID, nil); err == nil {
+			if c := strings.ToUpper(strings.TrimSpace(resolved)); c != "" {
+				return c
+			}
+		}
+	}
+	return "BDT"
 }

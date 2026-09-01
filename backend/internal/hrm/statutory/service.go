@@ -15,6 +15,10 @@ import (
 // Service covers statutory rules + slabs, and ComputeForEmployee, which
 // structurally satisfies payslips.StatutorySource.
 type Service interface {
+	// SetCountryResolver attaches the legal-entity layer (11B-2). Optional:
+	// without it every active rule applies to everybody, as before.
+	SetCountryResolver(r EmployeeCountryResolver)
+
 	ListRules(ctx context.Context, orgID string) ([]*Rule, error)
 	GetRule(ctx context.Context, orgID, ref string) (*Rule, error)
 	CreateRule(ctx context.Context, orgID, createdBy string, req CreateRuleRequest) (*Rule, error)
@@ -31,6 +35,9 @@ type Service interface {
 type serviceImpl struct {
 	repo     Repository
 	registry *Registry
+	// countries is OPTIONAL (11B-2). Nil means every active rule applies to
+	// everybody, which is exactly the behaviour this package shipped with.
+	countries EmployeeCountryResolver
 }
 
 // NewService takes an explicit *Registry rather than constructing one
@@ -145,8 +152,66 @@ func (s *serviceImpl) ListSlabs(ctx context.Context, orgID, ruleRef string) ([]*
 	return s.repo.ListSlabsByRule(ctx, rule.ID)
 }
 
+// SetCountryResolver attaches the legal-entity layer (11B-2).
+//
+// Separate from NewService so existing construction sites keep compiling, the
+// SetBonusSource shape used throughout payslips.
+func (s *serviceImpl) SetCountryResolver(r EmployeeCountryResolver) { s.countries = r }
+
+// activeRulesFor selects which statutory rules apply to one employee.
+//
+// ⚠ THIS IS THE MOST DANGEROUS DECISION IN PHASE 11, AND IT DELIBERATELY
+// FAILS OPEN.
+//
+// The defect being fixed is real: ListActiveRules returns EVERY active rule
+// for an org regardless of country, so a company operating in Germany and
+// Britain applied both countries' deductions to everyone. But the fix must
+// not create a worse defect in the other direction — narrowing to a country
+// that turns out to be wrong means withholding NOTHING, and under-withholding
+// statutory tax is a liability the employee discovers at the end of the year.
+//
+// So the rule set is narrowed ONLY when a LEGAL ENTITY has declared a
+// country. Specifically NOT when the country came from
+// organizations.country: that is a profile field somebody filled in during
+// signup, it is not a statement about where payroll is run, and gating
+// withholding on it would be over-trusting it.
+//
+// ⚠ The test suite CANNOT catch a mistake here. Test organizations set no
+// country at all, so a strict filter would leave every existing test green
+// while silently zeroing statutory deductions for real organizations that
+// happen to have a country on their profile. That is why the condition is
+// written to the narrowest safe case rather than the most obvious one.
+//
+// Every path that is not "a legal entity said so" returns the full rule set —
+// bit-for-bit the pre-11B-2 behaviour.
+func (s *serviceImpl) activeRulesFor(ctx context.Context, orgID, employeeID string) ([]*Rule, error) {
+	if s.countries == nil {
+		return s.repo.ListActiveRules(ctx, orgID)
+	}
+	country, fromLegalEntity, err := s.countries.CountryForEmployee(ctx, orgID, employeeID)
+	if err != nil {
+		return nil, fmt.Errorf("statutory: activeRulesFor: %w", err)
+	}
+	if !fromLegalEntity || strings.TrimSpace(country) == "" {
+		return s.repo.ListActiveRules(ctx, orgID)
+	}
+
+	scoped, err := s.repo.ListActiveRulesForCountry(ctx, orgID, country)
+	if err != nil {
+		return nil, err
+	}
+	// ⚠ An entity declaring a country the org has no rules for falls back to
+	// the full set rather than withholding nothing. A company that opens a
+	// German subsidiary before writing its German rules should keep paying
+	// what it was paying, visibly, rather than silently stop deducting.
+	if len(scoped) == 0 {
+		return s.repo.ListActiveRules(ctx, orgID)
+	}
+	return scoped, nil
+}
+
 func (s *serviceImpl) ComputeForEmployee(ctx context.Context, orgID, employeeID string, year, month int, gross, basic, taxableGross decimal.Decimal) ([]payslips.StatutoryLine, error) {
-	rules, err := s.repo.ListActiveRules(ctx, orgID)
+	rules, err := s.activeRulesFor(ctx, orgID, employeeID)
 	if err != nil {
 		return nil, fmt.Errorf("statutory: ComputeForEmployee: %w", err)
 	}

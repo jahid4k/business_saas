@@ -48,12 +48,7 @@ func seedExitTestEmployee(t *testing.T, env *testEnv) (orgID, ownerID, employeeI
 		{"Resigned", "terminated"},
 		{"Terminated", "terminated"},
 	} {
-		if _, err := env.db.Exec(ctx,
-			`INSERT INTO hrm_employee_statuses (org_id, name, category, color) VALUES ($1, $2, $3, '')`,
-			orgID, s.name, s.category,
-		); err != nil {
-			t.Fatalf("seed status %s: %v", s.name, err)
-		}
+		_ = statusIDFor(t, env, orgID, s.name, s.category)
 	}
 
 	emp, err := env.hrmEmpSvc.Create(ctx, orgID, ownerID, hrmemployees.CreateEmployeeRequest{
@@ -151,10 +146,16 @@ func TestIntegration_Terminations_Apply_FailsClosedWhenNoTerminatedStatus(t *tes
 	env := newTestEnv(t)
 	ctx := context.Background()
 
-	// An org with an Active status but NO terminated-category status at all —
-	// the real state of any organization created through the API, since only
-	// migration 00053's backfill and POST /hrm/employee-statuses create them.
+	// An org with an Active status but NO terminated-category status at all.
+	//
+	// This used to be the DEFAULT state of any API-created org, because
+	// organizations.Create never seeded statuses. The hardening pass fixed
+	// that, so the condition has to be constructed deliberately now — but the
+	// behaviour is still worth guarding: an org can delete its own statuses
+	// through POST /hrm/employee-statuses, and Apply must fail closed rather
+	// than terminate somebody into a NULL status.
 	orgID, _, ownerID := seedScopeTestOrg(t, env)
+	removeTerminatedStatuses(t, env, orgID)
 	emp, err := env.hrmEmpSvc.Create(ctx, orgID, ownerID, hrmemployees.CreateEmployeeRequest{
 		FirstName: "NoStatus", HireDate: "2020-01-01",
 	})
@@ -248,6 +249,9 @@ func TestIntegration_Resignations_Accept_FailsClosedWhenNoStatusAvailable(t *tes
 	ctx := context.Background()
 
 	orgID, _, ownerID := seedScopeTestOrg(t, env)
+	// See the note on the termination test above: orgs now ship with the
+	// default statuses, so the no-status condition is constructed here.
+	removeTerminatedStatuses(t, env, orgID)
 	emp, err := env.hrmEmpSvc.Create(ctx, orgID, ownerID, hrmemployees.CreateEmployeeRequest{
 		FirstName: "NoStatus", HireDate: "2020-01-01",
 	})
@@ -275,5 +279,19 @@ func TestIntegration_Resignations_Accept_FailsClosedWhenNoStatusAvailable(t *tes
 	}
 	if status == string(hrmresignations.StatusAccepted) {
 		t.Error("expected the whole Accept transaction to roll back, leaving the resignation un-accepted")
+	}
+}
+
+// removeTerminatedStatuses strips every terminated-category status from an
+// org, reproducing the state an org reaches by deleting its own statuses.
+//
+// Needed since organizations.Create began seeding the five defaults: the
+// fail-closed paths can no longer be reached by simply creating an org.
+func removeTerminatedStatuses(t *testing.T, env *testEnv, orgID string) {
+	t.Helper()
+	if _, err := env.db.Exec(context.Background(),
+		`DELETE FROM hrm_employee_statuses WHERE org_id=$1 AND category='terminated'`,
+		orgID); err != nil {
+		t.Fatalf("strip terminated statuses: %v", err)
 	}
 }

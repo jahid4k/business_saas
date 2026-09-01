@@ -47,8 +47,12 @@ func scanPromo(row pgx.Row) (*Promotion, error) {
 		&p.ApprovalInstanceID, &p.DocumentID, &p.Status,
 		&p.AppliedAt, &p.AppliedBy, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
@@ -77,12 +81,16 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter PromotionLi
 	q := fmt.Sprintf(`SELECT %s FROM hrm_promotions WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("promotions: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Promotion, 0)
 	for rows.Next() {
 		p, err := scanPromo(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, p)
 	}
 	return list, rows.Err()
@@ -100,7 +108,10 @@ func (r *repoImpl) Count(ctx context.Context, orgID string, filter PromotionList
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {
 	q := `SELECT ` + sel + ` FROM hrm_promotions WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanPromo(r.db.QueryRow(ctx, q, args...))
 }
 

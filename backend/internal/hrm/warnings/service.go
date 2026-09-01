@@ -52,26 +52,46 @@ func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Servic
 func (s *serviceImpl) List(ctx context.Context, orgID string, filter WarningListFilter) (*WarningListResponse, error) {
 	filter.Normalise()
 	list, err := s.repo.FindAll(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("warnings: List: %w", err) }
-	if list == nil { list = []*EmployeeWarning{} }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: List: %w", err)
+	}
+	if list == nil {
+		list = []*EmployeeWarning{}
+	}
 	total, err := s.repo.Count(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("warnings: List: count: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: List: count: %w", err)
+	}
 	return &WarningListResponse{Warnings: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Get: %w", err) }
-	if w == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Get: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
 	return w, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateWarningRequest) (*EmployeeWarning, error) {
-	if strings.TrimSpace(req.WarningTypeID) == "" { return nil, ErrWarningTypeIDRequired }
-	if strings.TrimSpace(req.Title) == "" { return nil, ErrTitleRequired }
-	if strings.TrimSpace(req.Description) == "" { return nil, ErrDescriptionRequired }
-	if strings.TrimSpace(req.IncidentDate) == "" { return nil, ErrIncidentDateRequired }
-	if _, err := time.Parse(dateLayout, req.IncidentDate); err != nil { return nil, ErrInvalidDate }
+	if strings.TrimSpace(req.WarningTypeID) == "" {
+		return nil, ErrWarningTypeIDRequired
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return nil, ErrTitleRequired
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		return nil, ErrDescriptionRequired
+	}
+	if strings.TrimSpace(req.IncidentDate) == "" {
+		return nil, ErrIncidentDateRequired
+	}
+	if _, err := time.Parse(dateLayout, req.IncidentDate); err != nil {
+		return nil, ErrInvalidDate
+	}
 
 	// Look up warning type config to snapshot
 	var typeName string
@@ -83,40 +103,64 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy s
 		FROM hrm_warning_types WHERE id=$1::uuid AND org_id=$2::uuid AND is_active=TRUE`,
 		req.WarningTypeID, orgID,
 	).Scan(&typeName, &severityLevel, &canRespond, &responseWindowDays)
-	if err != nil { return nil, ErrWarningTypeNotFound }
+	if err != nil {
+		return nil, ErrWarningTypeNotFound
+	}
 
 	witnessIDs := req.WitnessIDs
-	if witnessIDs == nil { witnessIDs = []string{} }
+	if witnessIDs == nil {
+		witnessIDs = []string{}
+	}
 
 	w := &EmployeeWarning{
 		OrgID: orgID, EmployeeID: employeeID,
 		WarningTypeID: req.WarningTypeID, WarningTypeName: typeName,
 		SeverityLevel: severityLevel,
-		Title: req.Title, Description: req.Description,
+		Title:         req.Title, Description: req.Description,
 		IncidentDate: req.IncidentDate,
-		IssuedBy: createdBy, WitnessIDs: witnessIDs,
+		IssuedBy:     createdBy, WitnessIDs: witnessIDs,
 		CanEmployeeRespond: canRespond, ResponseWindowDays: responseWindowDays,
 		IsActive: false, // not active until formally issued
-		Status: StatusDraft, CreatedBy: createdBy,
+		Status:   StatusDraft, CreatedBy: createdBy,
 	}
-	if err := s.repo.Create(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Create: %w", err) }
+	if err := s.repo.Create(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Create: %w", err)
+	}
 	return w, nil
 }
 
 func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string, req UpdateWarningRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Update: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if w.Status != StatusDraft { return nil, ErrWrongStatus }
-	if req.Title != nil { w.Title = *req.Title }
-	if req.Description != nil { w.Description = *req.Description }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Update: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if w.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
+	if req.Title != nil {
+		w.Title = *req.Title
+	}
+	if req.Description != nil {
+		w.Description = *req.Description
+	}
 	if req.IncidentDate != nil {
-		if _, err := time.Parse(dateLayout, *req.IncidentDate); err != nil { return nil, ErrInvalidDate }
+		if _, err := time.Parse(dateLayout, *req.IncidentDate); err != nil {
+			return nil, ErrInvalidDate
+		}
 		w.IncidentDate = *req.IncidentDate
 	}
-	if req.WitnessIDs != nil { w.WitnessIDs = req.WitnessIDs }
-	if req.DocumentID != nil { w.DocumentID = req.DocumentID }
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Update: %w", err) }
+	if req.WitnessIDs != nil {
+		w.WitnessIDs = req.WitnessIDs
+	}
+	if req.DocumentID != nil {
+		w.DocumentID = req.DocumentID
+	}
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Update: %w", err)
+	}
 	return w, nil
 }
 
@@ -131,10 +175,18 @@ func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string,
 // skip the gate and issue directly.
 func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedBy string, req IssueRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Issue: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if w.Status == StatusIssued || w.Status == StatusAcknowledged { return nil, ErrAlreadyIssued }
-	if w.Status != StatusDraft && w.Status != StatusPendingApproval { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Issue: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if w.Status == StatusIssued || w.Status == StatusAcknowledged {
+		return nil, ErrAlreadyIssued
+	}
+	if w.Status != StatusDraft && w.Status != StatusPendingApproval {
+		return nil, ErrWrongStatus
+	}
 
 	if w.Status == StatusDraft {
 		requiresApproval, approvalTemplateID := s.warningTypeApprovalConfig(ctx, orgID, w.WarningTypeID)
@@ -144,7 +196,9 @@ func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedB
 				inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
 					TemplateID: tmpl.ID, EntityType: "warning", EntityID: w.ID, RequestedBy: issuedBy,
 				})
-				if iErr != nil { return nil, fmt.Errorf("warnings: Issue: creating approval instance: %w", iErr) }
+				if iErr != nil {
+					return nil, fmt.Errorf("warnings: Issue: creating approval instance: %w", iErr)
+				}
 				if err := s.repo.SetApprovalInstance(ctx, w.ID, inst.ID, StatusPendingApproval); err != nil {
 					return nil, fmt.Errorf("warnings: Issue: %w", err)
 				}
@@ -163,7 +217,9 @@ func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedB
 	w.IssuedAt = &now
 	w.IsActive = true
 	w.Status = StatusIssued
-	if req.DocumentID != nil { w.DocumentID = req.DocumentID }
+	if req.DocumentID != nil {
+		w.DocumentID = req.DocumentID
+	}
 
 	// Compute response deadline
 	if w.CanEmployeeRespond && w.ResponseWindowDays > 0 {
@@ -179,8 +235,12 @@ func (s *serviceImpl) Issue(ctx context.Context, orgID, employeeID, ref, issuedB
 		w.ExpiresAt = &exp
 	}
 
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Issue: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, w.ID, StatusIssued); err != nil { return nil, fmt.Errorf("warnings: Issue: status: %w", err) }
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Issue: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, w.ID, StatusIssued); err != nil {
+		return nil, fmt.Errorf("warnings: Issue: status: %w", err)
+	}
 
 	// Check escalation rules (log-only — never auto-create)
 	s.checkEscalation(ctx, orgID, employeeID, w.WarningTypeID)
@@ -218,9 +278,15 @@ func (s *serviceImpl) resolveWarningApprovalTemplate(ctx context.Context, orgID 
 // HandleApprovalDecision reacts to the warning's approval instance completing.
 func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
 	w, err := s.repo.FindByRef(ctx, orgID, "", entityID)
-	if err != nil { return fmt.Errorf("warnings: HandleApprovalDecision: %w", err) }
-	if w == nil { return ErrNotFound }
-	if w.Status != StatusPendingApproval { return nil }
+	if err != nil {
+		return fmt.Errorf("warnings: HandleApprovalDecision: %w", err)
+	}
+	if w == nil {
+		return ErrNotFound
+	}
+	if w.Status != StatusPendingApproval {
+		return nil
+	}
 	if !approved {
 		if err := s.repo.UpdateStatus(ctx, w.ID, StatusCancelled); err != nil {
 			return fmt.Errorf("warnings: HandleApprovalDecision: %w", err)
@@ -241,14 +307,20 @@ func (s *serviceImpl) checkEscalation(ctx context.Context, orgID, employeeID, wa
 		`SELECT trigger_count, within_days, action FROM hrm_warning_escalation_rules
 		WHERE org_id=$1::uuid AND trigger_warning_type_id=$2::uuid AND is_active=TRUE`,
 		orgID, warningTypeID)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer rows.Close()
 	for rows.Next() {
 		var triggerCount, withinDays int
 		var action string
-		if err := rows.Scan(&triggerCount, &withinDays, &action); err != nil { continue }
+		if err := rows.Scan(&triggerCount, &withinDays, &action); err != nil {
+			continue
+		}
 		count, err := s.repo.CountActiveByTypeAndEmployee(ctx, orgID, employeeID, warningTypeID, withinDays)
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		if count >= triggerCount {
 			// In production: send a notification (email/webhook) per action type.
 			// For now: structured log. Notification system is Group E scope.
@@ -259,41 +331,71 @@ func (s *serviceImpl) checkEscalation(ctx context.Context, orgID, employeeID, wa
 
 func (s *serviceImpl) Acknowledge(ctx context.Context, orgID, employeeID, ref string, req AcknowledgeRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Acknowledge: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if w.Status != StatusIssued { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Acknowledge: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if w.Status != StatusIssued {
+		return nil, ErrWrongStatus
+	}
 
 	now := time.Now()
 	w.EmployeeRespondedAt = &now
 	w.EmployeeResponse = req.Response
 	w.Status = StatusAcknowledged
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Acknowledge: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, w.ID, StatusAcknowledged); err != nil { return nil, fmt.Errorf("warnings: Acknowledge: status: %w", err) }
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Acknowledge: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, w.ID, StatusAcknowledged); err != nil {
+		return nil, fmt.Errorf("warnings: Acknowledge: status: %w", err)
+	}
 	return w, nil
 }
 
 func (s *serviceImpl) Appeal(ctx context.Context, orgID, employeeID, ref string, req AppealRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Appeal: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if !w.CanEmployeeRespond { return nil, ErrCannotAppeal }
-	if w.Status != StatusIssued && w.Status != StatusAcknowledged { return nil, ErrWrongStatus }
-	if strings.TrimSpace(req.Reason) == "" { return nil, ErrDescriptionRequired }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Appeal: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if !w.CanEmployeeRespond {
+		return nil, ErrCannotAppeal
+	}
+	if w.Status != StatusIssued && w.Status != StatusAcknowledged {
+		return nil, ErrWrongStatus
+	}
+	if strings.TrimSpace(req.Reason) == "" {
+		return nil, ErrDescriptionRequired
+	}
 
 	now := time.Now()
 	w.AppealReason = &req.Reason
 	w.AppealSubmittedAt = &now
 	w.Status = StatusAppealed
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Appeal: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, w.ID, StatusAppealed); err != nil { return nil, fmt.Errorf("warnings: Appeal: status: %w", err) }
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Appeal: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, w.ID, StatusAppealed); err != nil {
+		return nil, fmt.Errorf("warnings: Appeal: status: %w", err)
+	}
 	return w, nil
 }
 
 func (s *serviceImpl) Close(ctx context.Context, orgID, employeeID, ref string, req CloseRequest) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Close: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if w.Status == StatusClosed || w.Status == StatusCancelled || w.Status == StatusDraft { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Close: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if w.Status == StatusClosed || w.Status == StatusCancelled || w.Status == StatusDraft {
+		return nil, ErrWrongStatus
+	}
 
 	if w.Status == StatusAppealed {
 		now := time.Now()
@@ -301,19 +403,33 @@ func (s *serviceImpl) Close(ctx context.Context, orgID, employeeID, ref string, 
 		w.AppealResolvedAt = &now
 	}
 	w.Status = StatusClosed
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Close: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, w.ID, StatusClosed); err != nil { return nil, fmt.Errorf("warnings: Close: status: %w", err) }
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Close: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, w.ID, StatusClosed); err != nil {
+		return nil, fmt.Errorf("warnings: Close: status: %w", err)
+	}
 	return w, nil
 }
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error) {
 	w, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("warnings: Cancel: %w", err) }
-	if w == nil { return nil, ErrNotFound }
-	if w.Status == StatusClosed || w.Status == StatusCancelled { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: Cancel: %w", err)
+	}
+	if w == nil {
+		return nil, ErrNotFound
+	}
+	if w.Status == StatusClosed || w.Status == StatusCancelled {
+		return nil, ErrWrongStatus
+	}
 	w.IsActive = false
 	w.Status = StatusCancelled
-	if err := s.repo.Update(ctx, w); err != nil { return nil, fmt.Errorf("warnings: Cancel: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, w.ID, StatusCancelled); err != nil { return nil, fmt.Errorf("warnings: Cancel: status: %w", err) }
+	if err := s.repo.Update(ctx, w); err != nil {
+		return nil, fmt.Errorf("warnings: Cancel: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, w.ID, StatusCancelled); err != nil {
+		return nil, fmt.Errorf("warnings: Cancel: status: %w", err)
+	}
 	return w, nil
 }

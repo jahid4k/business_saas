@@ -24,19 +24,23 @@ import (
 	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
 	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
 	hrmacks "github.com/mridha/businesssaas/internal/hrm/acknowledgements"
+	hrmanalytics "github.com/mridha/businesssaas/internal/hrm/analytics"
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
 	hrmassets "github.com/mridha/businesssaas/internal/hrm/assets"
 	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
 	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
 	hrmcompensation "github.com/mridha/businesssaas/internal/hrm/compensation"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmentities "github.com/mridha/businesssaas/internal/hrm/entities"
 	hrmexits "github.com/mridha/businesssaas/internal/hrm/exits"
 	hrmexpenses "github.com/mridha/businesssaas/internal/hrm/expenses"
 	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmfx "github.com/mridha/businesssaas/internal/hrm/fx"
 	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
 	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
 	hrmloans "github.com/mridha/businesssaas/internal/hrm/loans"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmorgchart "github.com/mridha/businesssaas/internal/hrm/orgchart"
 	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
 	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
 	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
@@ -46,6 +50,7 @@ import (
 	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
 	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
 	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
+	hrmsuccession "github.com/mridha/businesssaas/internal/hrm/succession"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/mridha/businesssaas/internal/organizations"
 	"github.com/mridha/businesssaas/internal/platform/checklists"
@@ -99,6 +104,13 @@ type testEnv struct {
 	leadsSvc             crmleads.Service
 	hrmResignationSvc    hrmresignations.Service
 	hrmExitsSvc          hrmexits.Service
+	hrmOrgChartSvc       hrmorgchart.Service
+	hrmSuccessionSvc     hrmsuccession.Service
+	hrmSuccessionRepo    hrmsuccession.Repository
+	hrmAnalyticsSvc      hrmanalytics.Service
+	hrmAnalyticsRepo     hrmanalytics.Repository
+	hrmEntitiesSvc       hrmentities.Service
+	hrmFxSvc             hrmfx.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -215,11 +227,20 @@ func newTestEnv(t *testing.T) *testEnv {
 		formsSvc, authzSvc, authSvc)
 
 	hrmRecruitmentRepo := hrmrecruitment.NewRepository(db)
+	// 11B-1: the FX layer, attached to the two consumers that carried a
+	// currency gap. Both attachments are optional and both degrade to the
+	// pre-11B behaviour without one; the tests exercise both states.
+	hrmFxSvc := hrmfx.NewService(hrmfx.NewRepository(db))
+	hrmEntitiesSvcLocal := hrmentities.NewService(hrmentities.NewRepository(db))
+	hrmExpensesSvc.SetRateSource(hrmFxSvc, hrmEntitiesSvcLocal)
+	hrmExitsSvc.SetRateSource(hrmFxSvc)
+
 	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc, hrmExitsSvc)
 	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
 
 	hrmTerminationSvc := hrmterminations.NewService(hrmterminations.NewRepository(db), db, hrmApprovalsSvc)
+	hrmTerminationSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
 	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationSvc.HandleApprovalDecision)
 	hrmResignationSvc := hrmresignations.NewService(hrmresignations.NewRepository(db), db)
 
@@ -277,6 +298,17 @@ func newTestEnv(t *testing.T) *testEnv {
 		hrmpayslips.NewRepository(db), db, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
 		hrmStatutorySvc, hrmBenefitsSvc, hrmExitsSvc,
 	)
+	// 11B-2: entity re-scoping. hrmEntitiesSvcLocal satisfies each
+	// consumer-declared interface structurally, exactly as in main.go.
+	//
+	// ⚠ All optional and all FAIL OPEN — without them payroll uses the
+	// historical default currency and statutory applies every active rule to
+	// everybody. Wiring the REAL entities service is the point: the claim
+	// under test is that an org with no entities is completely unaffected.
+	hrmPayslipsSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
+	hrmStatutorySvc.SetCountryResolver(hrmEntitiesSvcLocal)
+	hrmExitsSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
+
 	hrmApprovalsSvc.RegisterCallback("salary_revision", hrmCompensationSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
@@ -328,6 +360,13 @@ func newTestEnv(t *testing.T) *testEnv {
 		hrmPipSvc:            hrmPipSvc,
 		hrmScopeResolver:     hrmScopeResolver,
 		hrmExitsSvc:          hrmExitsSvc,
+		hrmOrgChartSvc:       hrmorgchart.NewService(hrmorgchart.NewRepository(db)),
+		hrmSuccessionSvc:     hrmsuccession.NewService(hrmsuccession.NewRepository(db)),
+		hrmSuccessionRepo:    hrmsuccession.NewRepository(db),
+		hrmAnalyticsSvc:      hrmanalytics.NewService(hrmanalytics.NewRepository(db)),
+		hrmAnalyticsRepo:     hrmanalytics.NewRepository(db),
+		hrmEntitiesSvc:       hrmEntitiesSvcLocal,
+		hrmFxSvc:             hrmFxSvc,
 		formsSvc:             formsSvc,
 		ticketsSvc:           ticketsSvc,
 		emailSvc:             emailSvc,
@@ -352,4 +391,31 @@ func cleanupUser(t *testing.T, env *testEnv, userID string) {
 	ctx := context.Background()
 	_ = env.authSvc.LogoutAll(ctx, userID)
 	_, _ = env.db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+}
+
+// statusIDFor returns an org's employee-status id by name, creating it only if
+// it is genuinely absent.
+//
+// Since the hardening pass, organizations.Create seeds the five default
+// statuses (Active / Inactive / On Leave / Resigned / Terminated), so a test
+// that blindly INSERTs one now collides with
+// hrm_employee_statuses_org_id_name_key. Fixtures should ASK for the status
+// they need rather than create it — which is also what a real caller does.
+func statusIDFor(t *testing.T, env *testEnv, orgID, name, category string) string {
+	t.Helper()
+	ctx := context.Background()
+	var id string
+	err := env.db.QueryRow(ctx,
+		`SELECT id::text FROM hrm_employee_statuses WHERE org_id=$1 AND name=$2`,
+		orgID, name).Scan(&id)
+	if err == nil {
+		return id
+	}
+	if err := env.db.QueryRow(ctx,
+		`INSERT INTO hrm_employee_statuses (org_id, name, category, color)
+		 VALUES ($1,$2,$3,'') RETURNING id::text`,
+		orgID, name, category).Scan(&id); err != nil {
+		t.Fatalf("status %q for org %s: %v", name, orgID, err)
+	}
+	return id
 }

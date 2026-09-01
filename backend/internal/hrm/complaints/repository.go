@@ -24,6 +24,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, is_anonymous, complaint_type,
@@ -43,8 +44,12 @@ func scan(row pgx.Row) (*Complaint, error) {
 		&c.Resolution, &c.ResolutionAction, &c.ResolvedAt, &c.ResolvedBy,
 		&c.DocumentID, &c.Status, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
@@ -73,10 +78,18 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter ComplaintLi
 	q := fmt.Sprintf(`SELECT %s FROM hrm_complaints WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("complaints: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("complaints: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Complaint, 0)
-	for rows.Next() { c, err := scan(rows); if err != nil { return nil, err }; list = append(list, c) }
+	for rows.Next() {
+		c, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
 	return list, rows.Err()
 }
 
@@ -92,7 +105,10 @@ func (r *repoImpl) Count(ctx context.Context, orgID string, filter ComplaintList
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Complaint, error) {
 	q := `SELECT ` + sel + ` FROM hrm_complaints WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scan(r.db.QueryRow(ctx, q, args...))
 }
 

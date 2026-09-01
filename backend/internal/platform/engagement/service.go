@@ -183,7 +183,7 @@ func (s *serviceImpl) CreateNote(ctx context.Context, orgID, userID, module stri
 		Content:     strings.TrimSpace(req.Content),
 		RelatedType: rt,
 		RelatedID:   req.RelatedID,
-		CreatedBy:   userID,
+		CreatedBy:   nullableActor(userID),
 	}
 	if err := s.repo.CreateNote(ctx, n); err != nil {
 		return nil, fmt.Errorf("engagement: CreateNote: %w", err)
@@ -630,4 +630,15 @@ func (s *serviceImpl) CreateEmailLog(ctx context.Context, orgID, userID, module 
 
 func (s *serviceImpl) DeleteEmailLog(ctx context.Context, orgID, emailID string) error {
 	return s.repo.DeleteEmailLog(ctx, orgID, emailID)
+}
+
+// nullableActor maps the system caller — an empty userID, which every
+// internal/capture/* path produces — to NULL rather than to the empty string,
+// which is not a uuid and cannot be stored in created_by. Mirrors
+// leads.nullableActor (added in 00112 for exactly the same reason).
+func nullableActor(userID string) *string {
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	return &userID
 }

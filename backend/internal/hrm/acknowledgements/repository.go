@@ -21,6 +21,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id,
@@ -42,23 +43,44 @@ func scanAck(row pgx.Row) (*Acknowledgement, error) {
 		&a.RequestedBy, &a.RequestedAt, &a.ReminderSentAt,
 		&a.CreatedAt, &a.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return a, nil
 }
 
 func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, ackType, status string) ([]*Acknowledgement, error) {
 	q := `SELECT ` + sel + ` FROM hrm_acknowledgements WHERE org_id=$1`
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if ackType != "" { args = append(args, ackType); q += fmt.Sprintf(` AND acknowledgeable_type=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
+	if ackType != "" {
+		args = append(args, ackType)
+		q += fmt.Sprintf(` AND acknowledgeable_type=$%d`, len(args))
+	}
+	if status != "" {
+		args = append(args, status)
+		q += fmt.Sprintf(` AND status=$%d`, len(args))
+	}
 	q += ` ORDER BY requested_at DESC`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Acknowledgement, 0)
-	for rows.Next() { a, err := scanAck(rows); if err != nil { return nil, err }; list = append(list, a) }
+	for rows.Next() {
+		a, err := scanAck(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
 	return list, rows.Err()
 }
 
@@ -66,10 +88,18 @@ func (r *repoImpl) FindByEntity(ctx context.Context, orgID, ackType, ackID strin
 	rows, err := r.db.Query(ctx,
 		`SELECT `+sel+` FROM hrm_acknowledgements WHERE org_id=$1 AND acknowledgeable_type=$2 AND acknowledgeable_id=$3::uuid ORDER BY requested_at DESC`,
 		orgID, ackType, ackID)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: FindByEntity: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: FindByEntity: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Acknowledgement, 0)
-	for rows.Next() { a, err := scanAck(rows); if err != nil { return nil, err }; list = append(list, a) }
+	for rows.Next() {
+		a, err := scanAck(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
 	return list, rows.Err()
 }
 

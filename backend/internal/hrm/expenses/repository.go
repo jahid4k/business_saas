@@ -374,13 +374,13 @@ func (r *repoImpl) UpdateClaim(ctx context.Context, c *Claim) error {
 }
 
 const lineSel = `id, public_id, claim_id, category, description, expense_date, amount, currency,
-	exchange_rate, base_amount, approved_amount, receipt_url, ocr_raw,
+	exchange_rate, exchange_rate_date, base_amount, approved_amount, receipt_url, ocr_raw,
 	mileage_distance, mileage_rate_id, display_order, created_at, updated_at`
 
 func scanLine(row pgx.Row) (*Line, error) {
 	l := &Line{}
 	err := row.Scan(&l.ID, &l.PublicID, &l.ClaimID, &l.Category, &l.Description, &l.ExpenseDate,
-		&l.Amount, &l.Currency, &l.ExchangeRate, &l.BaseAmount, &l.ApprovedAmount,
+		&l.Amount, &l.Currency, &l.ExchangeRate, &l.ExchangeRateDate, &l.BaseAmount, &l.ApprovedAmount,
 		&l.ReceiptURL, &l.OCRRaw, &l.MileageDistance, &l.MileageRateID,
 		&l.DisplayOrder, &l.CreatedAt, &l.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -395,11 +395,11 @@ func scanLine(row pgx.Row) (*Line, error) {
 func (r *repoImpl) CreateLine(ctx context.Context, l *Line) error {
 	return r.db.QueryRow(ctx,
 		`INSERT INTO hrm_expense_lines (claim_id, category, description, expense_date,
-		     amount, currency, exchange_rate, base_amount, receipt_url,
+		     amount, currency, exchange_rate, exchange_rate_date, base_amount, receipt_url,
 		     mileage_distance, mileage_rate_id, display_order)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, public_id, created_at, updated_at`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id, public_id, created_at, updated_at`,
 		l.ClaimID, l.Category, l.Description, l.ExpenseDate,
-		l.Amount, l.Currency, l.ExchangeRate, l.BaseAmount, l.ReceiptURL,
+		l.Amount, l.Currency, l.ExchangeRate, l.ExchangeRateDate, l.BaseAmount, l.ReceiptURL,
 		l.MileageDistance, l.MileageRateID, l.DisplayOrder,
 	).Scan(&l.ID, &l.PublicID, &l.CreatedAt, &l.UpdatedAt)
 }

@@ -13,6 +13,7 @@ import (
 )
 
 type Handler struct{ service Service }
+
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 // List godoc
@@ -34,9 +35,14 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) List(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.List(c.Context(), orgID, c.Params("employeeId"))
-	if err != nil { log.Error("contracts: List", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("contracts: List", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -73,13 +79,21 @@ func (h *Handler) List(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/contracts [post]
 func (h *Handler) Create(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateContractRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	contract, err := h.service.Create(c.Context(), orgID, c.Params("employeeId"), userID, req)
-	if err != nil { return h.contractError(c, err) }
+	if err != nil {
+		return h.contractError(c, err)
+	}
 	return response.Created(c, fiber.Map{"contract": contract}, "Contract created")
 }
 
@@ -103,9 +117,13 @@ func (h *Handler) Create(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/contracts/{contractId} [get]
 func (h *Handler) Get(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	contract, err := h.service.Get(c.Context(), orgID, c.Params("employeeId"), c.Params("contractId"))
-	if err != nil { return h.contractError(c, err) }
+	if err != nil {
+		return h.contractError(c, err)
+	}
 	return response.OK(c, fiber.Map{"contract": contract}, "OK")
 }
 
@@ -133,11 +151,17 @@ func (h *Handler) Get(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/contracts/{contractId} [patch]
 func (h *Handler) Update(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateContractRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	contract, err := h.service.Update(c.Context(), orgID, c.Params("employeeId"), c.Params("contractId"), req)
-	if err != nil { return h.contractError(c, err) }
+	if err != nil {
+		return h.contractError(c, err)
+	}
 	return response.OK(c, fiber.Map{"contract": contract}, "Contract updated")
 }
 
@@ -162,19 +186,30 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/contracts/{contractId}/deactivate [post]
 func (h *Handler) Deactivate(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.Deactivate(c.Context(), orgID, c.Params("employeeId"), c.Params("contractId")); err != nil { return h.contractError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.Deactivate(c.Context(), orgID, c.Params("employeeId"), c.Params("contractId")); err != nil {
+		return h.contractError(c, err)
+	}
 	return response.OK(c, nil, "Contract deactivated")
 }
 
 func (h *Handler) contractError(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrContractNotFound): return response.NotFound(c, "CONTRACT_NOT_FOUND", "Contract not found")
-	case errors.Is(err, ErrInvalidContractType): return response.BadRequest(c, "INVALID_CONTRACT_TYPE", "contract_type must be: permanent, fixed_term, probation, internship, or consultant")
-	case errors.Is(err, ErrStartDateRequired): return response.BadRequest(c, "START_DATE_REQUIRED", "start_date is required (YYYY-MM-DD)")
-	case errors.Is(err, ErrInvalidStartDate): return response.BadRequest(c, "INVALID_START_DATE", "start_date must be a valid YYYY-MM-DD date")
-	case errors.Is(err, ErrActiveContractExists): return response.Conflict(c, "ACTIVE_CONTRACT_EXISTS", "Employee already has an active contract — deactivate it first")
-	default: log.Error("contracts: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrContractNotFound):
+		return response.NotFound(c, "CONTRACT_NOT_FOUND", "Contract not found")
+	case errors.Is(err, ErrInvalidContractType):
+		return response.BadRequest(c, "INVALID_CONTRACT_TYPE", "contract_type must be: permanent, fixed_term, probation, internship, or consultant")
+	case errors.Is(err, ErrStartDateRequired):
+		return response.BadRequest(c, "START_DATE_REQUIRED", "start_date is required (YYYY-MM-DD)")
+	case errors.Is(err, ErrInvalidStartDate):
+		return response.BadRequest(c, "INVALID_START_DATE", "start_date must be a valid YYYY-MM-DD date")
+	case errors.Is(err, ErrActiveContractExists):
+		return response.Conflict(c, "ACTIVE_CONTRACT_EXISTS", "Employee already has an active contract — deactivate it first")
+	default:
+		log.Error("contracts: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }

@@ -60,31 +60,55 @@ func (s *serviceImpl) RegisterCallback(entityType string, fn EntityCallback) {
 
 func (s *serviceImpl) ListTemplates(ctx context.Context, orgID, actionType string) (*TemplateListResponse, error) {
 	list, err := s.repo.FindAllTemplates(ctx, orgID, actionType)
-	if err != nil { return nil, fmt.Errorf("approvals: ListTemplates: %w", err) }
-	if list == nil { list = []*ApprovalTemplate{} }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: ListTemplates: %w", err)
+	}
+	if list == nil {
+		list = []*ApprovalTemplate{}
+	}
 	return &TemplateListResponse{Templates: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) GetTemplate(ctx context.Context, orgID, ref string) (*ApprovalTemplate, error) {
 	t, err := s.repo.FindTemplateByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("approvals: GetTemplate: %w", err) }
-	if t == nil { return nil, ErrTemplateNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: GetTemplate: %w", err)
+	}
+	if t == nil {
+		return nil, ErrTemplateNotFound
+	}
 	levels, err := s.repo.FindTemplateLevels(ctx, t.ID)
-	if err != nil { return nil, fmt.Errorf("approvals: GetTemplate levels: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: GetTemplate levels: %w", err)
+	}
 	t.Levels = levels
 	return t, nil
 }
 
 func (s *serviceImpl) CreateTemplate(ctx context.Context, orgID, createdBy string, req CreateTemplateRequest) (*ApprovalTemplate, error) {
 	name := strings.TrimSpace(req.Name)
-	if name == "" { return nil, ErrNameRequired }
-	if !req.ActionType.IsValid() { return nil, ErrInvalidActionType }
-	if len(req.Levels) == 0 { return nil, ErrNoLevels }
+	if name == "" {
+		return nil, ErrNameRequired
+	}
+	if !req.ActionType.IsValid() {
+		return nil, ErrInvalidActionType
+	}
+	if len(req.Levels) == 0 {
+		return nil, ErrNoLevels
+	}
 	for i, lv := range req.Levels {
-		if lv.Level != i+1 { return nil, ErrInvalidLevel }
-		if !lv.ApproverType.IsValid() { return nil, ErrInvalidApproverType }
-		if lv.SLAHours <= 0 { lv.SLAHours = 48 }
-		if lv.OnSLABreach == "" { req.Levels[i].OnSLABreach = SLABreachEscalateNext }
+		if lv.Level != i+1 {
+			return nil, ErrInvalidLevel
+		}
+		if !lv.ApproverType.IsValid() {
+			return nil, ErrInvalidApproverType
+		}
+		if lv.SLAHours <= 0 {
+			lv.SLAHours = 48
+		}
+		if lv.OnSLABreach == "" {
+			req.Levels[i].OnSLABreach = SLABreachEscalateNext
+		}
 	}
 
 	t := &ApprovalTemplate{
@@ -109,13 +133,27 @@ func (s *serviceImpl) CreateTemplate(ctx context.Context, orgID, createdBy strin
 
 func (s *serviceImpl) UpdateTemplate(ctx context.Context, orgID, ref string, req UpdateTemplateRequest) (*ApprovalTemplate, error) {
 	t, err := s.repo.FindTemplateByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("approvals: UpdateTemplate: %w", err) }
-	if t == nil { return nil, ErrTemplateNotFound }
-	if req.Name != nil { t.Name = strings.TrimSpace(*req.Name) }
-	if req.Description != nil { t.Description = req.Description }
-	if req.ConditionExpression != nil { t.ConditionExpression = req.ConditionExpression }
-	if req.IsDefault != nil { t.IsDefault = *req.IsDefault }
-	if req.IsActive != nil { t.IsActive = *req.IsActive }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: UpdateTemplate: %w", err)
+	}
+	if t == nil {
+		return nil, ErrTemplateNotFound
+	}
+	if req.Name != nil {
+		t.Name = strings.TrimSpace(*req.Name)
+	}
+	if req.Description != nil {
+		t.Description = req.Description
+	}
+	if req.ConditionExpression != nil {
+		t.ConditionExpression = req.ConditionExpression
+	}
+	if req.IsDefault != nil {
+		t.IsDefault = *req.IsDefault
+	}
+	if req.IsActive != nil {
+		t.IsActive = *req.IsActive
+	}
 	if err := s.repo.UpdateTemplate(ctx, t); err != nil {
 		return nil, fmt.Errorf("approvals: UpdateTemplate: %w", err)
 	}
@@ -128,7 +166,9 @@ func (s *serviceImpl) DeleteTemplate(ctx context.Context, orgID, ref string) err
 
 func (s *serviceImpl) FindDefault(ctx context.Context, orgID string, actionType ActionType) (*ApprovalTemplate, error) {
 	t, err := s.repo.FindDefaultTemplate(ctx, orgID, actionType)
-	if err != nil { return nil, fmt.Errorf("approvals: FindDefault: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: FindDefault: %w", err)
+	}
 	if t != nil {
 		levels, _ := s.repo.FindTemplateLevels(ctx, t.ID)
 		t.Levels = levels
@@ -138,16 +178,24 @@ func (s *serviceImpl) FindDefault(ctx context.Context, orgID string, actionType 
 
 func (s *serviceImpl) ListInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) (*InstanceListResponse, error) {
 	list, total, err := s.repo.FindAllInstances(ctx, orgID, limit, offset, status, requesterID)
-	if err != nil { return nil, fmt.Errorf("approvals: ListInstances: %w", err) }
-	if list == nil { list = []*ApprovalInstance{} }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: ListInstances: %w", err)
+	}
+	if list == nil {
+		list = []*ApprovalInstance{}
+	}
 	return &InstanceListResponse{Instances: list, Total: total}, nil
 }
 
 func (s *serviceImpl) CreateInstance(ctx context.Context, orgID string, req CreateInstanceRequest) (*ApprovalInstance, error) {
 	t, err := s.repo.FindTemplateByRef(ctx, orgID, req.TemplateID)
-	if err != nil || t == nil { return nil, ErrTemplateNotFound }
+	if err != nil || t == nil {
+		return nil, ErrTemplateNotFound
+	}
 	levels, err := s.repo.FindTemplateLevels(ctx, t.ID)
-	if err != nil { return nil, fmt.Errorf("approvals: CreateInstance levels: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: CreateInstance levels: %w", err)
+	}
 
 	inst := &ApprovalInstance{
 		OrgID: orgID, TemplateID: &t.ID,
@@ -163,19 +211,31 @@ func (s *serviceImpl) CreateInstance(ctx context.Context, orgID string, req Crea
 
 func (s *serviceImpl) GetInstance(ctx context.Context, orgID, ref string) (*ApprovalInstance, error) {
 	inst, err := s.repo.FindInstanceByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("approvals: GetInstance: %w", err) }
-	if inst == nil { return nil, ErrInstanceNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: GetInstance: %w", err)
+	}
+	if inst == nil {
+		return nil, ErrInstanceNotFound
+	}
 	decisions, err := s.repo.FindDecisions(ctx, inst.ID)
-	if err != nil { return nil, fmt.Errorf("approvals: GetInstance decisions: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: GetInstance decisions: %w", err)
+	}
 	inst.Decisions = decisions
 	return inst, nil
 }
 
 func (s *serviceImpl) Decide(ctx context.Context, orgID, instanceRef, approverID string, req DecisionRequest) (*ApprovalInstance, error) {
 	inst, err := s.repo.FindInstanceByRef(ctx, orgID, instanceRef)
-	if err != nil { return nil, fmt.Errorf("approvals: Decide: %w", err) }
-	if inst == nil { return nil, ErrInstanceNotFound }
-	if inst.OverallStatus != InstanceStatusPending { return nil, ErrAlreadyCompleted }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: Decide: %w", err)
+	}
+	if inst == nil {
+		return nil, ErrInstanceNotFound
+	}
+	if inst.OverallStatus != InstanceStatusPending {
+		return nil, ErrAlreadyCompleted
+	}
 
 	decision := &ApprovalDecision{
 		InstanceID: inst.ID, Level: inst.CurrentLevel,

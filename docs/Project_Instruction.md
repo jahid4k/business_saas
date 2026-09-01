@@ -1,6 +1,612 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
-> Last updated: 2026-08-27 (r36 — **HRM Extended Phase 9C: exit interviews, documents, access
+> Last updated: 2026-09-01 (r43 — **HRM Extended Phase 11B-2: entity re-scoping. PHASE 11 IS
+> COMPLETE, AND WITH IT THE ENTIRE HRM EXTENDED BUILD PLAN.** Migrations `00131`/`00132`/`00133`,
+> no new tables, 1 new permission, 322 integration tests passing.
+>
+> **⚠ A LIVE DEFECT IS FIXED: statutory rules ignored `country_code` entirely.**
+> `ListActiveRules` returned EVERY active rule for an organization, so a company operating in
+> Germany and Britain applied **both** countries' deductions to everyone. Proved live: a German
+> employee now gets German-Tax 100 and a British employee British-Tax 200 — and critically, they do
+> so **even inside a single org-wide run**, because the narrowing is per-EMPLOYEE, not per-run.
+>
+> **⚠ THE FIX DELIBERATELY FAILS OPEN, AND THE TEST SUITE COULD NOT HAVE CAUGHT IT OTHERWISE.**
+> Narrowing to the wrong country means withholding NOTHING, and under-withholding statutory tax is a
+> liability the employee discovers at year end — worse than the over-application being fixed. So
+> rules are narrowed ONLY when a LEGAL ENTITY declared a country, never when it came from
+> `organizations.country`, which is a profile field somebody filled in at signup. Test
+> organizations set no country at all, so a strict filter would have left every existing test green
+> while silently zeroing deductions for real organizations. `entities.CountryForEmployee` therefore
+> returns the country **and** a `fromLegalEntity` flag, and that flag is the contract.
+>
+> **⚠ AN ENTITY DECLARING A COUNTRY THE ORG HAS NO RULES FOR ALSO FAILS OPEN.** A company that
+> opens a German subsidiary before writing its German rules keeps withholding what it was
+> withholding, visibly, rather than silently stopping.
+>
+> **⚠ `hrm_payslip_runs.legal_entity_id` GETS ITS FIRST READER** (planted in Phase 0.4). A run
+> scoped to an entity narrows its employee set; a run with NULL covers the whole organization —
+> which is every run that already exists. The predicate is
+> `($4::uuid IS NULL OR e.legal_entity_id = $4::uuid)`; written as a plain equality it produced
+> **0 payslips** for an org with no entities, which is every organization in this database. Nobody
+> gets paid is the worst possible failure of this slice, and the injection proved it in one line.
+>
+> **⚠ `00133` WAS AN UNPLANNED DISCOVERY MADE BY A TEST.** `uq_hrm_pr_org_month_regular` was keyed
+> on `(org_id, period_year, period_month)`, so a multi-entity organization **could not run its
+> German and British payrolls in the same month** — the entire point of scoping a run to an entity.
+> The index now includes `COALESCE(legal_entity_id, sentinel)`; COALESCE rather than a plain
+> four-column index, because NULL never equals NULL and two org-wide runs would otherwise become
+> possible, reintroducing the double-payment the index exists to prevent.
+>
+> **⚠ THE BDT FIX CHANGED SHAPE MID-SLICE ON A FACT I FOUND LATE.** When this was approved I said it
+> would affect "orgs whose `organizations.currency` is not BDT". That column is
+> **NOT NULL DEFAULT 'USD'** — every organization carries USD whether or not a human chose it, and
+> nothing distinguishes a deliberate USD from an untouched default. Reading it would have silently
+> relabelled every existing organization's payslips. The decision (yours, once I surfaced it) is
+> that only a LEGAL ENTITY'S DECLARATION counts: `entities.DeclaredCurrency` returns a currency only
+> when the entity or the org's default entity declared one, and `BDT` survives as the last resort so
+> an unconfigured org gets exactly what it got before. `BaseCurrency` (the full chain) remains for
+> **expenses**, where a conversion only happens once the org has deliberately recorded a rate and is
+> stored with its full audit set. All 6 hardcoded `currency := "BDT"` sites are gone.
+>
+> **Verification:** all six architecture guards green, 9 new integration tests (**322 total**, up
+> from 313), migrations reversibility proved, per-role grants queried
+> (`hrm.entities.view_all`: owner/admin only), **five claims proved non-vacuous by injection**, the
+> whole payroll/expenses/F&F family green, and a live smoke run.
+>
+> ⚠ **A THIRD, PREVIOUSLY UNKNOWN STALE-BINARY FAILURE MODE — AND MY REBUILD CHECK DID NOT CATCH
+> IT.** The smoke run reported `currency=BDT` and `legal_entity_id=NULL` from correct source. The
+> build had SUCCEEDED and air logged `running...`, but the new process then died instantly with
+> `failed to listen: listen tcp4 :8080: bind: address already in use` — an orphaned older process
+> still held the port, and **that stale binary kept serving every request**. The r40 check (count of
+> `running...` increased, read after the last restore) passes anyway, because the count increments
+> before the new process exits.
+>
+> **The rule now has three parts, and the third is new:** `touch` does not rebuild (r36); a FAILED
+> build leaves the previous binary running (r33); and **a SUCCESSFUL build can leave the previous
+> binary running too, if the new process cannot bind the port.** The reliable check is to look for
+> `address already in use` AFTER the last `running...` line — zero means the new binary is actually
+> serving — or simply `docker compose restart backend`. Everything the smoke reported as a defect
+> was correct code all along; one restart produced `currency=EUR` and the entity stored properly.
+>
+> ⚠ **An injection compiled, ran, and still PASSED — a finding about the TEST.**
+> `StatutoryFailsOpenWithoutALegalEntity` used a profile country (`BD`) that matched none of the
+> rule countries, so narrowing on the profile found no rules and fell back — masking the injection
+> entirely. Changed to `GB`, which matches one rule, the same injection now fails loudly with
+> `1 statutory lines [British Income Tax], want 2`. A fail-open test must use inputs where failing
+> open and failing closed produce DIFFERENT answers.
+>
+> ⚠ **I damaged a file and needed help recovering it.** Backing up for injections, I copied three
+> files all named `service.go` into one flat directory; they overwrote each other, and the restore
+> wrote `entities/service.go` over `statutory/service.go`. `git checkout` and `git show` were both
+> blocked for me, so the user ran the one-line recovery. Backup filenames are now package-qualified
+> and every restore is verified with `sed -n '2p'` on the destination before anything else runs.
+>
+> **Still open:** the frontend covers roughly Phases 0–3 only — no UI for recruitment, performance,
+> learning, compensation/benefits, assets/expenses/helpdesk, exits, org chart, succession, analytics
+> or entities. **That is now the largest and only major open item.** Also `evalFormula` on float64,
+> `MarkConverted` with no HRM-side caller, `EncashmentBasisFixed` with no column for its rate, and
+> scheduled report delivery (Resend is wired, nothing has asked to receive a report).
+>
+> ---
+>
+> r42 — **HRM Extended Phase 11B-1: exchange rates, and the two carried
+> currency gaps closed.** Migrations `00129`/`00130`, 1 table created, 2 extended, 3 new routes,
+> 1 new permission resource.
+>
+> **⚠ THIS SLICE EXISTS BECAUSE TWO SHIPPED SLICES DELIBERATELY REFUSED TO WORK WITHOUT IT.**
+> `exits/settlement.go` reported a foreign-currency travel advance at **zero** with "NOT
+> RECOVERED", because *"converting a foreign-currency advance would mean inventing a rate and
+> mis-charging a departing person real money"*. `expenses/money.go` froze whatever rate the
+> claimant typed. Both were correct refusals; neither could be fixed before an FX table existed,
+> which is why the sequencing question had only one answer.
+>
+> **⚠ NEVER STORE CONVERTED-ONLY.** Every converted figure now keeps all five of
+> **original_amount + original_currency + rate + rate_date + converted_amount**.
+> `hrm_expense_lines` already had four — 8B's instinct was right — and was one column short, so it
+> gained `exchange_rate_date`. `hrm_exit_settlement_lines` had none and gained the set, with
+> `chk_hrm_esl_conversion_complete` making it **all-or-nothing in the database**: a half-recorded
+> conversion is the converted-only case wearing four columns. An integration test inserts a partial
+> set directly through SQL and asserts Postgres refuses it.
+>
+> **⚠ THE RATE IS `NUMERIC(18,8)`, NOT `(15,2)`. A RATE IS NOT MONEY.** Only the RESULT of a
+> conversion rounds to 2 places. The injection proving this is the sharpest in the slice: rounding
+> the rate first turns 1,000,000,000 × 0.00000123 = **1230** into **0**. Verified live end to end,
+> through the database and back.
+>
+> **⚠ WITH NO RATE, NOTHING CONVERTS — AND CERTAINLY NOT AT PARITY.** This is the rule 9B's refusal
+> was protecting, and giving settlement a rate source must not weaken it. With no recorded rate the
+> advance is still reported at zero with its reason. The injection is the whole argument: a parity
+> fallback charged a departing person **500** at an invented 1:1 rate *and marked the advance
+> settled*, so it would never be recovered properly. `ConvertAsOf` returns `available=false` with
+> no conversion attached, so a caller cannot accidentally use a figure that was never computed.
+>
+> **⚠ A CALLER-SUPPLIED RATE STILL WINS.** An organization with a contractual or corporate-card
+> rate must be able to state it; the table lookup is the FALLBACK. Before 11B-1 the caller's number
+> was the only path and its absence meant 1 — that is the actual change.
+>
+> **A same-currency line records NO conversion.** Writing a rate of 1 with today's date would put a
+> fabricated lookup into an audit trail whose entire purpose is to say where a number came from.
+>
+> **An inverted rate says so.** `RateAsOf` tries the direct pair then the inverse, and reports
+> `direction: inverted` plus the row it was derived from — a derived number must not pass as a
+> recorded one. `Invert` divides at rate scale, never money scale; rounding 1/109 to 0.01 is a 9%
+> error on everything it touches, and a round-trip test pins it.
+>
+> **The lookup is effective-dated** — `MAX(rate_date) <= asOf`, the `SlabsAsOf` shape. A rate
+> recorded after somebody left must not reprice their settlement. Verified live across four dates
+> including one recorded in the future, which is correctly ignored.
+>
+> **Both attachments are OPTIONAL and both degrade to the pre-11B behaviour.** `expenses` and
+> `exits` each declare their OWN one-method `RateSource` interface satisfied structurally by
+> `RateAsOfPrimitive` — consumer-owned narrow interfaces, twelfth and thirteenth instances, no
+> adapter and no import in the provider's direction. `entities.BaseCurrency` was added returning a
+> **primitive** for the same reason: handing back `*EntityContext` would have forced expenses to
+> import entities and inverted the dependency.
+>
+> **Verification:** all six architecture guards green, 14 new integration tests (**313 total**, up
+> from 299), 7 new unit tests on the rate arithmetic, migrations `00129`/`00130` reversibility
+> proved **against real conversion data in both altered tables** — seeded, `down` twice, exact
+> prior column lists and all 7 indexes restored, rows intact, then re-up with the new columns back
+> and NULL rather than re-invented — per-role grants queried, **six claims proved non-vacuous by
+> injection**, the full payroll/expenses/F&F family (66 tests) green, and a live smoke run over all
+> 3 routes.
+>
+> ⚠ **THREE INJECTIONS WERE INVALID ON THE FIRST ATTEMPT AND WERE REDONE.** One removed the last
+> use of a bound parameter and failed on a SQL type error rather than a wrong rate; two others left
+> a variable unused and did not compile at all. **A test that goes red because the code no longer
+> builds proves nothing about the claim.** Rewritten as `rate_date <= $4 + INTERVAL '100 years'`,
+> `_ = rateDate`, and `|| true`, all three produced the real failures. Second occurrence of this
+> after r40's threshold-guard injection; it is now a standing check.
+>
+> ⚠ **One full-suite run showed a failure that was transient**, not a regression:
+> `TestIntegration_FnF_PaysProratedSalaryPlusSettlement` failed with a bare
+> `context canceled` database dial error and no assertion message. It passed 3/3 in isolation and
+> the full suite was re-run clean at 313/0. A failure with no assertion output is a connection
+> problem, not a logic one — but it was re-run rather than assumed.
+>
+> **The stale comment on the existing 9B test was updated, not left.**
+> `TestIntegration_FnFSources_ForeignCurrencyAdvanceIsReportedNotGuessed` said "no FX rate table
+> exists anywhere". It now explains that the table exists and this org records no rate, which makes
+> the test **more** important rather than obsolete: it is the half of the pair proving the refusal
+> survived.
+>
+> **Still open:** 11B-2 is the last slice — entity re-scoping of payroll and statutory resolution,
+> plus the hardcoded `currency := "BDT"` in 6 places. ⚠ `ListActiveRules` still returns **every**
+> active statutory rule for an org regardless of `country_code`, so a multi-country org applies
+> German and British deductions to everyone; and `hrm_payslip_runs.legal_entity_id` still has no
+> reader. Also unchanged: the frontend covers roughly Phases 0–3 only, `evalFormula` on float64,
+> `MarkConverted` with no HRM-side caller, `EncashmentBasisFixed` with no column for its rate.
+>
+> ---
+>
+> r41 — **HRM Extended Phase 11A: legal entities, country configs and
+> locations.** Migrations `00127`/`00128`, 1 table extended, 2 created, 1 column added to
+> `hrm_employees`, 11 new routes, 2 new permission resources.
+>
+> **⚠ THE CENTRAL CLAIM IS A NEGATIVE ONE: AN ORGANIZATION WITH NO LEGAL ENTITIES — WHICH IS EVERY
+> ORGANIZATION IN THIS DATABASE — IS COMPLETELY UNAFFECTED.** `legal_entity_id` is a nullable FK on
+> **39 tables** (38 before this slice), all un-backfilled, and 11A makes not one of them required.
+> Resolution is a fallback chain rather than a stored value: **entity-specific → the org's default
+> entity → the organization itself**, the same shape as `hrm_per_diem_rates`' country-specific →
+> org-wide lookup. A NULL `legal_entity_id` is not missing data; it means "whatever the
+> organization's default is", and that answer stays correct when the default changes — which is
+> precisely why nothing backfills them. An injection making resolution require an entity failed
+> immediately, and an `information_schema` test asserts all 39 columns stay nullable.
+>
+> **⚠ THE CHAIN RESOLVES FIELD BY FIELD, NOT AS A UNIT.** This is the part that is easy to get
+> wrong and expensive when wrong. An entity recording a country but no base currency must get the
+> next link's CURRENCY while keeping its own COUNTRY; falling through as a unit would take that
+> link's country too and **silently relocate the subsidiary**. A half-populated record is the normal
+> state of one somebody is part-way through setting up. Proved live: promoting a GB-only entity to
+> default left currency falling all the way to the organization's USD and timezone to
+> America/New_York, while country stayed GB.
+>
+> **⚠ EVERY RESOLVED FIELD CARRIES ITS SOURCE**, and that is not decoration. "GBP" alone is
+> ambiguous — a reader cannot tell whether the entity declares GBP or whether the entity declares
+> nothing and the organization happens to be British. Those become different facts the day somebody
+> adds a second entity, and a value with no provenance hides the difference. `Resolved` is
+> `{value, source}` throughout, with `SourceNone` for genuinely unset.
+>
+> ⚠ **AN UNSET FIELD RESOLVES TO EMPTY, NEVER TO A GUESS.** Defaulting a currency to USD because it
+> is common would produce payslips in the wrong money.
+>
+> **⚠ THE FIRST ENTITY AN ORGANIZATION CREATES BECOMES ITS DEFAULT AUTOMATICALLY, AND UNSETTING THE
+> DEFAULT IS REFUSED.** An org with entities and no default has no step two in its chain — every
+> lookup would skip straight to the organization and silently ignore the entities somebody just set
+> up. A default is replaced by promoting another, never by clearing this one (`ErrCannotUndefault`,
+> 409). `SetDefault` demotes before promoting inside one transaction, because
+> `idx_hrm_legal_entities_org_default` is a partial unique index and the other order violates it
+> mid-transaction.
+>
+> **The one-default constraint ALREADY EXISTED and was verified, not assumed.** Phase 0.4 planted
+> `idx_hrm_legal_entities_org_default` as a partial unique index on `(org_id) WHERE is_default`. It
+> is what makes step two single-valued, so it is load-bearing for this phase; it was checked before
+> being relied on rather than recreated.
+>
+> **⚠ COUNTRY CONFIGS ARE DEFAULTS, NOT ENFORCEMENT, AND EVERY COLUMN IS NULLABLE.** Nothing in
+> payroll reads `hrm_country_configs` and refuses to run; it supplies a value where a caller has not
+> given one. A config that hard-required a statutory notice period would break the first
+> organization whose contracts are more generous, which is most of them. The config attaches to the
+> **resolved** country, not the one written on the entity row, so a branch inheriting its country
+> still gets that country's rules — an injection restricting it to `SourceEntity` went red.
+>
+> **⚠ `hrm_legal_entities` IS EXTENDED AND RESTORED, NOT DROPPED AND RECREATED.** It pre-dates this
+> migration with real rows in it and 39 foreign keys pointing at it. Reversibility was therefore
+> proved against REAL DATA: a seeded entity row, `down` twice, and the table comes back to its exact
+> six-column prior shape (`id, org_id, name, is_default, created_at, updated_at`) with all three
+> original indexes and the row still present, `legal_entity_id` still on 38 tables all nullable, and
+> `hrm_employees.location_id` gone. Two genuine 0.4-era rows in the dev database (Nexus Solutions,
+> Vertex Logistics, created 2026-08-03) took distinct backfilled `public_id`s, which is the
+> real-data proof the backfill worked.
+>
+> ⚠ **`country_code`, `base_currency` and `created_by` are all NULLABLE on the extended table.**
+> Rows predating 11A have none, and there is no honest value to write: guessing a country for
+> somebody's subsidiary is worse than resolving the organization's at read time because a guess is
+> indistinguishable from a fact once stored, and attributing an old row to whoever ran the migration
+> would be a lie recorded in an audit field.
+>
+> **`hrm.locations` is a SEPARATE resource from `hrm.entities`.** A legal entity carries a
+> registration number and a tax identifier and is edited by finance or legal; a work site is a
+> building somebody adds when the company opens an office. Folding them together would mean nobody
+> can add an office without also being able to change the company's tax registration.
+>
+> **Timezones are trimmed but NOT uppercased**, unlike the ISO codes beside them — IANA zone names
+> are case-sensitive, and "EUROPE/LONDON" is not a zone. An injection folding them into the same
+> normaliser went red.
+>
+> **Verification:** all six architecture guards green, 12 new integration tests (**299 total**, up
+> from 287), 7 new unit tests on the resolution chain, migrations `00127`/`00128` reversibility
+> proved against real data as above, per-role grants queried, **seven claims proved non-vacuous by
+> injection**, the entire pre-existing payroll/compensation/statutory suite (34 tests) still green,
+> and a live smoke run over all 11 routes.
+>
+> ✅ **The r40 stale-binary lesson was applied and worked.** The rebuild count was read AFTER the
+> last injection restore, a real content change forced a rebuild, and the increase was confirmed
+> before the smoke run — which was clean first time.
+>
+> **Still open:** unchanged — the frontend covers roughly Phases 0–3 only, `evalFormula` on float64,
+> `MarkConverted` with no HRM-side caller, `EncashmentBasisFixed` with no column to store its rate,
+> and no FX table. **11B is the last slice**: `hrm_exchange_rates`, entity re-scoping of payroll and
+> statutory resolution, and the two carried currency gaps (9B's un-recovered foreign advances, 8B's
+> caller-supplied exchange rate).
+>
+> ---
+>
+> r40 — **HRM Extended Phase 10C: people analytics. PHASE 10 IS
+> COMPLETE.** Migrations `00125`/`00126`, 3 new tables, 10 new routes, 1 new permission resource
+> (5 keys), 1 new scheduler job.
+>
+> **⚠ NIGHTLY SNAPSHOTS AND FACT TABLES, NEVER LIVE AGGREGATION OVER OLTP.** Every analytics
+> endpoint reads `hrm_headcount_snapshots` and `hrm_attrition_facts` and nothing else; the nightly
+> job is the only code in the package that touches `hrm_employees`, `hrm_exits`,
+> `hrm_terminations` or `hrm_rehire_eligibility`. This is not a performance preference — a live
+> aggregate changes under a reader between two refreshes of the same page, and correcting an old
+> record silently rewrites last March. Proved by mutating OLTP (a real completed exit) and asserting
+> the metric does **not** move until the job runs, then that it does. `internal/hrm/reports`' three
+> `COUNT(*)` endpoints are deliberately left alone: "how many employees are there right now" is an
+> OLTP question and they answer it correctly.
+>
+> ⚠ **Facts are built BEFORE snapshots inside `RunSnapshot`**, because the snapshot's leaver counts
+> read from the facts. Reversing the order would report a month with no leavers and then never
+> correct it — the row for that date already exists and the next run writes a different date.
+>
+> **⚠ `hrm_metric_definitions` IS NOT A FORMULA ENGINE, AND THAT IS THE WHOLE DESIGN.** The plan
+> calls the table non-optional so two consumers cannot compute "attrition" two ways. But this
+> codebase already carries one interpreted-expression defect — learning's `evalFormula` on
+> `float64` — and a second interpreter would trade a definitional problem for a worse one. So
+> `computation` NAMES a Go implementation from a CHECKed vocabulary, every PARAMETER of that
+> computation is data (which termination types count, whether probation exits are included, the
+> suppression threshold), and `formula_statement` is a NOT NULL human-readable statement that is
+> **never parsed**. `predictive_attrition` is not in the vocabulary and cannot be added by naming
+> it — verified live, 400.
+>
+> **⚠ THE SUPPRESSED DEI GROUP CANNOT BE RECOVERED BY SUBTRACTION, AND THAT TOOK THREE RULES.**
+> Primary suppression alone is almost useless: with a published total, one hidden group is one
+> subtraction. So `Suppress` also applies **secondary suppression** (if exactly one group would be
+> hidden, the smallest disclosed group is hidden too) and **withholds the total entirely** whenever
+> anything is suppressed. The third rule is stronger than standard cell suppression and is what the
+> plan literally asks for; it also closes the narrow case rule 2 leaves open (two hidden groups
+> summing to 2 can only be 1 and 1). A fourth rule suppresses everything when only one group would
+> be left standing, because one disclosed group with a withheld total still says "everyone here is
+> X". Proved live: 12 male / 8 female / 1 other returns **all three suppressed and no total**.
+>
+> ⚠ **SUPPRESSION IS NOT A PERMISSION AND NOTHING LIFTS IT.** `Suppress` takes no caller and has no
+> bypass argument; `view_dei` decides whether somebody sees the breakdown at all, never whether a
+> cell opens. The owner in the smoke run holds all five analytics keys and sees the same suppressed
+> distribution a manager would. Same rule as 5C.
+>
+> **⚠ SMALL-GROUP PAY IS WITHHELD AT WRITE TIME, NOT READ TIME.** The nightly job writes
+> `comp_p25/median/p75` as NULL for any group below the threshold, so a small team's pay
+> distribution is never recorded — no later query, export or database backup can expose what was
+> never stored. That is a different mechanism from the permission strip (a caller without
+> `view_compensation` gets the columns blanked on read), and **neither substitutes for the other**;
+> both have their own test, and disabling either one is red.
+>
+> **⚠ AN UNKNOWN REGRETTED STATUS STAYS UNKNOWN.** `is_regretted` is nullable and
+> `RegrettedFromRehireStatus` returns nil for `conditional` and for no decision at all. Folding
+> those into non-regretted would report every un-reviewed departure as a good riddance and flatter
+> the exact number the metric exists to expose, so `AttritionSummary` reports
+> `regretted / non_regretted / regretted_unknown` as three figures. This gave Phase 9's
+> `hrm_rehire_eligibility.status` its second reader.
+>
+> **⚠ THE EXPORT CARRIES NO DEMOGRAPHIC COLUMN.** Export is row-level by nature, and a row-level
+> extract with gender on it is precisely what "DEI is aggregate-only" forbids — a spreadsheet the
+> suppression rule cannot reach. An un-reviewed exit exports `is_regretted=unknown` rather than a
+> blank a spreadsheet would read as false.
+>
+> **Two arithmetic judgements, both stated rather than buried.** The attrition denominator is the
+> **average** of opening and closing headcount, not closing — dividing by the smaller number
+> inflates the rate in exactly the months somebody is looking at the chart. And a period with no
+> denominator returns **no rate at all** rather than 0%: an organization with no snapshot did not
+> achieve perfect retention.
+>
+> **Verification:** all six architecture guards green, 11 new integration tests (**287 total**, up
+> from 276), 14 new unit tests across suppression and the metric arithmetic, migrations
+> `00125`/`00126` reversibility proved down×2 with 10B untouched, per-role grants queried (manager
+> holds `view` alone), **nine claims proved non-vacuous by injection**, and a live smoke run over
+> all 10 routes showing 200/200/403/403/403/403 across the manager boundary.
+>
+> ⚠ **THE SMOKE RUN CAUGHT A STALE BINARY, AND MY REBUILD CHECK WAS THE THING AT FAULT.** The first
+> run reported the group of one as disclosed with the total published — which is injection F's
+> behaviour, not the source's. The container was still running a binary built during the red/green
+> injections. Checking that the `running...` count was non-zero and that the new job had registered
+> proved only that *a* rebuild had happened, not that one had happened **after the last restore**.
+> The rule from r36 needs this addition: after any injection cycle, force a fresh rebuild and
+> confirm the count **increased from a reading taken after the restore** before trusting a smoke
+> run.
+>
+> ⚠ **One injection failed for the wrong reason and was redone.** Deleting the threshold guard from
+> the snapshot SQL removed the last use of `$3` and the query failed on a parameter-count mismatch —
+> red, but not evidence that pay would be disclosed. Rewritten as `headcount >= $3 - 1000` so the
+> parameter stays bound and the guard is genuinely disabled, it produced the real failure: a stored
+> median of 60000 for a group of 3.
+>
+> **Still open:** unchanged — the frontend covers roughly Phases 0–3 only (now with a ninth
+> uncovered area), `evalFormula` on float64, `MarkConverted` with no HRM-side caller,
+> `EncashmentBasisFixed` with no column to store its rate, and no FX table (Phase 11B). Scheduled
+> report **delivery** remains out of scope: Resend is wired, but a delivery mechanism is worth
+> building once there is a report somebody has asked to receive.
+>
+> ---
+>
+> r39 — **HRM Extended Phase 10B: succession planning.** Migrations
+> `00123`/`00124`, 5 new tables, 16 new routes, 2 new permission resources (5 keys).
+>
+> **⚠ POTENTIAL IS ASSESSED SEPARATELY AND IS NEVER DERIVED FROM PERFORMANCE.** This is the rule
+> the whole slice exists to protect. If potential were computed from the appraisal rating, every
+> employee would land on the grid's diagonal and the 9-box would carry exactly as much information
+> as the rating already did — an expensive way to draw one number twice. The schema enforces it
+> three ways: `performance_band` and `potential_band` are independent columns with independent
+> CHECKs and no default derived from the other; `potential_rationale` is **NOT NULL**, because a
+> potential band nobody can explain is the unexplainable score this phase bans; and
+> `performance_band` carries provenance (the appraisal id plus a value snapshot) while
+> `potential_band` deliberately carries none, since there is no upstream record it could come from.
+> Proved live: two employees with the **same** published rating of 4.5/5 and different assessed
+> potential land in box 3 (Solid Performer) and box 9 (Star).
+>
+> ⚠ **Omitting the potential band is a REFUSAL, not a fallback.** Performance may be derived from
+> the most recent published appraisal — the appraisal *is* the performance record — but there is no
+> equivalent path for potential anywhere in the package. An injection that made potential default
+> to the performance band failed two tests immediately.
+>
+> **⚠ THERE IS NO `box_number` COLUMN AND NO `Box` FIELD.** The 9-box position is
+> `f(performance_band, potential_band)` computed in Go (the 00076 computed-not-stored rule) — a
+> stored box would be a third value free to disagree with the two it claims to summarise.
+>
+> **⚠ CONFIDENTIALITY IS TWO READ PATHS, NOT FIELD FILTERING — because the enabler the build plan
+> named does not exist.** The plan cited "Phase 1's field-level filtering"; it was never built, the
+> same situation as Phase 9's training bond. Instead the confidential material
+> (`hrm_talent_assessments`, `hrm_succession_candidates`) and the subject-visible material
+> (`hrm_development_plans` + items) live in separate TABLES reached by separate REPOSITORY METHODS
+> returning separate TYPES. `SubjectPlans`' SQL never names a confidential table, so there is
+> nothing in memory for a handler to forget to strip. Fourth instance of this shape after 5C's 360
+> anonymity, 8C's internal ticket comments and 9C's exit interviews — and stronger than the
+> filtering the plan assumed.
+>
+> **The FK direction is part of the guarantee.** `hrm_succession_candidates` points AT a development
+> plan; a plan never points at a nomination. A `development_plan_id` on the wrong side would tell
+> the subject — who may read their own plan — that they are a named successor for a specific role.
+> For the same reason `hrm_development_plans` has **no `plan_type` column**: a value like
+> `succession_readiness` leaks the identical fact through a field the subject is entitled to read.
+>
+> **The confidentiality test is STRUCTURAL, not behavioural.** It walks `SubjectView`'s type graph
+> reflectively and fails on any field whose type or name belongs to the reviewer's half. A
+> behavioural test only shows that today's code does not populate those fields; this shows there is
+> nowhere to populate. Adding an `Assessment *TalentAssessment` field failed it on both the type
+> and the field name.
+>
+> **⚠ `hrm.succession.view_confidential` IS DELIBERATELY NOT GRANTED TO MANAGER**, following 9C's
+> `hrm.exits.interview_view` precedent. A manager may read which roles are critical — org design
+> they need — but not the 9-box, the flight-risk signals or who has been nominated, because the
+> subject's own manager is usually both the source of the assessment and the reader it most needs
+> protecting from. Verified live over HTTP: a manager gets **200** on critical-positions and **403**
+> on the grid, the bench and the employee review.
+>
+> **⚠ FLIGHT RISK IS COMPUTED, NOT STORED — there is no table for it, and no score anywhere.** All
+> four indicators are derivable from data this database already holds: time since last promotion
+> (`hrm_promotions`), pay below band (salary record → `hrm_salary_structures.grade_label` →
+> `hrm_compensation_bands`), manager churn (10A's `hrm_reporting_relationships`) and appraisal
+> decline (`hrm_appraisals.final_rating_value`). Stored signals go stale the moment any of those
+> change with nothing to detect it; deriving them guarantees each can state the query that produced
+> it. Every signal carries a mandatory `Detail` naming the actual figures, and `ReviewerView` has
+> nowhere to put a score, level or probability.
+>
+> **Two signal thresholds are judgements, and both are stated rather than tuned.** Below-band tests
+> the band **minimum**, not the midpoint — half of any healthy band sits under its midpoint by
+> construction, so a midpoint test would flag half the company and mean nothing. Appraisal decline
+> fires on **any** drop, because how big a drop matters is exactly the judgement that belongs to a
+> human rather than to a hidden constant. Manager churn counts **solid lines only**: counting matrix
+> lines would fire on ordinary project rotation, and an injection removing that filter made four
+> dotted-line changes trip the signal.
+>
+> **Verification:** all six architecture guards green, 12 new integration tests (**276 total**, up
+> from 264), 12 new unit tests across the 9-box and the four evaluators, migrations `00123`/`00124`
+> reversibility proved down×2 with zero tables/permissions/grants and 10A untouched, per-role grants
+> queried and confirmed (manager has succession.view and development_plan.{view,manage} and nothing
+> else), **eight claims proved non-vacuous by injection**, and a live smoke run covering all 16
+> routes.
+>
+> ⚠ **AN INJECTION THAT STAYED GREEN WAS A FINDING ABOUT THE TEST.** Deleting the day-of-month
+> correction from `monthsBetween` left the whole no-promotion table passing — none of its cases
+> straddled a partial month, so they proved nothing about it. A dedicated pair differing by one day
+> across the 36-month threshold now pins it, and the same injection is red. Same lesson as 9B's
+> tautological settlement proof.
+>
+> **Deviation from the plan, stated: five tables rather than three.** The 9-box assessment is
+> per-employee and independent of any nomination — you assess the population, *then* nominate — so
+> folding it into `hrm_succession_candidates` would have forced a nomination to exist before anyone
+> could be assessed. Development plan items are their own table because a plan without actions is a
+> title. Flight risk needed no table at all.
+>
+> **Still open:** unchanged — the frontend covers roughly Phases 0–3 only (now with an eighth
+> uncovered area), `evalFormula` on float64, `MarkConverted` with no HRM-side caller,
+> `EncashmentBasisFixed` with no column to store its rate, and no FX table (Phase 11B).
+>
+> ---
+>
+> r38 — **HRM Extended Phase 10A: the org chart.** Migrations
+> `00121`/`00122`, 2 new tables, 8 new routes, 1 new permission resource. First slice of Phase 10.
+>
+> **⚠ `hrm_employees.manager_id` STAYS, AND KEEPING IT IN SYNC IS THE ENTIRE DIFFICULTY OF THIS
+> SLICE.** That column is not a convenience field — `scope.Predicate`'s `view_team` tier is a
+> recursive CTE joining `he.manager_id = s.id`, so **every scope-tiered permission in this product
+> resolves through it**. The new `hrm_reporting_relationships` table is the temporal and matrix
+> source of truth and **writes the column back inside the same transaction**; the column is never
+> where a change originates. If the two ever disagree, half the product's authorization silently
+> follows the stale one, and nothing would report it. The drift test was mandatory, not optional,
+> and both halves were proved by injection: suppressing the sync on create leaves `manager_id` NULL
+> after a solid line, and suppressing the clear on end leaves a departed manager still reading their
+> former report's payroll.
+>
+> **Only `solid` lines confer data access — `dotted`, `functional` and `project` deliberately do
+> not.** Matrix reporting is real and the chart must draw it, but a project lead who could read
+> their contributors' compensation because of a project line is a quiet privilege escalation.
+> `RelationshipType.GrantsDataAccess()` is the single place that decision lives, and both the
+> repository sync and the chart's `MatrixLines` split read it. Making it return `true` for every
+> type fails the matrix test immediately.
+>
+> **Cycle detection is an AUTHORIZATION safety check, not data tidiness.** A loop in the hierarchy
+> makes that same recursive CTE non-terminating, so a cycle does not corrupt an org chart — it hangs
+> every permission check that walks the tree. The service refuses before inserting. The unit tests
+> were proved non-vacuous by injecting a parent-only check, which passes the direct A→B/B→A case and
+> **fails all three deeper ones**; the integration test closes an indirect A→B→C→A and asserts
+> nothing was written, neither the row nor the column. `MaxChainDepth = 64` bounds the walk so
+> corrupt pre-existing data cannot hang the checker itself.
+>
+> **The chart is NOT scope-tiered, and that is a deliberate exception to the HRM norm.** A chart
+> whose shape depends on who is looking is a subtree, not a chart, and 10B succession and 10C
+> analytics both need the whole graph to compute anything. What is sensitive is the salary and
+> appraisal data hanging off each node, and that stays behind its own already-tiered resources.
+> `hrm.org_chart.{view,manage}` therefore never calls `ResolveScope`, which is also what keeps
+> `TestPermissions_ScopeTiersSeeded` (all-or-nothing per resource) satisfied. `.manage` is separated
+> from `.view` because re-parenting somebody rewrites `manager_id` and thereby changes who can read
+> whose payroll — an HR-administrative act, not an editing convenience.
+>
+> **`GetChart` reads `manager_id`, not the relationships table, on purpose.** Rendering from the
+> prettier source would hide exactly the drift this design exists to prevent. The chart shows what
+> authorization actually believes.
+>
+> **A vacated seat is not a deleted seat.** `hrm_position_seats.employee_id` is nullable and
+> clearing it keeps the seat as headcount — which is precisely what a future requisition is raised
+> against. There is no `is_occupied` column (the 00076 rule); occupancy is `EmployeeID != nil`.
+>
+> **Verification:** all six architecture guards green, 7 new integration tests (**264 total**, up
+> from 257), 12 cycle-detection unit subtests, migrations `00121`/`00122` reversibility proved
+> down×2 with zero tables/permissions/grants left and `manager_id` untouched, **four claims proved
+> non-vacuous by injection** (create sync, end clear, matrix isolation, cycle refusal), and a live
+> smoke run covering all 8 routes: solid line syncs the column, duplicate solid → 409, indirect
+> cycle → 409, dotted line leaves the column alone and appears in `matrix_lines` rather than as a
+> child edge, seat assigned then vacated with the vacancy list flipping 0→1, and ending the line
+> clearing `manager_id` to NULL while both history rows survive.
+>
+> **The smoke run found only a documentation gap:** the list filters are `?vacant=true` and
+> `?active=false`, not the `_only` names the plan's prose implied. Both are now written into
+> `routes.go` beside the routes they belong to.
+>
+> **Still open:** unchanged from r37 — the frontend covers roughly Phases 0–3 only (now with a
+> seventh uncovered area), `evalFormula` on float64, `MarkConverted` with no HRM-side caller,
+> `EncashmentBasisFixed` with no column to store its rate, and no FX table (Phase 11B).
+>
+> ---
+>
+> r37 — **Hardening pass: clearing the known-open ledger.** Migration
+> `00120`, no new permissions. Four long-carried defects fixed, one "defect" found not to exist, and
+> two additional bugs discovered along the way.
+>
+> **⚠ PAYROLL MONEY WAS COMPUTED IN `float64`, AND IT WAS PRODUCING WRONG FIGURES.**
+> `ComputeSlab` did progressive bracket arithmetic in floating point while its inputs and outputs
+> were already `decimal` — `statutory/provider.go` literally called `base.InexactFloat64()` on its
+> way in. Scanning 28,572 ordinary salary bases against a three-bracket table, **42 came out one
+> paisa wrong after rounding** (base `1030.10` gave `51.50` where the exact answer is `51.51`). This
+> is the statutory deduction on every payslip, so that is a wrong number on somebody's pay, not a
+> rounding curiosity. The bracket walk is now decimal end to end, the slab base is resolved from the
+> decimal source rather than the float formula `env`, and four of those exact bases are pinned as a
+> regression test. Roughly 1 in 700 bases was affected.
+>
+> ⚠ **`evalFormula` deliberately stays on `float64`** — it evaluates user-authored expressions
+> through `expr-lang`, and making formulas exact means replacing the evaluator. The single
+> conversion point is now named in a comment, and this remains open rather than being implied fixed.
+>
+> **⚠ THE SCHEDULER API WAS NEVER BROKEN — the known-open entry was wrong.** It claimed
+> `POST /platform/scheduler/jobs/:name/run` "returns 400 NO_BUSINESS_CONTEXT for every job — its
+> route has no `:orgId` but its permission gate requires one." The gate reads `business_id` from the
+> **JWT**, not the path. The real fact is narrower and different: **`Login` always issues a token
+> with no org** (`auth/service.go` passes `nil`), so any route relying on JWT org context needs
+> `POST /organizations/:id/switch` first. Verified live: with a switched token the endpoint returns
+> all **8** registered jobs with their run history. No code changed; the entry has been corrected
+> instead of repeated. (An earlier note in this session said 10 jobs — that was wrong, 8 is the
+> count.)
+>
+> **A brand-new organization could not hire its first employee.** Migration `00053` seeded
+> `hrm_employee_statuses` per-org, but `organizations.Create` never did — so every org created
+> through the API had none and `POST /hrm/employees` failed on a NOT NULL `status_id`. Carried since
+> r18 and worked around by hand in nearly every smoke run this project has done. Now seeded inside
+> `Create`'s existing transaction (an org either exists fully usable or not at all), with `00120`
+> backfilling the orgs already created. The five rows mirror `00053` exactly — including `Resigned`
+> and `Terminated` **sharing** the `terminated` category, because HRM filters on category, never on
+> name.
+>
+> **⚠ TWO STACKED DEFECTS meant every automatic note this system writes has ALWAYS failed
+> silently.** r32 diagnosed one — `platform_notes.created_by` was NOT NULL while capture paths
+> create notes with no acting user. The real path had a second, earlier failure: `crm/leads` and
+> `crm/deals` passed the bare strings `"lead"` and `"deal"` as `related_type`, but the vocabulary is
+> `"<module>.<entity>"` (`crm.lead` / `crm.deal`). `CreateNote` rejected them with "invalid
+> related_type value" **before** the NOT NULL constraint was ever reached, and both callers discard
+> the error with `_, _ =`. Both are fixed, both use the exported constants now, and each was proved
+> independently necessary by injection.
+>
+> ⚠ **A unit test was asserting the bug.** `TestCreateLead_DuplicateEmail_AppendsNote` checked for
+> `related_type == "lead"` and passed, because its engagement stub recorded whatever it was handed
+> without validating. **A stub that accepts what the real implementation refuses is worse than no
+> stub** — it makes the suite agree with the defect. The stub now validates `related_type` the way
+> the service does.
+>
+> **Test fixtures had to change, and that is the fix working.** Three integration fixtures inserted
+> statuses by hand and now collide with the seeded ones; they ask for the status they need via a new
+> `statusIDFor` helper instead. Two "fails closed when the org has no terminated status" tests could
+> no longer reach their condition naturally and now construct it explicitly — the behaviour still
+> matters, because an org can delete its own statuses.
+>
+> **Verification:** all six architecture guards green, 4 new integration tests (**257 total**, up
+> from 253), 2 new slab unit tests pinning exact paisa results, migration `00120` reversibility
+> proved down/up, three claims proved non-vacuous by injection, and a live smoke run showing a fresh
+> org hiring with no manual status insert, the scheduler listing 8 jobs, and a duplicate inbound
+> email recording its note with `created_by IS NULL`.
+>
+> ⚠ **`00120`'s status backfill is deliberately NOT reverted by its down block.** There is no way to
+> tell a backfilled row from one an org has since renamed or come to depend on, and deleting a
+> status would orphan `hrm_employees.status_id`, which is NOT NULL. Reverting would risk destroying
+> live data to undo a repair.
+>
+> **Still open:** the frontend covers roughly Phases 0–3 only — no UI exists for recruitment,
+> performance, learning, compensation/benefits, assets/expenses/helpdesk or exits (six phases,
+> ~60 tables), which sits against §1's "Frontend drives feature prioritization". Also `evalFormula`
+> on float64, `MarkConverted` with no HRM-side caller, `EncashmentBasisFixed` with no column to
+> store its rate, and no FX table (Phase 11).
+>
+> ---
+>
+> r36 — **HRM Extended Phase 9C: exit interviews, documents, access
 > revocation.** Migrations `00118`/`00119`, 1 new table, 6 new routes, 2 scheduler jobs.
 > **PHASE 9 IS COMPLETE, and so is the HRM Extended build plan through Phase 9.**
 >
@@ -2114,6 +2720,16 @@ GET  /api/v1/platform/scheduler/jobs              ← platform.scheduler.view
 GET  /api/v1/platform/scheduler/jobs/:name/runs   ← platform.scheduler.view
 POST /api/v1/platform/scheduler/jobs/:name/run    ← platform.scheduler.manage
 ```
+
+⚠ **These three routes take their org context from the JWT, not the path** — there is no `:orgId`
+segment, because scheduled jobs are instance-wide rather than org-scoped. `middleware.RequirePermission`
+reads `business_id` from the token, and **`Login` issues a token with no org**, so a plain login
+token gets `400 NO_BUSINESS_CONTEXT` here. Call `POST /organizations/:id/switch` first and use the
+token it returns.
+
+This was recorded as a bug ("the route has no `:orgId` but its permission gate requires one") from
+r24 through r36 and repeated in every "still open" list. It is not a bug — verified in r37 against a
+switched token, which returns all 8 registered jobs with their run history.
 
 Permissions: `platform.scheduler.view` / `.manage` — granted to owner/admin.
 

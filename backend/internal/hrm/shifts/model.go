@@ -7,18 +7,22 @@ import (
 )
 
 type ShiftType string
+
 const (
 	ShiftTypeFixed    ShiftType = "fixed"
 	ShiftTypeFlexible ShiftType = "flexible"
 )
+
 func (t ShiftType) IsValid() bool { return t == ShiftTypeFixed || t == ShiftTypeFlexible }
 
 type AssigneeType string
+
 const (
 	AssigneeTypeOrganization AssigneeType = "organization"
 	AssigneeTypeDepartment   AssigneeType = "department"
 	AssigneeTypeEmployee     AssigneeType = "employee"
 )
+
 func (t AssigneeType) IsValid() bool {
 	return t == AssigneeTypeOrganization || t == AssigneeTypeDepartment || t == AssigneeTypeEmployee
 }
@@ -78,20 +82,20 @@ type CreateShiftRequest struct {
 }
 
 type UpdateShiftRequest struct {
-	Name                   *string   `json:"name"`
-	Description            *string   `json:"description"`
-	StartTime              *string   `json:"start_time"`
-	EndTime                *string   `json:"end_time"`
-	CoreStartTime          *string   `json:"core_start_time"`
-	CoreEndTime            *string   `json:"core_end_time"`
-	WeeklyHoursTarget      *float64  `json:"weekly_hours_target"`
-	BreakMinutes           *int      `json:"break_minutes"`
-	WorkingDays            []string  `json:"working_days"`
-	TrackOvertime          *bool     `json:"track_overtime"`
-	OvertimeThresholdHours *float64  `json:"overtime_threshold_hours"`
-	TrackBreaks            *bool     `json:"track_breaks"`
-	IsDefault              *bool     `json:"is_default"`
-	IsActive               *bool     `json:"is_active"`
+	Name                   *string  `json:"name"`
+	Description            *string  `json:"description"`
+	StartTime              *string  `json:"start_time"`
+	EndTime                *string  `json:"end_time"`
+	CoreStartTime          *string  `json:"core_start_time"`
+	CoreEndTime            *string  `json:"core_end_time"`
+	WeeklyHoursTarget      *float64 `json:"weekly_hours_target"`
+	BreakMinutes           *int     `json:"break_minutes"`
+	WorkingDays            []string `json:"working_days"`
+	TrackOvertime          *bool    `json:"track_overtime"`
+	OvertimeThresholdHours *float64 `json:"overtime_threshold_hours"`
+	TrackBreaks            *bool    `json:"track_breaks"`
+	IsDefault              *bool    `json:"is_default"`
+	IsActive               *bool    `json:"is_active"`
 }
 
 type AssignShiftRequest struct {
@@ -113,14 +117,14 @@ type AssignmentListResponse struct {
 }
 
 var (
-	ErrShiftNotFound        = errors.New("shift not found")
-	ErrAssignmentNotFound   = errors.New("schedule assignment not found")
-	ErrNameRequired         = errors.New("name is required")
-	ErrNameConflict         = errors.New("a shift with this name already exists")
-	ErrInvalidShiftType     = errors.New("shift_type must be: fixed or flexible")
-	ErrFixedTimeRequired    = errors.New("start_time and end_time are required for fixed shifts")
-	ErrFlexHoursRequired    = errors.New("weekly_hours_target is required for flexible shifts")
-	ErrInvalidAssigneeType  = errors.New("assignee_type must be: organization, department, or employee")
-	ErrAssigneeIDRequired   = errors.New("assignee_id is required")
+	ErrShiftNotFound         = errors.New("shift not found")
+	ErrAssignmentNotFound    = errors.New("schedule assignment not found")
+	ErrNameRequired          = errors.New("name is required")
+	ErrNameConflict          = errors.New("a shift with this name already exists")
+	ErrInvalidShiftType      = errors.New("shift_type must be: fixed or flexible")
+	ErrFixedTimeRequired     = errors.New("start_time and end_time are required for fixed shifts")
+	ErrFlexHoursRequired     = errors.New("weekly_hours_target is required for flexible shifts")
+	ErrInvalidAssigneeType   = errors.New("assignee_type must be: organization, department, or employee")
+	ErrAssigneeIDRequired    = errors.New("assignee_id is required")
 	ErrEffectiveDateRequired = errors.New("effective_date is required")
 )

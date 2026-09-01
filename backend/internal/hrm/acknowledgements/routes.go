@@ -18,8 +18,8 @@ func RegisterRoutes(router fiber.Router, handler *Handler, permFn PermissionFunc
 	// Named/static sub-routes BEFORE /:ackId
 	ag.Get("/entity/:type/:id", permFn("hrm.acknowledgements.view"), handler.ListByEntity)
 	ag.Post("/:ackId/acknowledge", permFn("hrm.acknowledgements.respond"), handler.Respond)
-	ag.Post("/:ackId/decline",    permFn("hrm.acknowledgements.respond"), handler.Decline)
-	ag.Get("/",       permFn("hrm.acknowledgements.view"),   handler.List)
-	ag.Post("/",      permFn("hrm.acknowledgements.manage"), handler.Create)
-	ag.Get("/:ackId", permFn("hrm.acknowledgements.view"),   handler.Get)
+	ag.Post("/:ackId/decline", permFn("hrm.acknowledgements.respond"), handler.Decline)
+	ag.Get("/", permFn("hrm.acknowledgements.view"), handler.List)
+	ag.Post("/", permFn("hrm.acknowledgements.manage"), handler.Create)
+	ag.Get("/:ackId", permFn("hrm.acknowledgements.view"), handler.Get)
 }

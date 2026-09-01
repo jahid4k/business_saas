@@ -248,24 +248,31 @@ func (c LineCategory) IsValid() bool {
 // because NULL ("undecided") and 0 ("decided, nothing payable") are
 // genuinely different states.
 type Line struct {
-	ID              string           `db:"id"                json:"id"`
-	PublicID        string           `db:"public_id"          json:"public_id"`
-	ClaimID         string           `db:"claim_id"           json:"claim_id"`
-	Category        LineCategory     `db:"category"           json:"category"`
-	Description     *string          `db:"description"        json:"description,omitempty"`
-	ExpenseDate     time.Time        `db:"expense_date"       json:"expense_date"`
-	Amount          decimal.Decimal  `db:"amount"             json:"amount"`
-	Currency        string           `db:"currency"           json:"currency"`
-	ExchangeRate    decimal.Decimal  `db:"exchange_rate"      json:"exchange_rate"`
-	BaseAmount      decimal.Decimal  `db:"base_amount"        json:"base_amount"`
-	ApprovedAmount  *decimal.Decimal `db:"approved_amount"    json:"approved_amount,omitempty"`
-	ReceiptURL      *string          `db:"receipt_url"        json:"receipt_url,omitempty"`
-	OCRRaw          []byte           `db:"ocr_raw"            json:"-"`
-	MileageDistance *decimal.Decimal `db:"mileage_distance"   json:"mileage_distance,omitempty"`
-	MileageRateID   *string          `db:"mileage_rate_id"    json:"mileage_rate_id,omitempty"`
-	DisplayOrder    int              `db:"display_order"      json:"display_order"`
-	CreatedAt       time.Time        `db:"created_at"         json:"created_at"`
-	UpdatedAt       time.Time        `db:"updated_at"         json:"updated_at"`
+	ID           string          `db:"id"                json:"id"`
+	PublicID     string          `db:"public_id"          json:"public_id"`
+	ClaimID      string          `db:"claim_id"           json:"claim_id"`
+	Category     LineCategory    `db:"category"           json:"category"`
+	Description  *string         `db:"description"        json:"description,omitempty"`
+	ExpenseDate  time.Time       `db:"expense_date"       json:"expense_date"`
+	Amount       decimal.Decimal `db:"amount"             json:"amount"`
+	Currency     string          `db:"currency"           json:"currency"`
+	ExchangeRate decimal.Decimal `db:"exchange_rate"      json:"exchange_rate"`
+	// ExchangeRateDate is the fifth audit field (11B-1). Amount + Currency +
+	// ExchangeRate + BaseAmount were already stored; without the DATE a
+	// stored rate cannot be checked against the table it came from.
+	//
+	// ⚠ Nil on every line written before 11B-1, and nil on same-currency
+	// lines, which are not conversions at all. Nil never means "today".
+	ExchangeRateDate *time.Time       `db:"exchange_rate_date" json:"exchange_rate_date,omitempty"`
+	BaseAmount       decimal.Decimal  `db:"base_amount"        json:"base_amount"`
+	ApprovedAmount   *decimal.Decimal `db:"approved_amount"    json:"approved_amount,omitempty"`
+	ReceiptURL       *string          `db:"receipt_url"        json:"receipt_url,omitempty"`
+	OCRRaw           []byte           `db:"ocr_raw"            json:"-"`
+	MileageDistance  *decimal.Decimal `db:"mileage_distance"   json:"mileage_distance,omitempty"`
+	MileageRateID    *string          `db:"mileage_rate_id"    json:"mileage_rate_id,omitempty"`
+	DisplayOrder     int              `db:"display_order"      json:"display_order"`
+	CreatedAt        time.Time        `db:"created_at"         json:"created_at"`
+	UpdatedAt        time.Time        `db:"updated_at"         json:"updated_at"`
 
 	// DERIVED — the policy warnings this line raised, if any.
 	Violations []*PolicyViolation `db:"-" json:"violations,omitempty"`

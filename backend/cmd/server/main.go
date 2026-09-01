@@ -93,13 +93,18 @@ import (
 	crmtemplates "github.com/mridha/businesssaas/internal/crm/templates"
 
 	// ── Internal — HRM Phase 1 (Core Employee Management) ────────────────────
+	hrmanalytics "github.com/mridha/businesssaas/internal/hrm/analytics"
 	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmentities "github.com/mridha/businesssaas/internal/hrm/entities"
 	hrmexits "github.com/mridha/businesssaas/internal/hrm/exits"
+	hrmfx "github.com/mridha/businesssaas/internal/hrm/fx"
 	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
 	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmorgchart "github.com/mridha/businesssaas/internal/hrm/orgchart"
 	hrmpositions "github.com/mridha/businesssaas/internal/hrm/positions"
 	hrmreports "github.com/mridha/businesssaas/internal/hrm/reports"
+	hrmsuccession "github.com/mridha/businesssaas/internal/hrm/succession"
 
 	// ── Internal — HRM Group A (Config / Setup) ───────────────────────────────
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
@@ -599,6 +604,53 @@ func main() {
 	schedulerHandler := scheduler.NewHandler(schedulerSvc)
 	ticketsHandler := tickets.NewHandler(ticketsSvc)
 	hrmExitsHandler := hrmexits.NewHandler(hrmExitsSvc, authzSvc, hrmScopeResolver)
+	// The org chart takes no scope resolver: it is org-wide by design, so
+	// nothing here calls ResolveScope. See migration 00122's header.
+	hrmOrgChartSvc := hrmorgchart.NewService(hrmorgchart.NewRepository(pgPool))
+	hrmOrgChartHandler := hrmorgchart.NewHandler(hrmOrgChartSvc, authzSvc)
+
+	hrmSuccessionSvc := hrmsuccession.NewService(hrmsuccession.NewRepository(pgPool))
+	hrmSuccessionHandler := hrmsuccession.NewHandler(hrmSuccessionSvc, authzSvc)
+
+	hrmAnalyticsSvc := hrmanalytics.NewService(hrmanalytics.NewRepository(pgPool))
+	hrmAnalyticsHandler := hrmanalytics.NewHandler(hrmAnalyticsSvc, authzSvc)
+
+	hrmEntitiesSvc := hrmentities.NewService(hrmentities.NewRepository(pgPool))
+	hrmEntitiesHandler := hrmentities.NewHandler(hrmEntitiesSvc, authzSvc)
+
+	hrmFxSvc := hrmfx.NewService(hrmfx.NewRepository(pgPool))
+	hrmFxHandler := hrmfx.NewHandler(hrmFxSvc, authzSvc)
+
+	// 11B-1: give the two carried currency gaps a rate source.
+	//
+	// ⚠ Both are OPTIONAL attachments, and both degrade to their previous
+	// behaviour without one — expenses uses the caller's rate defaulting to
+	// 1, exits reports a foreign advance unconverted with its reason. Neither
+	// ever falls back to parity.
+	//
+	// hrmFxSvc satisfies expenses.RateSource and exits.RateSource
+	// structurally through RateAsOfPrimitive; hrmEntitiesSvc satisfies
+	// expenses.BaseCurrencySource through BaseCurrency. No adapter, and
+	// neither consumer imports the provider.
+	hrmExpensesSvc.SetRateSource(hrmFxSvc, hrmEntitiesSvc)
+	hrmExitsSvc.SetRateSource(hrmFxSvc)
+
+	// 11B-2: entity re-scoping. hrmEntitiesSvc satisfies every one of these
+	// consumer-declared interfaces structurally, through BaseCurrency and
+	// CountryForEmployee — primitives only, no adapter, and no consumer
+	// imports internal/hrm/entities.
+	//
+	// ⚠ EVERY ONE OF THESE IS OPTIONAL AND EVERY ONE FAILS OPEN. Without
+	// them: payroll uses the historical BDT default, statutory applies every
+	// active rule to everybody, and clearance/severance/award currencies fall
+	// back as they always did. Entity scoping that failed closed would empty
+	// the payroll run and zero the statutory deductions of every organization
+	// in this database, none of which has a legal entity configured.
+	hrmPayslipsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmStatutorySvc.SetCountryResolver(hrmEntitiesSvc)
+	hrmExitsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmTerminationsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmAwardsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
 	kbHandler := kb.NewHandler(kbSvc)
 	notifHandler := notifications.NewHandler(notifSvc)
 
@@ -748,6 +800,11 @@ func main() {
 	tickets.RegisterRoutes(api, ticketsHandler, permFn, requireAuth, requireOrgMatch)
 	kb.RegisterRoutes(api, kbHandler, permFn, requireAuth, requireOrgMatch)
 	hrmexits.RegisterRoutes(api, hrmExitsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmorgchart.RegisterRoutes(api, hrmOrgChartHandler, permFn, requireAuth, requireOrgMatch)
+	hrmsuccession.RegisterRoutes(api, hrmSuccessionHandler, permFn, requireAuth, requireOrgMatch)
+	hrmanalytics.RegisterRoutes(api, hrmAnalyticsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmentities.RegisterRoutes(api, hrmEntitiesHandler, permFn, requireAuth, requireOrgMatch)
+	hrmfx.RegisterRoutes(api, hrmFxHandler, permFn, requireAuth, requireOrgMatch)
 	notifications.RegisterRoutes(api, notifHandler, requireAuth)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
@@ -1017,6 +1074,30 @@ func main() {
 			return n, fmt.Errorf("exit access revocation sweep: %w", err)
 		}
 		return n, nil
+	})
+
+	// analytics.nightly_snapshot — instance-wide, the
+	// benefits.activate_pending_enrollments shape.
+	//
+	// ⚠ THIS JOB IS THE ONLY THING IN THE ANALYTICS PATH THAT READS OLTP.
+	// Every analytics endpoint reads hrm_headcount_snapshots and
+	// hrm_attrition_facts only, which is what makes a metric stable between
+	// two refreshes of the same page and stops a correction to an old record
+	// silently rewriting last March.
+	//
+	// ⚠ Facts are built BEFORE snapshots inside RunSnapshot, because the
+	// snapshot's leaver counts are read from the facts. Reversing the order
+	// would report a month with no leavers and then never correct it — the
+	// snapshot row for that date already exists and the next run writes a
+	// different date.
+	//
+	// Runs at 00:30 so a day's snapshot is taken after that day has ended.
+	schedulerSvc.Register("analytics.nightly_snapshot", "30 0 * * *", func(jCtx context.Context) (int, error) {
+		res, err := hrmAnalyticsSvc.RunSnapshot(jCtx, time.Now())
+		if err != nil {
+			return 0, fmt.Errorf("analytics nightly snapshot: %w", err)
+		}
+		return res.RowsWritten + res.FactsWritten, nil
 	})
 
 	<-quit

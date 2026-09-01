@@ -39,7 +39,9 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) ListTypes(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	activeOnly := strings.ToLower(c.Query("active")) == "true"
 	result, err := h.service.ListTypes(c.Context(), orgID, activeOnly)
 	if err != nil {
@@ -76,13 +78,21 @@ func (h *Handler) ListTypes(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types [post]
 func (h *Handler) CreateType(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateWarningTypeRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	wt, err := h.service.CreateType(c.Context(), orgID, userID, req)
-	if err != nil { return h.typeError(c, err) }
+	if err != nil {
+		return h.typeError(c, err)
+	}
 	return response.Created(c, fiber.Map{"warning_type": wt}, "Warning type created")
 }
 
@@ -105,9 +115,13 @@ func (h *Handler) CreateType(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/{typeId} [get]
 func (h *Handler) GetType(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	wt, err := h.service.GetType(c.Context(), orgID, c.Params("typeId"))
-	if err != nil { return h.typeError(c, err) }
+	if err != nil {
+		return h.typeError(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning_type": wt}, "OK")
 }
 
@@ -134,11 +148,17 @@ func (h *Handler) GetType(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/{typeId} [patch]
 func (h *Handler) UpdateType(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateWarningTypeRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	wt, err := h.service.UpdateType(c.Context(), orgID, c.Params("typeId"), req)
-	if err != nil { return h.typeError(c, err) }
+	if err != nil {
+		return h.typeError(c, err)
+	}
 	return response.OK(c, fiber.Map{"warning_type": wt}, "Warning type updated")
 }
 
@@ -162,8 +182,12 @@ func (h *Handler) UpdateType(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/{typeId} [delete]
 func (h *Handler) DeleteType(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.DeleteType(c.Context(), orgID, c.Params("typeId")); err != nil { return h.typeError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.DeleteType(c.Context(), orgID, c.Params("typeId")); err != nil {
+		return h.typeError(c, err)
+	}
 	return response.NoContent(c)
 }
 
@@ -186,7 +210,9 @@ func (h *Handler) DeleteType(c fiber.Ctx) error {
 func (h *Handler) ListEscalationRules(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	result, err := h.service.ListEscalationRules(c.Context(), orgID, c.Query("warning_type_id"))
 	if err != nil {
 		log.Error("warningtypes: ListEscalationRules", slog.Any("error", err))
@@ -221,13 +247,21 @@ func (h *Handler) ListEscalationRules(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/escalations [post]
 func (h *Handler) CreateEscalationRule(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateEscalationRuleRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	ru, err := h.service.CreateEscalationRule(c.Context(), orgID, userID, req)
-	if err != nil { return h.ruleError(c, err) }
+	if err != nil {
+		return h.ruleError(c, err)
+	}
 	return response.Created(c, fiber.Map{"rule": ru}, "Escalation rule created")
 }
 
@@ -253,11 +287,17 @@ func (h *Handler) CreateEscalationRule(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/escalations/{ruleId} [patch]
 func (h *Handler) UpdateEscalationRule(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateEscalationRuleRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	ru, err := h.service.UpdateEscalationRule(c.Context(), orgID, c.Params("ruleId"), req)
-	if err != nil { return h.ruleError(c, err) }
+	if err != nil {
+		return h.ruleError(c, err)
+	}
 	return response.OK(c, fiber.Map{"rule": ru}, "Escalation rule updated")
 }
 
@@ -280,8 +320,12 @@ func (h *Handler) UpdateEscalationRule(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/warning-types/escalations/{ruleId} [delete]
 func (h *Handler) DeleteEscalationRule(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.DeleteEscalationRule(c.Context(), orgID, c.Params("ruleId")); err != nil { return h.ruleError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.DeleteEscalationRule(c.Context(), orgID, c.Params("ruleId")); err != nil {
+		return h.ruleError(c, err)
+	}
 	return response.NoContent(c)
 }
 

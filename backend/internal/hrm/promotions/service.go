@@ -46,24 +46,40 @@ func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Servic
 func (s *serviceImpl) List(ctx context.Context, orgID string, filter PromotionListFilter) (*PromotionListResponse, error) {
 	filter.Normalise()
 	list, err := s.repo.FindAll(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("promotions: List: %w", err) }
-	if list == nil { list = []*Promotion{} }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: List: %w", err)
+	}
+	if list == nil {
+		list = []*Promotion{}
+	}
 	total, err := s.repo.Count(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("promotions: List: count: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: List: count: %w", err)
+	}
 	return &PromotionListResponse{Promotions: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("promotions: Get: %w", err) }
-	if p == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Get: %w", err)
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
 	return p, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy string, req CreatePromotionRequest) (*Promotion, error) {
-	if strings.TrimSpace(req.ToPositionID) == "" { return nil, ErrToPositionRequired }
-	if strings.TrimSpace(req.EffectiveDate) == "" { return nil, ErrEffectiveDateReq }
-	if _, err := time.Parse(dateLayout, req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+	if strings.TrimSpace(req.ToPositionID) == "" {
+		return nil, ErrToPositionRequired
+	}
+	if strings.TrimSpace(req.EffectiveDate) == "" {
+		return nil, ErrEffectiveDateReq
+	}
+	if _, err := time.Parse(dateLayout, req.EffectiveDate); err != nil {
+		return nil, ErrInvalidDate
+	}
 
 	// Snapshot current employee state
 	var fromPosID, fromDeptID *string
@@ -84,43 +100,77 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy s
 		EffectiveDate: req.EffectiveDate, Reason: req.Reason, Notes: req.Notes,
 		Status: StatusDraft, CreatedBy: createdBy,
 	}
-	if err := s.repo.Create(ctx, p); err != nil { return nil, fmt.Errorf("promotions: Create: %w", err) }
+	if err := s.repo.Create(ctx, p); err != nil {
+		return nil, fmt.Errorf("promotions: Create: %w", err)
+	}
 	return p, nil
 }
 
 func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string, req UpdatePromotionRequest) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("promotions: Update: %w", err) }
-	if p == nil { return nil, ErrNotFound }
-	if p.Status != StatusDraft { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Update: %w", err)
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	if p.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
 
-	if req.ToPositionID != nil { p.ToPositionID = *req.ToPositionID }
-	if req.ToDepartmentID != nil { p.ToDepartmentID = req.ToDepartmentID }
-	if req.ToSalaryStructureID != nil { p.ToSalaryStructureID = req.ToSalaryStructureID }
-	if req.NewBasicPay != nil { p.NewBasicPay = req.NewBasicPay }
+	if req.ToPositionID != nil {
+		p.ToPositionID = *req.ToPositionID
+	}
+	if req.ToDepartmentID != nil {
+		p.ToDepartmentID = req.ToDepartmentID
+	}
+	if req.ToSalaryStructureID != nil {
+		p.ToSalaryStructureID = req.ToSalaryStructureID
+	}
+	if req.NewBasicPay != nil {
+		p.NewBasicPay = req.NewBasicPay
+	}
 	if req.EffectiveDate != nil {
-		if _, err := time.Parse(dateLayout, *req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+		if _, err := time.Parse(dateLayout, *req.EffectiveDate); err != nil {
+			return nil, ErrInvalidDate
+		}
 		p.EffectiveDate = *req.EffectiveDate
 	}
-	if req.Reason != nil { p.Reason = req.Reason }
-	if req.Notes != nil { p.Notes = req.Notes }
-	if req.DocumentID != nil { p.DocumentID = req.DocumentID }
-	if err := s.repo.Update(ctx, p); err != nil { return nil, fmt.Errorf("promotions: Update: %w", err) }
+	if req.Reason != nil {
+		p.Reason = req.Reason
+	}
+	if req.Notes != nil {
+		p.Notes = req.Notes
+	}
+	if req.DocumentID != nil {
+		p.DocumentID = req.DocumentID
+	}
+	if err := s.repo.Update(ctx, p); err != nil {
+		return nil, fmt.Errorf("promotions: Update: %w", err)
+	}
 	return p, nil
 }
 
 func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("promotions: Submit: %w", err) }
-	if p == nil { return nil, ErrNotFound }
-	if p.Status != StatusDraft { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Submit: %w", err)
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	if p.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
 
 	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypePromotion)
 	if tErr == nil && tmpl != nil {
 		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
 			TemplateID: tmpl.ID, EntityType: "promotion", EntityID: p.ID, RequestedBy: submittedBy,
 		})
-		if iErr != nil { return nil, fmt.Errorf("promotions: Submit: creating approval instance: %w", iErr) }
+		if iErr != nil {
+			return nil, fmt.Errorf("promotions: Submit: creating approval instance: %w", iErr)
+		}
 		if err := s.repo.SetApprovalInstance(ctx, p.ID, inst.ID, StatusPendingApproval); err != nil {
 			return nil, fmt.Errorf("promotions: Submit: %w", err)
 		}
@@ -140,11 +190,19 @@ func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submit
 // HandleApprovalDecision reacts to the promotion's approval instance completing.
 func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
 	p, err := s.repo.FindByRef(ctx, orgID, "", entityID)
-	if err != nil { return fmt.Errorf("promotions: HandleApprovalDecision: %w", err) }
-	if p == nil { return ErrNotFound }
-	if p.Status != StatusPendingApproval { return nil }
+	if err != nil {
+		return fmt.Errorf("promotions: HandleApprovalDecision: %w", err)
+	}
+	if p == nil {
+		return ErrNotFound
+	}
+	if p.Status != StatusPendingApproval {
+		return nil
+	}
 	status := StatusApproved
-	if !approved { status = StatusRejected }
+	if !approved {
+		status = StatusRejected
+	}
 	if err := s.repo.UpdateStatus(ctx, p.ID, status); err != nil {
 		return fmt.Errorf("promotions: HandleApprovalDecision: %w", err)
 	}
@@ -153,10 +211,18 @@ func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityI
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("promotions: Cancel: %w", err) }
-	if p == nil { return nil, ErrNotFound }
-	if p.Status == StatusApplied { return nil, ErrAlreadyApplied }
-	if p.Status == StatusCancelled { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Cancel: %w", err)
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	if p.Status == StatusApplied {
+		return nil, ErrAlreadyApplied
+	}
+	if p.Status == StatusCancelled {
+		return nil, ErrWrongStatus
+	}
 	if err := s.repo.UpdateStatus(ctx, p.ID, StatusCancelled); err != nil {
 		return nil, fmt.Errorf("promotions: Cancel: %w", err)
 	}
@@ -170,13 +236,23 @@ func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string)
 //  3. Insert a new salary record if pay is changing (append-only pattern from A1)
 func (s *serviceImpl) Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Promotion, error) {
 	p, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("promotions: Apply: %w", err) }
-	if p == nil { return nil, ErrNotFound }
-	if p.Status == StatusApplied { return nil, ErrAlreadyApplied }
-	if p.Status != StatusApproved { return nil, ErrNotApproved }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Apply: %w", err)
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	if p.Status == StatusApplied {
+		return nil, ErrAlreadyApplied
+	}
+	if p.Status != StatusApproved {
+		return nil, ErrNotApproved
+	}
 
 	tx, err := s.db.Begin(ctx)
-	if err != nil { return nil, fmt.Errorf("promotions: Apply: begin tx: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("promotions: Apply: begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	// 1. Mark promotion applied
@@ -212,7 +288,9 @@ func (s *serviceImpl) Apply(ctx context.Context, orgID, employeeID, ref, applied
 		}
 	}
 
-	if err := tx.Commit(ctx); err != nil { return nil, fmt.Errorf("promotions: Apply: commit: %w", err) }
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("promotions: Apply: commit: %w", err)
+	}
 
 	now := time.Now()
 	p.Status = StatusApplied

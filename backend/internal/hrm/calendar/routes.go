@@ -13,9 +13,9 @@ type PermissionFunc func(permission string) fiber.Handler
 func RegisterRoutes(router fiber.Router, handler *Handler, permFn PermissionFunc, requireAuth, requireOrgMatch fiber.Handler) {
 	cal := router.Group("/organizations/:orgId/hrm/calendar", requireAuth, requireOrgMatch)
 	cal.Post("/:eventId/cancel", permFn("hrm.calendar.manage"), handler.Cancel)
-	cal.Post("/:eventId/rsvp",   permFn("hrm.calendar.manage"), handler.RequestRSVP)
-	cal.Get("/",         permFn("hrm.calendar.view"),   handler.List)
-	cal.Post("/",        permFn("hrm.calendar.manage"), handler.Create)
-	cal.Get("/:eventId",  permFn("hrm.calendar.view"),   handler.Get)
-	cal.Patch("/:eventId",permFn("hrm.calendar.manage"), handler.Update)
+	cal.Post("/:eventId/rsvp", permFn("hrm.calendar.manage"), handler.RequestRSVP)
+	cal.Get("/", permFn("hrm.calendar.view"), handler.List)
+	cal.Post("/", permFn("hrm.calendar.manage"), handler.Create)
+	cal.Get("/:eventId", permFn("hrm.calendar.view"), handler.Get)
+	cal.Patch("/:eventId", permFn("hrm.calendar.manage"), handler.Update)
 }

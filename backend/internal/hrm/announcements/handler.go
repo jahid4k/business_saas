@@ -13,6 +13,7 @@ import (
 )
 
 type Handler struct{ service Service }
+
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 // List godoc
@@ -33,9 +34,14 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) List(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.List(c.Context(), orgID, c.Query("category"), c.Query("status"))
-	if err != nil { log.Error("announcements: List", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("announcements: List", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -56,31 +62,49 @@ func (h *Handler) List(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/announcements [post]
 func (h *Handler) Create(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateAnnouncementRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	a, err := h.service.Create(c.Context(), orgID, userID, req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.Created(c, fiber.Map{"announcement": a}, "Announcement created")
 }
 
 func (h *Handler) Get(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	a, err := h.service.Get(c.Context(), orgID, c.Params("announcementId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"announcement": a}, "OK")
 }
 
 func (h *Handler) Update(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateAnnouncementRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	a, err := h.service.Update(c.Context(), orgID, c.Params("announcementId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"announcement": a}, "Announcement updated")
 }
 
@@ -101,39 +125,61 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/announcements/{announcementId}/publish [post]
 func (h *Handler) Publish(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	a, err := h.service.Publish(c.Context(), orgID, c.Params("announcementId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"announcement": a}, "Announcement published")
 }
 
 func (h *Handler) Schedule(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	a, err := h.service.Schedule(c.Context(), orgID, c.Params("announcementId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"announcement": a}, "Announcement scheduled")
 }
 
 func (h *Handler) Archive(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	a, err := h.service.Archive(c.Context(), orgID, c.Params("announcementId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"announcement": a}, "Announcement archived")
 }
 
 func (h *Handler) err(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrNotFound): return response.NotFound(c, "ANNOUNCEMENT_NOT_FOUND", "Announcement not found")
-	case errors.Is(err, ErrTitleRequired): return response.BadRequest(c, "TITLE_REQUIRED", "title is required")
-	case errors.Is(err, ErrContentRequired): return response.BadRequest(c, "CONTENT_REQUIRED", "content is required")
-	case errors.Is(err, ErrInvalidCategory): return response.BadRequest(c, "INVALID_CATEGORY", "invalid category")
-	case errors.Is(err, ErrWrongStatus): return response.Conflict(c, "WRONG_STATUS", "Action not allowed in current announcement status")
-	case errors.Is(err, ErrAlreadyPublished): return response.Conflict(c, "ALREADY_PUBLISHED", "Announcement is already published")
-	default: log.Error("announcements: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrNotFound):
+		return response.NotFound(c, "ANNOUNCEMENT_NOT_FOUND", "Announcement not found")
+	case errors.Is(err, ErrTitleRequired):
+		return response.BadRequest(c, "TITLE_REQUIRED", "title is required")
+	case errors.Is(err, ErrContentRequired):
+		return response.BadRequest(c, "CONTENT_REQUIRED", "content is required")
+	case errors.Is(err, ErrInvalidCategory):
+		return response.BadRequest(c, "INVALID_CATEGORY", "invalid category")
+	case errors.Is(err, ErrWrongStatus):
+		return response.Conflict(c, "WRONG_STATUS", "Action not allowed in current announcement status")
+	case errors.Is(err, ErrAlreadyPublished):
+		return response.Conflict(c, "ALREADY_PUBLISHED", "Announcement is already published")
+	default:
+		log.Error("announcements: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }

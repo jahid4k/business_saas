@@ -28,51 +28,84 @@ type serviceImpl struct {
 	repo Repository
 	db   *pgxpool.Pool
 }
+
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, ackType, status string) (*AckListResponse, error) {
 	list, err := s.repo.FindAll(ctx, orgID, employeeID, ackType, status)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: List: %w", err) }
-	if list == nil { list = []*Acknowledgement{} }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: List: %w", err)
+	}
+	if list == nil {
+		list = []*Acknowledgement{}
+	}
 	return &AckListResponse{Acknowledgements: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) ListByEntity(ctx context.Context, orgID, ackType, ackID string) (*AckListResponse, error) {
 	list, err := s.repo.FindByEntity(ctx, orgID, ackType, ackID)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: ListByEntity: %w", err) }
-	if list == nil { list = []*Acknowledgement{} }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: ListByEntity: %w", err)
+	}
+	if list == nil {
+		list = []*Acknowledgement{}
+	}
 	return &AckListResponse{Acknowledgements: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, ref string) (*Acknowledgement, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: Get: %w", err) }
-	if a == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: Get: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
 	return a, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, requestedBy string, req CreateAcknowledgementRequest) (*Acknowledgement, error) {
-	if strings.TrimSpace(req.EmployeeID) == "" { return nil, ErrEmployeeIDRequired }
-	if strings.TrimSpace(req.EntityTitle) == "" { return nil, ErrEntityTitleRequired }
-	if !req.AcknowledgeableType.IsValid() { return nil, ErrInvalidAckType }
-	if strings.TrimSpace(req.AcknowledgeableID) == "" { return nil, ErrAckIDRequired }
-	if req.ExpiresAt != nil { if _, err := time.Parse(dateLayout, *req.ExpiresAt); err != nil { return nil, ErrInvalidDate } }
+	if strings.TrimSpace(req.EmployeeID) == "" {
+		return nil, ErrEmployeeIDRequired
+	}
+	if strings.TrimSpace(req.EntityTitle) == "" {
+		return nil, ErrEntityTitleRequired
+	}
+	if !req.AcknowledgeableType.IsValid() {
+		return nil, ErrInvalidAckType
+	}
+	if strings.TrimSpace(req.AcknowledgeableID) == "" {
+		return nil, ErrAckIDRequired
+	}
+	if req.ExpiresAt != nil {
+		if _, err := time.Parse(dateLayout, *req.ExpiresAt); err != nil {
+			return nil, ErrInvalidDate
+		}
+	}
 	a := &Acknowledgement{
 		OrgID: orgID, EmployeeID: req.EmployeeID,
 		AcknowledgeableType: req.AcknowledgeableType, AcknowledgeableID: req.AcknowledgeableID,
 		EntityTitle: req.EntityTitle, SignatureRequired: req.SignatureRequired,
 		ExpiresAt: req.ExpiresAt,
-		Status: StatusPending, RequestedBy: requestedBy,
+		Status:    StatusPending, RequestedBy: requestedBy,
 	}
-	if err := s.repo.Create(ctx, a); err != nil { return nil, fmt.Errorf("acknowledgements: Create: %w", err) }
+	if err := s.repo.Create(ctx, a); err != nil {
+		return nil, fmt.Errorf("acknowledgements: Create: %w", err)
+	}
 	return a, nil
 }
 
 func (s *serviceImpl) Respond(ctx context.Context, orgID, ref string, req RespondRequest) (*Acknowledgement, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: Respond: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status != StatusPending { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: Respond: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status != StatusPending {
+		return nil, ErrWrongStatus
+	}
 	if a.SignatureRequired && (req.SignatureData == nil || strings.TrimSpace(*req.SignatureData) == "") {
 		return nil, ErrSignatureRequired
 	}
@@ -89,9 +122,15 @@ func (s *serviceImpl) Respond(ctx context.Context, orgID, ref string, req Respon
 
 func (s *serviceImpl) Decline(ctx context.Context, orgID, ref string, req DeclineRequest) (*Acknowledgement, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("acknowledgements: Decline: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status != StatusPending { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("acknowledgements: Decline: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status != StatusPending {
+		return nil, ErrWrongStatus
+	}
 	if err := s.repo.Decline(ctx, a.ID, req.Reason); err != nil {
 		return nil, fmt.Errorf("acknowledgements: Decline: %w", err)
 	}

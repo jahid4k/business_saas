@@ -511,7 +511,50 @@ Pulls from seven modules — this is the architectural stress test for everythin
 
 ---
 
-## PHASE 10 — Org Chart, Succession, Analytics
+## PHASE 10 — Org Chart, Succession, Analytics ✅ DONE (2026-08-31)
+
+> **Status: ✅ PHASE 10 COMPLETE — all 3 slices shipped, all uncommitted.**
+> 10A Org chart ✅ (r38, `internal/hrm/orgchart`, migrations `00121`/`00122`) ·
+> 10B Succession ✅ (r39, `internal/hrm/succession`, `00123`/`00124`) ·
+> 10C People analytics ✅ (r40, `internal/hrm/analytics`, `00125`/`00126`)
+>
+> **10C resolved:** the read path touches ONLY `hrm_headcount_snapshots` and
+> `hrm_attrition_facts`; the `analytics.nightly_snapshot` job is the sole OLTP reader and builds
+> facts BEFORE snapshots. `hrm_metric_definitions` names a Go computation from a CHECKed
+> vocabulary and never parses its `formula_statement` — deliberately not a second formula engine
+> beside `evalFormula`. DEI suppression is four rules (primary, secondary, total withheld,
+> last-group-standing), binds `view_all` holders, and no permission lifts it. Small-group pay is
+> withheld at WRITE time so it is never stored. `is_regretted` is nullable and unknown stays
+> unknown — Phase 9's rehire flag has its second reader. The export carries no demographic column.
+>
+> ⚠ **Five permission keys, not the four named below.** `hrm.analytics.manage` was added because a
+> metric definition nobody may write is a constant with extra steps, and overloading `export` to
+> mean "may redefine attrition" would have been worse.
+>
+> ⚠ **Scheduled report DELIVERY is still not built.** Resend is wired so it is unblocked, but a
+> delivery mechanism with nothing anybody has asked to receive is speculative.
+>
+> ⚠ **The confidentiality enabler this plan names below does not exist.** "Phase 1's field-level
+> filtering" was never built — the same situation as Phase 9's training bond. 10B used **two read
+> paths returning two types** instead, the shape already used three times (5C 360 anonymity, 8C
+> internal ticket comments, 9C exit interviews) and stronger than filtering, because the subject's
+> query never selects the confidential columns at all.
+>
+> **10B resolved:** potential is its own column with a NOT NULL rationale and no derivation path
+> from performance; the 9-box number is computed, never stored; the FK runs
+> candidate → development_plan and never back, and plans have no `plan_type`, because either
+> direction would leak a nomination to its subject; `view_confidential` is NOT granted to manager;
+> flight risk is four derived, explained signals with no score and no table.
+>
+> ⚠ **Five tables, not the three named below.** The 9-box is per-employee and independent of any
+> nomination — you assess the population, then nominate — so folding it into
+> `hrm_succession_candidates` would force a nomination to exist before anyone could be assessed.
+> Plan items are their own table; flight risk needed no table at all.
+>
+> **10A resolved:** `manager_id` is written back inside the relationship transaction and cleared
+> when a solid line ends; only `solid` grants data access; cycle detection refuses indirect loops
+> (`MaxChainDepth = 64`); the chart is **not** scope-tiered and must never call `ResolveScope`;
+> `GetChart` reads `manager_id` deliberately so drift is visible rather than hidden.
 
 **Org Chart** — `hrm_reporting_relationships` as an effective-dated table with
 `relationship_type` (`solid` / `dotted` / `functional` / `project`). Does **not** delete
@@ -536,7 +579,55 @@ delivery needs EMAIL SENDING.
 
 ---
 
-## PHASE 11 — Multi-country / Multi-currency
+## PHASE 11 — Multi-country / Multi-currency ✅ DONE (2026-09-01)
+
+> **Status: ✅ PHASE 11 COMPLETE — and with it the ENTIRE HRM EXTENDED BUILD PLAN.**
+> 11A Legal entities ✅ (r41, `internal/hrm/entities`, `00127`/`00128`) ·
+> 11B-1 FX rates ✅ (r42, `internal/hrm/fx`, `00129`/`00130`) ·
+> 11B-2 Entity re-scoping ✅ (r43, `00131`/`00132`/`00133`)
+>
+> **11B-2 resolved:** statutory rules now narrow to the employee's country — fixing a live defect
+> where a multi-country org applied EVERY country's deductions to everyone.
+> `hrm_payslip_runs.legal_entity_id` has its first reader. Analytics populates the `legal_entity`
+> dimension. All 6 hardcoded `currency := "BDT"` sites are gone.
+>
+> ⚠ **Everything fails OPEN.** Narrowing wrongly means withholding nothing or paying nobody — both
+> worse than the defect. Rules narrow only when a LEGAL ENTITY declared a country (never
+> `organizations.country`, a profile field); a country with no rules falls back to the full set; a
+> run with no entity covers the whole organization.
+>
+> ⚠ **`00133` was discovered by a test:** `uq_hrm_pr_org_month_regular` prevented a multi-entity org
+> from running its German and British payrolls in the same month.
+>
+> ⚠ **`hrm.entities.view_all` is an ordinary permission, not a fourth scope tier** (r38), so
+> `TestPermissions_ScopeTiersSeeded` is untouched.
+>
+> ⚠ **11B was sliced in two** (decided with you): 11B-1 is additive — the FX table and the two
+> carried gap closures; 11B-2 is surgery on payroll and statutory resolution, the code that has
+> produced five money defects. 11B-1 is a clean stopping point.
+>
+> **11B-1 resolved:** `hrm_exchange_rates` effective-dated (`MAX(rate_date) <= asOf`), rate stored
+> `NUMERIC(18,8)` because a rate is not money. Never store converted-only — all five audit fields,
+> enforced all-or-nothing by `chk_hrm_esl_conversion_complete`. **With no rate nothing converts,
+> and never at parity**: 9B's refusal survives intact. A caller-supplied rate still wins; the
+> lookup is the fallback. Same-currency records no conversion. Inverted rates report
+> `direction: inverted`.
+>
+> ⚠ **Still open for 11B-2:** `ListActiveRules` ignores `country_code` entirely, so a multi-country
+> org applies every country's statutory rules to everyone; `hrm_payslip_runs.legal_entity_id` has
+> no reader; `currency := "BDT"` is hardcoded in 6 places.
+>
+> **11A resolved:** `hrm_legal_entities` extended in place (never dropped — it holds 0.4 rows and
+> 39 FKs point at it); `hrm_country_configs` and `hrm_locations` created; `hrm_employees.location_id`
+> added, nullable. Resolution is a fallback chain **entity → org default → organization**, applied
+> **field by field** so a half-populated entity cannot be silently relocated, with every resolved
+> value carrying its `source`. The first entity becomes the default automatically and unsetting the
+> default is refused. Country configs are DEFAULTS with every column nullable, attached to the
+> RESOLVED country.
+>
+> ⚠ **All 39 `legal_entity_id` columns stay nullable and un-backfilled**, and an
+> `information_schema` test asserts it. An org with no entities — every org in this database — is
+> completely unaffected, which is the regression guard for the whole phase.
 
 Not a module — a legal-entity layer between organization and employee. Phase 0.4 already
 planted `legal_entity_id` and `currency`, so this phase writes logic rather than schema surgery.
@@ -545,7 +636,10 @@ planted `legal_entity_id` and `currency`, so this phase writes logic rather than
 Payroll runs, statutory resolution, and analytics views all re-scope to entity.
 Currency rule: **never store converted-only** — `original_amount` + `original_currency` +
 `rate` + `rate_date` + `converted_amount`.
-`view_all_entities` is a new permission scope tier inside org-level RBAC.
+⚠ `view_all_entities` is an **ordinary permission, not a fourth `authz.Scope` tier** (decided
+r38): entity membership is orthogonal to reporting hierarchy, and a fourth tier would force every
+scope-tiered resource to seed a new key or trip `TestPermissions_ScopeTiersSeeded`. Entity scoping
+is a `LegalEntityFilter` applied alongside the existing own/team/all tier.
 **Data residency is explicitly out of scope** and conflicts with the single-Postgres deployment
 model — that, not schema, is the real wall.
 

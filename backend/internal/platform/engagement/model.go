@@ -50,9 +50,15 @@ type Note struct {
 	Content     string      `db:"content"      json:"content"`
 	RelatedType RelatedType `db:"related_type" json:"related_type,omitempty"`
 	RelatedID   string      `db:"related_id"   json:"related_id,omitempty"`
-	CreatedBy   string      `db:"created_by"   json:"created_by"`
-	CreatedAt   time.Time   `db:"created_at"   json:"created_at"`
-	UpdatedAt   time.Time   `db:"updated_at"   json:"updated_at"`
+	// Nullable because a SYSTEM-generated note has no human author. Every
+	// internal/capture/* path creates leads with no acting user, and
+	// leads.CreateLead's duplicate-capture path writes a note with that same
+	// empty actor — created_by was NOT NULL, so those inserts failed and the
+	// error was discarded by the caller. See migration 00120; the identical
+	// fix for crm_leads.created_by is 00112.
+	CreatedBy *string   `db:"created_by"   json:"created_by,omitempty"`
+	CreatedAt time.Time `db:"created_at"   json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at"   json:"updated_at"`
 }
 
 type CreateNoteRequest struct {

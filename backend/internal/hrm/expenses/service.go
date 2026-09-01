@@ -14,6 +14,11 @@ import (
 )
 
 type Service interface {
+	// SetRateSource attaches the FX layer and the base-currency resolver
+	// (11B-1). Optional: without them a line uses the caller's rate,
+	// defaulting to 1, exactly as before.
+	SetRateSource(rates RateSource, base BaseCurrencySource)
+
 	// Config — hrm.expense_config, untiered.
 	ListPolicies(ctx context.Context, orgID string) ([]*Policy, error)
 	CreatePolicy(ctx context.Context, orgID, createdBy string, req CreatePolicyRequest) (*Policy, error)
@@ -66,10 +71,29 @@ type serviceImpl struct {
 	repo           Repository
 	approvalsSvc   approvals.Service
 	reimbursements ReimbursementCreator
+	// rates and baseCurrency are OPTIONAL (11B-1). Both nil means this
+	// package behaves exactly as it did before the FX table existed: the
+	// caller's rate is used, defaulting to 1. Every deployment path that has
+	// not wired them keeps working.
+	rates        RateSource
+	baseCurrency BaseCurrencySource
 }
 
 func NewService(repo Repository, approvalsSvc approvals.Service, reimbursementCreator ReimbursementCreator) Service {
 	return &serviceImpl{repo: repo, approvalsSvc: approvalsSvc, reimbursements: reimbursementCreator}
+}
+
+// WithRateSource attaches the FX layer and the base-currency resolver.
+//
+// Separate from NewService so the six existing construction sites keep
+// compiling unchanged, the SetBonusSource shape used throughout payslips.
+func (s *serviceImpl) WithRateSource(rates RateSource, base BaseCurrencySource) {
+	s.rates, s.baseCurrency = rates, base
+}
+
+// SetRateSource is the Service-level door to the same thing.
+func (s *serviceImpl) SetRateSource(rates RateSource, base BaseCurrencySource) {
+	s.WithRateSource(rates, base)
 }
 
 // ── Config ───────────────────────────────────────────────────────────────────
@@ -541,13 +565,21 @@ func (s *serviceImpl) AddLine(ctx context.Context, orgID, claimRef string, req C
 	if err != nil {
 		return nil, err
 	}
+	// ⚠ A CALLER-SUPPLIED RATE STILL WINS. An organization with a
+	// contractual or corporate-card rate must be able to state it, and
+	// overriding that with a table lookup would silently reprice their claim.
+	// The lookup is the FALLBACK, which is the change 11B-1 makes: before it,
+	// the caller's number was the only path and its absence meant 1.
 	rate := decimal.NewFromInt(1)
+	var rateDate *time.Time
+	callerSuppliedRate := false
 	if req.ExchangeRate != nil && strings.TrimSpace(*req.ExchangeRate) != "" {
 		r, err := decimal.NewFromString(strings.TrimSpace(*req.ExchangeRate))
 		if err != nil || !r.IsPositive() {
 			return nil, ErrInvalidExchangeRate
 		}
 		rate = r
+		callerSuppliedRate = true
 	}
 
 	amount, err := parseMoneyOrZero(req.Amount)
@@ -581,6 +613,22 @@ func (s *serviceImpl) AddLine(ctx context.Context, orgID, claimRef string, req C
 			line.Currency = mr.Currency
 		}
 	}
+
+	// The rate lookup happens HERE, after the mileage branch above, because
+	// a mileage line takes its currency from the mileage rate rather than
+	// from the request — looking up earlier would price it against the wrong
+	// pair.
+	if !callerSuppliedRate {
+		resolvedRate, resolvedDate, err := s.lookupRate(ctx, orgID, line.Currency, *spent)
+		if err != nil {
+			return nil, err
+		}
+		if resolvedDate != nil {
+			rate, rateDate = resolvedRate, resolvedDate
+		}
+	}
+	line.ExchangeRate = rate
+	line.ExchangeRateDate = rateDate
 
 	line.Amount = amount
 	line.BaseAmount = ConvertToBase(amount, rate)
@@ -953,4 +1001,40 @@ func (s *serviceImpl) RecoverAdvanceForSettlement(ctx context.Context, orgID, ad
 		return fmt.Errorf("expenses: RecoverAdvanceForSettlement: %w", err)
 	}
 	return nil
+}
+
+// lookupRate resolves the rate to convert a line's currency into the
+// organization's base currency on the expense date.
+//
+// ⚠ IT DEGRADES TO "NO CONVERSION" AT EVERY STEP, NEVER TO A GUESS. No FX
+// source wired, no base currency configured, the line already in base
+// currency, or no rate recorded for that pair on that date — each returns a
+// nil date, and AddLine then leaves the rate at 1 exactly as it did before
+// 11B-1 existed. The only way this function changes a stored figure is by
+// finding a real rate somebody recorded.
+func (s *serviceImpl) lookupRate(ctx context.Context, orgID, lineCurrency string, spent time.Time) (decimal.Decimal, *time.Time, error) {
+	one := decimal.NewFromInt(1)
+	if s.rates == nil || s.baseCurrency == nil {
+		return one, nil, nil
+	}
+	base, err := s.baseCurrency.BaseCurrency(ctx, orgID, nil)
+	if err != nil {
+		return one, nil, fmt.Errorf("expenses: lookupRate: base currency: %w", err)
+	}
+	base = strings.ToUpper(strings.TrimSpace(base))
+	line := strings.ToUpper(strings.TrimSpace(lineCurrency))
+	// ⚠ A currency converted to itself is not a conversion. Recording a rate
+	// of 1 with today's date would put a fabricated lookup into an audit
+	// trail whose entire purpose is to say where a number came from.
+	if base == "" || line == "" || base == line {
+		return one, nil, nil
+	}
+	rate, rateDate, ok, err := s.rates.RateAsOfPrimitive(ctx, orgID, line, base, spent)
+	if err != nil {
+		return one, nil, fmt.Errorf("expenses: lookupRate: %w", err)
+	}
+	if !ok || !rate.IsPositive() {
+		return one, nil, nil
+	}
+	return rate, &rateDate, nil
 }

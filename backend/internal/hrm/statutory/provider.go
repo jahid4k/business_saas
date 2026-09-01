@@ -84,8 +84,11 @@ func (SlabProvider) Compute(rule *Rule, slabs []*Slab, gross, basic, taxableGros
 	base := baseValue(rule.BaseVariable, gross, basic, taxableGross)
 
 	cfg := toSlabConfig(rule.BaseVariable, slabs)
-	amount := payslips.ComputeSlab(base.InexactFloat64(), cfg)
-	return decimal.NewFromFloat(amount).Round(2)
+	// Exact end to end: the base is already decimal, ComputeSlab now walks the
+	// brackets in decimal, and only the final Round(2) reduces precision. This
+	// used to go decimal -> InexactFloat64 -> float arithmetic -> back, which
+	// produced a one-paisa error on roughly 1 in 700 ordinary salary bases.
+	return payslips.ComputeSlab(base, cfg).Round(2)
 }
 
 // toSlabConfig adapts our effective-dated Slab rows (already filtered to the

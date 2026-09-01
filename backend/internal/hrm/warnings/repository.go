@@ -55,8 +55,12 @@ func scanW(row pgx.Row) (*EmployeeWarning, error) {
 		&w.ExpiresAt, &w.IsActive,
 		&w.IssuedAt, &w.Status, &w.CreatedBy, &w.CreatedAt, &w.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return w, nil
 }
 
@@ -88,12 +92,16 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter WarningList
 	q := fmt.Sprintf(`SELECT %s FROM hrm_employee_warnings WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("warnings: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*EmployeeWarning, 0)
 	for rows.Next() {
 		w, err := scanW(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, w)
 	}
 	return list, rows.Err()
@@ -111,7 +119,10 @@ func (r *repoImpl) Count(ctx context.Context, orgID string, filter WarningListFi
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error) {
 	q := `SELECT ` + sel + ` FROM hrm_employee_warnings WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanW(r.db.QueryRow(ctx, q, args...))
 }
 

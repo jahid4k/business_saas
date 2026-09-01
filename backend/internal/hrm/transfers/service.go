@@ -34,6 +34,7 @@ type serviceImpl struct {
 	db           *pgxpool.Pool
 	approvalsSvc approvals.Service
 }
+
 func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
 	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
@@ -41,24 +42,40 @@ func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Servic
 func (s *serviceImpl) List(ctx context.Context, orgID string, filter TransferListFilter) (*TransferListResponse, error) {
 	filter.Normalise()
 	list, err := s.repo.FindAll(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("transfers: List: %w", err) }
-	if list == nil { list = []*Transfer{} }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: List: %w", err)
+	}
+	if list == nil {
+		list = []*Transfer{}
+	}
 	total, err := s.repo.Count(ctx, orgID, filter)
-	if err != nil { return nil, fmt.Errorf("transfers: List: count: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: List: count: %w", err)
+	}
 	return &TransferListResponse{Transfers: list, Total: total, Limit: filter.Limit, Offset: filter.Offset}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("transfers: Get: %w", err) }
-	if t == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Get: %w", err)
+	}
+	if t == nil {
+		return nil, ErrNotFound
+	}
 	return t, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy string, req CreateTransferRequest) (*Transfer, error) {
-	if !req.TransferType.IsValid() { return nil, ErrInvalidTransferType }
-	if strings.TrimSpace(req.EffectiveDate) == "" { return nil, ErrEffectiveDateReq }
-	if _, err := time.Parse(dateLayout, req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+	if !req.TransferType.IsValid() {
+		return nil, ErrInvalidTransferType
+	}
+	if strings.TrimSpace(req.EffectiveDate) == "" {
+		return nil, ErrEffectiveDateReq
+	}
+	if _, err := time.Parse(dateLayout, req.EffectiveDate); err != nil {
+		return nil, ErrInvalidDate
+	}
 
 	var fromDeptID, fromMgrEmpID *string
 	_ = s.db.QueryRow(ctx,
@@ -68,47 +85,79 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, employeeID, createdBy s
 	t := &Transfer{
 		OrgID: orgID, EmployeeID: employeeID, TransferType: req.TransferType,
 		FromDepartmentID: fromDeptID, FromManagerEmployeeID: fromMgrEmpID,
-		ToDepartmentID: req.ToDepartmentID,
+		ToDepartmentID:      req.ToDepartmentID,
 		ToManagerEmployeeID: req.ToManagerEmployeeID,
-		ToLocation: req.ToLocation,
-		EffectiveDate: req.EffectiveDate, Reason: req.Reason, Notes: req.Notes,
+		ToLocation:          req.ToLocation,
+		EffectiveDate:       req.EffectiveDate, Reason: req.Reason, Notes: req.Notes,
 		Status: StatusDraft, CreatedBy: createdBy,
 	}
-	if err := s.repo.Create(ctx, t); err != nil { return nil, fmt.Errorf("transfers: Create: %w", err) }
+	if err := s.repo.Create(ctx, t); err != nil {
+		return nil, fmt.Errorf("transfers: Create: %w", err)
+	}
 	return t, nil
 }
 
 func (s *serviceImpl) Update(ctx context.Context, orgID, employeeID, ref string, req UpdateTransferRequest) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("transfers: Update: %w", err) }
-	if t == nil { return nil, ErrNotFound }
-	if t.Status != StatusDraft { return nil, ErrWrongStatus }
-	if req.ToDepartmentID != nil { t.ToDepartmentID = req.ToDepartmentID }
-	if req.ToManagerEmployeeID != nil { t.ToManagerEmployeeID = req.ToManagerEmployeeID }
-	if req.ToLocation != nil { t.ToLocation = req.ToLocation }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Update: %w", err)
+	}
+	if t == nil {
+		return nil, ErrNotFound
+	}
+	if t.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
+	if req.ToDepartmentID != nil {
+		t.ToDepartmentID = req.ToDepartmentID
+	}
+	if req.ToManagerEmployeeID != nil {
+		t.ToManagerEmployeeID = req.ToManagerEmployeeID
+	}
+	if req.ToLocation != nil {
+		t.ToLocation = req.ToLocation
+	}
 	if req.EffectiveDate != nil {
-		if _, err := time.Parse(dateLayout, *req.EffectiveDate); err != nil { return nil, ErrInvalidDate }
+		if _, err := time.Parse(dateLayout, *req.EffectiveDate); err != nil {
+			return nil, ErrInvalidDate
+		}
 		t.EffectiveDate = *req.EffectiveDate
 	}
-	if req.Reason != nil { t.Reason = req.Reason }
-	if req.Notes != nil { t.Notes = req.Notes }
-	if req.DocumentID != nil { t.DocumentID = req.DocumentID }
-	if err := s.repo.Update(ctx, t); err != nil { return nil, fmt.Errorf("transfers: Update: %w", err) }
+	if req.Reason != nil {
+		t.Reason = req.Reason
+	}
+	if req.Notes != nil {
+		t.Notes = req.Notes
+	}
+	if req.DocumentID != nil {
+		t.DocumentID = req.DocumentID
+	}
+	if err := s.repo.Update(ctx, t); err != nil {
+		return nil, fmt.Errorf("transfers: Update: %w", err)
+	}
 	return t, nil
 }
 
 func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submittedBy string) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
-	if t == nil { return nil, ErrNotFound }
-	if t.Status != StatusDraft { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Submit: %w", err)
+	}
+	if t == nil {
+		return nil, ErrNotFound
+	}
+	if t.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
 
 	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeTransfer)
 	if tErr == nil && tmpl != nil {
 		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
 			TemplateID: tmpl.ID, EntityType: "transfer", EntityID: t.ID, RequestedBy: submittedBy,
 		})
-		if iErr != nil { return nil, fmt.Errorf("transfers: Submit: creating approval instance: %w", iErr) }
+		if iErr != nil {
+			return nil, fmt.Errorf("transfers: Submit: creating approval instance: %w", iErr)
+		}
 		if err := s.repo.SetApprovalInstance(ctx, t.ID, inst.ID, StatusPendingApproval); err != nil {
 			return nil, fmt.Errorf("transfers: Submit: %w", err)
 		}
@@ -117,7 +166,9 @@ func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submit
 		return t, nil
 	}
 
-	if err := s.repo.UpdateStatus(ctx, t.ID, StatusApproved); err != nil { return nil, fmt.Errorf("transfers: Submit: %w", err) }
+	if err := s.repo.UpdateStatus(ctx, t.ID, StatusApproved); err != nil {
+		return nil, fmt.Errorf("transfers: Submit: %w", err)
+	}
 	t.Status = StatusApproved
 	return t, nil
 }
@@ -125,11 +176,19 @@ func (s *serviceImpl) Submit(ctx context.Context, orgID, employeeID, ref, submit
 // HandleApprovalDecision reacts to the transfer's approval instance completing.
 func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
 	t, err := s.repo.FindByRef(ctx, orgID, "", entityID)
-	if err != nil { return fmt.Errorf("transfers: HandleApprovalDecision: %w", err) }
-	if t == nil { return ErrNotFound }
-	if t.Status != StatusPendingApproval { return nil }
+	if err != nil {
+		return fmt.Errorf("transfers: HandleApprovalDecision: %w", err)
+	}
+	if t == nil {
+		return ErrNotFound
+	}
+	if t.Status != StatusPendingApproval {
+		return nil
+	}
 	status := StatusApproved
-	if !approved { status = StatusRejected }
+	if !approved {
+		status = StatusRejected
+	}
 	if err := s.repo.UpdateStatus(ctx, t.ID, status); err != nil {
 		return fmt.Errorf("transfers: HandleApprovalDecision: %w", err)
 	}
@@ -138,11 +197,21 @@ func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityI
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("transfers: Cancel: %w", err) }
-	if t == nil { return nil, ErrNotFound }
-	if t.Status == StatusApplied { return nil, ErrAlreadyApplied }
-	if t.Status == StatusCancelled { return nil, ErrWrongStatus }
-	if err := s.repo.UpdateStatus(ctx, t.ID, StatusCancelled); err != nil { return nil, fmt.Errorf("transfers: Cancel: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Cancel: %w", err)
+	}
+	if t == nil {
+		return nil, ErrNotFound
+	}
+	if t.Status == StatusApplied {
+		return nil, ErrAlreadyApplied
+	}
+	if t.Status == StatusCancelled {
+		return nil, ErrWrongStatus
+	}
+	if err := s.repo.UpdateStatus(ctx, t.ID, StatusCancelled); err != nil {
+		return nil, fmt.Errorf("transfers: Cancel: %w", err)
+	}
 	t.Status = StatusCancelled
 	return t, nil
 }
@@ -150,13 +219,23 @@ func (s *serviceImpl) Cancel(ctx context.Context, orgID, employeeID, ref string)
 // Apply updates employee.department_id and/or employee.manager_id in one transaction.
 func (s *serviceImpl) Apply(ctx context.Context, orgID, employeeID, ref, appliedBy string) (*Transfer, error) {
 	t, err := s.repo.FindByRef(ctx, orgID, employeeID, ref)
-	if err != nil { return nil, fmt.Errorf("transfers: Apply: %w", err) }
-	if t == nil { return nil, ErrNotFound }
-	if t.Status == StatusApplied { return nil, ErrAlreadyApplied }
-	if t.Status != StatusApproved { return nil, ErrNotApproved }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Apply: %w", err)
+	}
+	if t == nil {
+		return nil, ErrNotFound
+	}
+	if t.Status == StatusApplied {
+		return nil, ErrAlreadyApplied
+	}
+	if t.Status != StatusApproved {
+		return nil, ErrNotApproved
+	}
 
 	tx, err := s.db.Begin(ctx)
-	if err != nil { return nil, fmt.Errorf("transfers: Apply: begin tx: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: Apply: begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	if _, err = tx.Exec(ctx,
@@ -175,7 +254,9 @@ func (s *serviceImpl) Apply(ctx context.Context, orgID, employeeID, ref, applied
 		return nil, fmt.Errorf("transfers: Apply: update employee: %w", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil { return nil, fmt.Errorf("transfers: Apply: commit: %w", err) }
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("transfers: Apply: commit: %w", err)
+	}
 
 	now := time.Now()
 	t.Status = StatusApplied

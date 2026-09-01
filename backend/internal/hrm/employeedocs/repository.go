@@ -24,6 +24,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, template_id,
@@ -45,8 +46,12 @@ func scanDoc(row pgx.Row) (*EmployeeDocument, error) {
 		&d.Status, &d.IssuedBy, &d.SentAt, &d.AcknowledgedAt, &d.AcknowledgementNote,
 		&d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return d, nil
 }
 
@@ -79,10 +84,18 @@ func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter DocListFilt
 	q := fmt.Sprintf(`SELECT %s FROM hrm_employee_documents WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
 		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("employeedocs: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("employeedocs: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*EmployeeDocument, 0)
-	for rows.Next() { d, err := scanDoc(rows); if err != nil { return nil, err }; list = append(list, d) }
+	for rows.Next() {
+		d, err := scanDoc(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
 	return list, rows.Err()
 }
 
@@ -98,7 +111,10 @@ func (r *repoImpl) Count(ctx context.Context, orgID string, filter DocListFilter
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeDocument, error) {
 	q := `SELECT ` + sel + ` FROM hrm_employee_documents WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanDoc(r.db.QueryRow(ctx, q, args...))
 }
 
@@ -116,7 +132,9 @@ func (r *repoImpl) Create(ctx context.Context, d *EmployeeDocument) error {
 
 func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status DocStatus) error {
 	extra := ""
-	if status == StatusSent { extra = `, sent_at=NOW()` }
+	if status == StatusSent {
+		extra = `, sent_at=NOW()`
+	}
 	_, err := r.db.Exec(ctx,
 		`UPDATE hrm_employee_documents SET status=$1`+extra+`, updated_at=NOW() WHERE id=$2`,
 		status, id)

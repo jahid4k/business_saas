@@ -199,7 +199,9 @@ func (s *serviceImpl) MarkDealWon(ctx context.Context, orgID, dealID string) (*D
 			authorID = &d.CreatedBy
 		}
 		_, _ = s.engagementSvc.CreateNote(ctx, orgID, *authorID, "crm", engagement.CreateNoteRequest{
-			RelatedType: "deal",
+			// ⚠ Was the bare "deal" — not a valid RelatedType, so this note
+			// was silently rejected too. See the same fix in crm/leads.
+			RelatedType: string(engagement.RelatedCRMDeal),
 			RelatedID:   d.ID,
 			Content:     content,
 		})

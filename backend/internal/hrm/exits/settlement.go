@@ -128,8 +128,12 @@ func (s *serviceImpl) SettlementForRun(ctx context.Context, orgID, runID string)
 // indefensible to whoever has to read the payslip, and deriving it separately
 // per source is exactly how that happens.
 func (s *serviceImpl) buildSettlementLines(ctx context.Context, orgID string, exit *Exit, tenure *EmployeeTenure, runCurrency string) ([]SettlementLineRow, error) {
+	// ⚠ Nearly unreachable since 11B-2 — a payroll run now always carries a
+	// resolved currency — but a settlement must never assemble in a currency
+	// nobody chose, so the fallback resolves through the same chain instead
+	// of naming one.
 	if strings.TrimSpace(runCurrency) == "" {
-		runCurrency = "BDT"
+		runCurrency = s.resolveCurrency(ctx, orgID, nil)
 	}
 	rows := make([]SettlementLineRow, 0, 4)
 
@@ -246,11 +250,17 @@ func (s *serviceImpl) buildSettlementLines(ctx context.Context, orgID string, ex
 
 	// ── Debit: unsettled travel advances ──
 	//
-	// ⚠ ONLY same-currency advances are recovered. No FX rate table exists
-	// anywhere in this codebase (Phase 11 scope), so converting a
-	// foreign-currency advance would mean inventing a rate and mis-charging a
-	// departing person real money. A mismatched advance is reported on the
-	// trail at zero so HR handles it deliberately.
+	// A same-currency advance is recovered directly. A FOREIGN-currency
+	// advance is converted only when a real recorded rate exists as of the
+	// last working date (11B-1); with no rate it keeps the behaviour this
+	// slice shipped with — reported on the trail at zero with the reason, so
+	// HR settles it deliberately.
+	//
+	// ⚠ THE NO-RATE PATH IS NOT A FALLBACK TO PARITY, AND MUST NEVER BECOME
+	// ONE. Treating an unconvertible balance as 1:1 charges a departing
+	// person a number nobody computed, and they have no way to see that it
+	// happened. Refusing to convert is the honest failure; converting at an
+	// invented rate is a silent one.
 	if s.advanceSource != nil {
 		advances, err := s.advanceSource.OutstandingAdvancesForEmployee(ctx, orgID, exit.EmployeeID)
 		if err != nil {
@@ -263,12 +273,33 @@ func (s *serviceImpl) buildSettlementLines(ctx context.Context, orgID string, ex
 			}
 			id := a.ID
 			if !strings.EqualFold(a.Currency, runCurrency) {
+				conv, err := s.convertAdvance(ctx, orgID, out, a.Currency, runCurrency, exit.LastWorkingDate)
+				if err != nil {
+					return nil, err
+				}
+				if conv == nil {
+					rows = append(rows, SettlementLineRow{
+						SourceType: "travel_advance", SourceID: &id,
+						Description: fmt.Sprintf(
+							"Travel advance %s %s outstanding — NOT RECOVERED: no exchange rate to %s, settle manually",
+							a.Currency, out.String(), runCurrency),
+						Amount: decimal.Zero, IsCredit: false, Currency: a.Currency,
+					})
+					continue
+				}
+				// ⚠ All five audit fields travel together: the original
+				// amount and currency, the rate, its date, and the converted
+				// figure. Amount/Currency stay the CONVERTED pair so payslip
+				// assembly is untouched.
 				rows = append(rows, SettlementLineRow{
 					SourceType: "travel_advance", SourceID: &id,
 					Description: fmt.Sprintf(
-						"Travel advance %s %s outstanding — NOT RECOVERED: no exchange rate to %s, settle manually",
-						a.Currency, out.String(), runCurrency),
-					Amount: decimal.Zero, IsCredit: false, Currency: a.Currency,
+						"Travel advance recovery — %s %s converted at %s (rate of %s)",
+						a.Currency, out.String(), conv.Rate.String(),
+						conv.RateDate.Format("2006-01-02")),
+					Amount: conv.Converted, IsCredit: false, Currency: runCurrency,
+					OriginalAmount: &conv.Original, OriginalCurrency: &conv.OriginalCurrency,
+					ExchangeRate: &conv.Rate, ExchangeRateDate: &conv.RateDate,
 				})
 				continue
 			}
@@ -533,4 +564,48 @@ func (s *serviceImpl) ListSettlementLines(ctx context.Context, orgID string, cal
 		return nil, err
 	}
 	return s.repo.FindSettlementLines(ctx, orgID, e.ID)
+}
+
+// advanceConversion is the five-field record for one converted advance.
+type advanceConversion struct {
+	Original         decimal.Decimal
+	OriginalCurrency string
+	Rate             decimal.Decimal
+	RateDate         time.Time
+	Converted        decimal.Decimal
+}
+
+// convertAdvance resolves the rate that applied on the last working date and
+// applies it.
+//
+// ⚠ Returns (nil, nil) — meaning "not convertible" — when no rate source is
+// wired or no rate was recorded for that pair by that date. The caller then
+// reports the advance at zero with an explanation, exactly as it did before
+// the FX table existed. There is deliberately no branch that returns a rate
+// of 1.
+//
+// ⚠ The rate is resolved AS OF THE LAST WORKING DATE, not today. A rate
+// recorded after somebody left must not reprice their settlement, and a
+// settlement re-assembled months later must produce the same figure it did
+// the first time.
+func (s *serviceImpl) convertAdvance(ctx context.Context, orgID string, amount decimal.Decimal, from, to string, asOf time.Time) (*advanceConversion, error) {
+	if s.rateSource == nil {
+		return nil, nil
+	}
+	rate, rateDate, ok, err := s.rateSource.RateAsOfPrimitive(ctx, orgID, from, to, asOf)
+	if err != nil {
+		return nil, fmt.Errorf("exits: convertAdvance: %w", err)
+	}
+	if !ok || !rate.IsPositive() {
+		return nil, nil
+	}
+	return &advanceConversion{
+		Original:         amount,
+		OriginalCurrency: strings.ToUpper(strings.TrimSpace(from)),
+		Rate:             rate,
+		RateDate:         rateDate,
+		// Only the RESULT rounds to money scale; the rate is stored as
+		// resolved.
+		Converted: amount.Mul(rate).Round(2),
+	}, nil
 }

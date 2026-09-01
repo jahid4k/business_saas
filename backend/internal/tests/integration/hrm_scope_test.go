@@ -33,13 +33,9 @@ func seedScopeTestOrg(t *testing.T, env *testEnv) (orgID, statusID, ownerUserID 
 		t.Fatalf("create org: %v", err)
 	}
 
-	err = env.db.QueryRow(ctx,
-		`INSERT INTO hrm_employee_statuses (org_id, name, category) VALUES ($1, 'Active', 'active') RETURNING id`,
-		org.ID,
-	).Scan(&statusID)
-	if err != nil {
-		t.Fatalf("seed employee status: %v", err)
-	}
+	// organizations.Create now seeds the default statuses, so ask for the one
+	// this fixture needs rather than inserting a duplicate.
+	statusID = statusIDFor(t, env, org.ID, "Active", "active")
 
 	t.Cleanup(func() {
 		cleanupUser(t, env, owner.ID)

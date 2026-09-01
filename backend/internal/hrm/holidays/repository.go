@@ -30,6 +30,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const calSel = `id, public_id, org_id, name, description, country_code, year, is_active, created_by, created_at, updated_at`
@@ -37,20 +38,34 @@ const calSel = `id, public_id, org_id, name, description, country_code, year, is
 func scanCal(row pgx.Row) (*HolidayCalendar, error) {
 	c := &HolidayCalendar{}
 	err := row.Scan(&c.ID, &c.PublicID, &c.OrgID, &c.Name, &c.Description, &c.CountryCode, &c.Year, &c.IsActive, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
 func (r *repoImpl) FindAllCalendars(ctx context.Context, orgID string, activeOnly bool) ([]*HolidayCalendar, error) {
 	q := `SELECT ` + calSel + ` FROM hrm_holiday_calendars WHERE org_id=$1`
-	if activeOnly { q += ` AND is_active=TRUE` }
+	if activeOnly {
+		q += ` AND is_active=TRUE`
+	}
 	q += ` ORDER BY year DESC, name`
 	rows, err := r.db.Query(ctx, q, orgID)
-	if err != nil { return nil, fmt.Errorf("holidays: FindAllCalendars: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("holidays: FindAllCalendars: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*HolidayCalendar, 0)
-	for rows.Next() { c, err := scanCal(rows); if err != nil { return nil, err }; list = append(list, c) }
+	for rows.Next() {
+		c, err := scanCal(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
 	return list, rows.Err()
 }
 
@@ -74,8 +89,12 @@ func (r *repoImpl) UpdateCalendar(ctx context.Context, c *HolidayCalendar) error
 
 func (r *repoImpl) DeleteCalendar(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_holiday_calendars WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("holidays: DeleteCalendar: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrCalendarNotFound }
+	if err != nil {
+		return fmt.Errorf("holidays: DeleteCalendar: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrCalendarNotFound
+	}
 	return nil
 }
 
@@ -92,17 +111,29 @@ const holSel = `id, public_id, calendar_id, name, to_char(date,'YYYY-MM-DD'), ho
 func scanHol(row pgx.Row) (*Holiday, error) {
 	h := &Holiday{}
 	err := row.Scan(&h.ID, &h.PublicID, &h.CalendarID, &h.Name, &h.Date, &h.HolidayType, &h.IsPaid, &h.RepeatYearly, &h.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return h, nil
 }
 
 func (r *repoImpl) FindHolidays(ctx context.Context, calendarID string) ([]*Holiday, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+holSel+` FROM hrm_holidays WHERE calendar_id=$1 ORDER BY date`, calendarID)
-	if err != nil { return nil, fmt.Errorf("holidays: FindHolidays: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("holidays: FindHolidays: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Holiday, 0)
-	for rows.Next() { h, err := scanHol(rows); if err != nil { return nil, err }; list = append(list, h) }
+	for rows.Next() {
+		h, err := scanHol(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, h)
+	}
 	return list, rows.Err()
 }
 
@@ -127,8 +158,12 @@ func (r *repoImpl) UpdateHoliday(ctx context.Context, h *Holiday) error {
 
 func (r *repoImpl) DeleteHoliday(ctx context.Context, calendarID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_holidays WHERE calendar_id=$1 AND (id::text=$2 OR public_id=$2)`, calendarID, ref)
-	if err != nil { return fmt.Errorf("holidays: DeleteHoliday: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrHolidayNotFound }
+	if err != nil {
+		return fmt.Errorf("holidays: DeleteHoliday: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrHolidayNotFound
+	}
 	return nil
 }
 
@@ -139,8 +174,12 @@ func (r *repoImpl) FindAssignment(ctx context.Context, assigneeType, assigneeID 
 	err := r.db.QueryRow(ctx,
 		`SELECT `+asgSel+` FROM hrm_calendar_assignments WHERE assignee_type=$1 AND assignee_id=$2`,
 		assigneeType, assigneeID).Scan(&a.ID, &a.PublicID, &a.OrgID, &a.CalendarID, &a.AssigneeType, &a.AssigneeID, &a.EffectiveDate, &a.CreatedBy, &a.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, fmt.Errorf("holidays: FindAssignment: %w", err) }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("holidays: FindAssignment: %w", err)
+	}
 	return a, nil
 }
 
@@ -156,7 +195,11 @@ func (r *repoImpl) UpsertAssignment(ctx context.Context, a *CalendarAssignment) 
 
 func (r *repoImpl) DeleteAssignment(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_calendar_assignments WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("holidays: DeleteAssignment: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrAssignmentNotFound }
+	if err != nil {
+		return fmt.Errorf("holidays: DeleteAssignment: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrAssignmentNotFound
+	}
 	return nil
 }

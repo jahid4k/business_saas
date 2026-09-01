@@ -15,6 +15,10 @@ import (
 const dateLayout = "2006-01-02"
 
 type Service interface {
+	// SetBaseCurrencySource attaches the legal-entity layer so a currency is
+	// resolved rather than assumed (11B-2). Optional.
+	SetBaseCurrencySource(src BaseCurrencySource)
+
 	List(ctx context.Context, orgID, employeeID, status string) (*AwardListResponse, error)
 	Get(ctx context.Context, orgID, ref string) (*Award, error)
 	Create(ctx context.Context, orgID, createdBy string, req CreateAwardRequest) (*Award, error)
@@ -34,41 +38,63 @@ type serviceImpl struct {
 	repo         Repository
 	db           *pgxpool.Pool
 	approvalsSvc approvals.Service
+	// baseCurrency is OPTIONAL (11B-2); nil keeps the historical default.
+	baseCurrency BaseCurrencySource
 }
+
 func NewService(repo Repository, db *pgxpool.Pool, approvalsSvc approvals.Service) Service {
 	return &serviceImpl{repo: repo, db: db, approvalsSvc: approvalsSvc}
 }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, status string) (*AwardListResponse, error) {
 	list, err := s.repo.FindAll(ctx, orgID, employeeID, status)
-	if err != nil { return nil, fmt.Errorf("awards: List: %w", err) }
-	if list == nil { list = []*Award{} }
+	if err != nil {
+		return nil, fmt.Errorf("awards: List: %w", err)
+	}
+	if list == nil {
+		list = []*Award{}
+	}
 	return &AwardListResponse{Awards: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, ref string) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("awards: Get: %w", err) }
-	if a == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("awards: Get: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
 	return a, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req CreateAwardRequest) (*Award, error) {
-	if strings.TrimSpace(req.EmployeeID) == "" { return nil, ErrEmployeeIDRequired }
-	if strings.TrimSpace(req.Title) == "" { return nil, ErrTitleRequired }
-	if strings.TrimSpace(req.Description) == "" { return nil, ErrDescriptionRequired }
-	if !req.AwardType.IsValid() { return nil, ErrInvalidAwardType }
+	if strings.TrimSpace(req.EmployeeID) == "" {
+		return nil, ErrEmployeeIDRequired
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return nil, ErrTitleRequired
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		return nil, ErrDescriptionRequired
+	}
+	if !req.AwardType.IsValid() {
+		return nil, ErrInvalidAwardType
+	}
 
 	awardDate := time.Now().Format(dateLayout)
 	if req.AwardDate != nil && strings.TrimSpace(*req.AwardDate) != "" {
-		if _, err := time.Parse(dateLayout, *req.AwardDate); err != nil { return nil, ErrInvalidDate }
+		if _, err := time.Parse(dateLayout, *req.AwardDate); err != nil {
+			return nil, ErrInvalidDate
+		}
 		awardDate = *req.AwardDate
 	}
 
 	points := 0
-	if req.Points != nil { points = *req.Points }
-	currency := "BDT"
-	if req.Currency != nil && *req.Currency != "" { currency = *req.Currency }
+	if req.Points != nil {
+		points = *req.Points
+	}
+	currency := s.resolveCurrency(ctx, orgID, req.Currency)
 
 	a := &Award{
 		OrgID: orgID, EmployeeID: req.EmployeeID,
@@ -77,40 +103,70 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 		AwardDate: awardDate, IssuedBy: createdBy,
 		Status: StatusDraft, CreatedBy: createdBy,
 	}
-	if err := s.repo.Create(ctx, a); err != nil { return nil, fmt.Errorf("awards: Create: %w", err) }
+	if err := s.repo.Create(ctx, a); err != nil {
+		return nil, fmt.Errorf("awards: Create: %w", err)
+	}
 	return a, nil
 }
 
 func (s *serviceImpl) Update(ctx context.Context, orgID, ref string, req UpdateAwardRequest) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("awards: Update: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status != StatusDraft { return nil, ErrWrongStatus }
-	if req.Title != nil { a.Title = *req.Title }
-	if req.Description != nil { a.Description = *req.Description }
-	if req.Points != nil { a.Points = *req.Points }
-	if req.MonetaryValue != nil { a.MonetaryValue = req.MonetaryValue }
+	if err != nil {
+		return nil, fmt.Errorf("awards: Update: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
+	if req.Title != nil {
+		a.Title = *req.Title
+	}
+	if req.Description != nil {
+		a.Description = *req.Description
+	}
+	if req.Points != nil {
+		a.Points = *req.Points
+	}
+	if req.MonetaryValue != nil {
+		a.MonetaryValue = req.MonetaryValue
+	}
 	if req.AwardDate != nil {
-		if _, err := time.Parse(dateLayout, *req.AwardDate); err != nil { return nil, ErrInvalidDate }
+		if _, err := time.Parse(dateLayout, *req.AwardDate); err != nil {
+			return nil, ErrInvalidDate
+		}
 		a.AwardDate = *req.AwardDate
 	}
-	if req.CertificateDocumentID != nil { a.CertificateDocumentID = req.CertificateDocumentID }
-	if err := s.repo.Update(ctx, a); err != nil { return nil, fmt.Errorf("awards: Update: %w", err) }
+	if req.CertificateDocumentID != nil {
+		a.CertificateDocumentID = req.CertificateDocumentID
+	}
+	if err := s.repo.Update(ctx, a); err != nil {
+		return nil, fmt.Errorf("awards: Update: %w", err)
+	}
 	return a, nil
 }
 
 func (s *serviceImpl) Submit(ctx context.Context, orgID, ref, submittedBy string) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("awards: Submit: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status != StatusDraft { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("awards: Submit: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status != StatusDraft {
+		return nil, ErrWrongStatus
+	}
 
 	tmpl, tErr := s.approvalsSvc.FindDefault(ctx, orgID, approvals.ActionTypeAward)
 	if tErr == nil && tmpl != nil {
 		inst, iErr := s.approvalsSvc.CreateInstance(ctx, orgID, approvals.CreateInstanceRequest{
 			TemplateID: tmpl.ID, EntityType: "award", EntityID: a.ID, RequestedBy: submittedBy,
 		})
-		if iErr != nil { return nil, fmt.Errorf("awards: Submit: creating approval instance: %w", iErr) }
+		if iErr != nil {
+			return nil, fmt.Errorf("awards: Submit: creating approval instance: %w", iErr)
+		}
 		if err := s.repo.SetApprovalInstance(ctx, a.ID, inst.ID, StatusPendingApproval); err != nil {
 			return nil, fmt.Errorf("awards: Submit: %w", err)
 		}
@@ -119,7 +175,9 @@ func (s *serviceImpl) Submit(ctx context.Context, orgID, ref, submittedBy string
 		return a, nil
 	}
 
-	if err := s.repo.UpdateStatus(ctx, a.ID, StatusApproved); err != nil { return nil, fmt.Errorf("awards: Submit: %w", err) }
+	if err := s.repo.UpdateStatus(ctx, a.ID, StatusApproved); err != nil {
+		return nil, fmt.Errorf("awards: Submit: %w", err)
+	}
 	a.Status = StatusApproved
 	return a, nil
 }
@@ -128,11 +186,19 @@ func (s *serviceImpl) Submit(ctx context.Context, orgID, ref, submittedBy string
 // Awards have no "rejected" status — a rejected award is cancelled.
 func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityID string, approved bool) error {
 	a, err := s.repo.FindByRef(ctx, orgID, entityID)
-	if err != nil { return fmt.Errorf("awards: HandleApprovalDecision: %w", err) }
-	if a == nil { return ErrNotFound }
-	if a.Status != StatusPendingApproval { return nil }
+	if err != nil {
+		return fmt.Errorf("awards: HandleApprovalDecision: %w", err)
+	}
+	if a == nil {
+		return ErrNotFound
+	}
+	if a.Status != StatusPendingApproval {
+		return nil
+	}
 	status := StatusApproved
-	if !approved { status = StatusCancelled }
+	if !approved {
+		status = StatusCancelled
+	}
 	if err := s.repo.UpdateStatus(ctx, a.ID, status); err != nil {
 		return fmt.Errorf("awards: HandleApprovalDecision: %w", err)
 	}
@@ -143,22 +209,38 @@ func (s *serviceImpl) HandleApprovalDecision(ctx context.Context, orgID, entityI
 // creates an hrm_announcements record (E2) and links it.
 func (s *serviceImpl) Issue(ctx context.Context, orgID, ref, issuedBy string, req IssueRequest) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("awards: Issue: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status == StatusIssued { return nil, ErrAlreadyIssued }
-	if a.Status != StatusDraft && a.Status != StatusApproved { return nil, ErrWrongStatus }
+	if err != nil {
+		return nil, fmt.Errorf("awards: Issue: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status == StatusIssued {
+		return nil, ErrAlreadyIssued
+	}
+	if a.Status != StatusDraft && a.Status != StatusApproved {
+		return nil, ErrWrongStatus
+	}
 
 	now := time.Now()
 	a.IssuedAt = &now
 	a.Status = StatusIssued
-	if req.CertificateDocumentID != nil { a.CertificateDocumentID = req.CertificateDocumentID }
-	if err := s.repo.Update(ctx, a); err != nil { return nil, fmt.Errorf("awards: Issue: update: %w", err) }
-	if err := s.repo.UpdateStatus(ctx, a.ID, StatusIssued); err != nil { return nil, fmt.Errorf("awards: Issue: status: %w", err) }
+	if req.CertificateDocumentID != nil {
+		a.CertificateDocumentID = req.CertificateDocumentID
+	}
+	if err := s.repo.Update(ctx, a); err != nil {
+		return nil, fmt.Errorf("awards: Issue: update: %w", err)
+	}
+	if err := s.repo.UpdateStatus(ctx, a.ID, StatusIssued); err != nil {
+		return nil, fmt.Errorf("awards: Issue: status: %w", err)
+	}
 
 	// Create E2 announcement (optional)
 	if req.CreateAnnouncement {
 		content := fmt.Sprintf("Congratulations to %s for receiving the **%s** award!", a.EmployeeID, a.Title)
-		if req.AnnouncementContent != nil { content = *req.AnnouncementContent }
+		if req.AnnouncementContent != nil {
+			content = *req.AnnouncementContent
+		}
 		var annID string
 		_ = s.db.QueryRow(ctx,
 			`INSERT INTO hrm_announcements (org_id, title, content, category, scope_type, author_id, status, created_by)
@@ -176,10 +258,42 @@ func (s *serviceImpl) Issue(ctx context.Context, orgID, ref, issuedBy string, re
 
 func (s *serviceImpl) Cancel(ctx context.Context, orgID, ref string) (*Award, error) {
 	a, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("awards: Cancel: %w", err) }
-	if a == nil { return nil, ErrNotFound }
-	if a.Status == StatusIssued || a.Status == StatusCancelled { return nil, ErrWrongStatus }
-	if err := s.repo.UpdateStatus(ctx, a.ID, StatusCancelled); err != nil { return nil, fmt.Errorf("awards: Cancel: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("awards: Cancel: %w", err)
+	}
+	if a == nil {
+		return nil, ErrNotFound
+	}
+	if a.Status == StatusIssued || a.Status == StatusCancelled {
+		return nil, ErrWrongStatus
+	}
+	if err := s.repo.UpdateStatus(ctx, a.ID, StatusCancelled); err != nil {
+		return nil, fmt.Errorf("awards: Cancel: %w", err)
+	}
 	a.Status = StatusCancelled
 	return a, nil
+}
+
+// SetBaseCurrencySource attaches the legal-entity layer (11B-2).
+func (s *serviceImpl) SetBaseCurrencySource(src BaseCurrencySource) { s.baseCurrency = src }
+
+// resolveCurrency applies: what the caller asked for → the organization's or
+// entity's base currency → the historical default.
+//
+// ⚠ "BDT" survives only as the LAST resort. It was the unconditional default
+// until 11B-2, so an organization that has configured no currency at all
+// keeps getting exactly what it got before — changing that would be a second
+// behaviour change riding along with the fix.
+func (s *serviceImpl) resolveCurrency(ctx context.Context, orgID string, requested *string) string {
+	if requested != nil && strings.TrimSpace(*requested) != "" {
+		return strings.ToUpper(strings.TrimSpace(*requested))
+	}
+	if s.baseCurrency != nil {
+		if resolved, err := s.baseCurrency.DeclaredCurrency(ctx, orgID, nil); err == nil {
+			if c := strings.ToUpper(strings.TrimSpace(resolved)); c != "" {
+				return c
+			}
+		}
+	}
+	return "BDT"
 }

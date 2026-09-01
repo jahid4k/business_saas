@@ -33,6 +33,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const recSel = `id, public_id, org_id, employee_id,
@@ -56,8 +57,12 @@ func scanRec(row pgx.Row) (*AttendanceRecord, error) {
 		&r.Status, &r.ApprovedBy, &r.ApprovedAt,
 		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
@@ -90,10 +95,18 @@ func (r *repoImpl) FindRecords(ctx context.Context, orgID string, filter RecordL
 	q := fmt.Sprintf(`SELECT %s FROM hrm_attendance_records WHERE %s ORDER BY attendance_date DESC, employee_id LIMIT $%d OFFSET $%d`,
 		recSel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("attendance: FindRecords: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("attendance: FindRecords: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*AttendanceRecord, 0)
-	for rows.Next() { rec, err := scanRec(rows); if err != nil { return nil, err }; list = append(list, rec) }
+	for rows.Next() {
+		rec, err := scanRec(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, rec)
+	}
 	return list, rows.Err()
 }
 
@@ -171,22 +184,40 @@ func scanPeriod(row pgx.Row) (*AttendancePeriod, error) {
 		&p.FinalizedAt, &p.FinalizedBy, &p.LockedAt, &p.LockedBy,
 		&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
 func (r *repoImpl) FindPeriods(ctx context.Context, orgID string, year, month int) ([]*AttendancePeriod, error) {
 	q := `SELECT ` + perSel + ` FROM hrm_attendance_periods WHERE org_id=$1`
 	args := []any{orgID}
-	if year > 0 { args = append(args, year); q += fmt.Sprintf(` AND period_year=$%d`, len(args)) }
-	if month > 0 { args = append(args, month); q += fmt.Sprintf(` AND period_month=$%d`, len(args)) }
+	if year > 0 {
+		args = append(args, year)
+		q += fmt.Sprintf(` AND period_year=$%d`, len(args))
+	}
+	if month > 0 {
+		args = append(args, month)
+		q += fmt.Sprintf(` AND period_month=$%d`, len(args))
+	}
 	q += ` ORDER BY period_year DESC, period_month DESC`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("attendance: FindPeriods: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("attendance: FindPeriods: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*AttendancePeriod, 0)
-	for rows.Next() { p, err := scanPeriod(rows); if err != nil { return nil, err }; list = append(list, p) }
+	for rows.Next() {
+		p, err := scanPeriod(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
 	return list, rows.Err()
 }
 
@@ -234,6 +265,8 @@ func (r *repoImpl) GetEmployeeSummary(ctx context.Context, orgID, employeeID str
 		AND EXTRACT(YEAR FROM attendance_date)=$3 AND EXTRACT(MONTH FROM attendance_date)=$4`,
 		orgID, employeeID, year, month,
 	).Scan(&s.PresentDays, &s.AbsentDays, &s.LeaveDays, &s.HolidayDays, &s.OvertimeHours)
-	if err != nil { return nil, fmt.Errorf("attendance: GetEmployeeSummary: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("attendance: GetEmployeeSummary: %w", err)
+	}
 	return s, nil
 }

@@ -21,6 +21,10 @@ import (
 
 // Service defines business logic for the payroll engine.
 type Service interface {
+	// SetBaseCurrencySource attaches the legal-entity layer so a run's
+	// currency is resolved rather than assumed (11B-2).
+	SetBaseCurrencySource(src BaseCurrencySource)
+
 	ListRuns(ctx context.Context, orgID string) (*RunListResponse, error)
 	GetRun(ctx context.Context, orgID, ref string) (*PayslipRun, error)
 	CreateRun(ctx context.Context, orgID, createdBy string, req CreateRunRequest) (*PayslipRun, error)
@@ -55,6 +59,9 @@ type serviceImpl struct {
 	// debits, and tells it WHICH employee is being settled. Nil is valid —
 	// see FnFSource's doc comment in model.go.
 	fnfSource FnFSource
+	// entityCurrency is OPTIONAL (11B-2). Nil keeps the historical BDT
+	// default for a run whose currency the caller did not name.
+	entityCurrency BaseCurrencySource
 }
 
 func NewService(
@@ -118,7 +125,7 @@ func (s *serviceImpl) CreateRun(ctx context.Context, orgID, createdBy string, re
 	// uq_hrm_pr_org_month_regular is the guarantee; this is the friendly
 	// message, and both read RunType.IsUniquePerPeriod so they cannot drift.
 	if runType.IsUniquePerPeriod() {
-		existing, err := s.repo.FindRunByPeriod(ctx, orgID, req.Year, req.Month, runType)
+		existing, err := s.repo.FindRunByPeriod(ctx, orgID, req.Year, req.Month, runType, req.LegalEntityID)
 		if err != nil {
 			return nil, fmt.Errorf("payslips: CreateRun: check existing: %w", err)
 		}
@@ -127,15 +134,39 @@ func (s *serviceImpl) CreateRun(ctx context.Context, orgID, createdBy string, re
 		}
 	}
 
-	currency := "BDT"
+	// ⚠ THE CURRENCY IS RESOLVED, NOT HARDCODED (11B-2). This read
+	// `currency := "BDT"` since Phase 7, so a US organization creating a run
+	// without naming a currency got Bangladeshi Taka on every payslip.
+	//
+	// Resolution order: what the caller asked for → a currency a LEGAL ENTITY
+	// declared → BDT as the last resort.
+	//
+	// ⚠ organizations.currency is deliberately NOT in that chain. It is
+	// NOT NULL DEFAULT 'USD', so every organization carries USD whether or
+	// not anyone chose it, and reading it here would silently relabel every
+	// existing organization's payslips from BDT to USD. An org fixes its
+	// currency by declaring a legal entity, which is an act rather than a
+	// default. See entities.DeclaredCurrency.
+	currency := ""
 	if req.Currency != nil && strings.TrimSpace(*req.Currency) != "" {
-		currency = *req.Currency
+		currency = strings.ToUpper(strings.TrimSpace(*req.Currency))
+	}
+	if currency == "" && s.entityCurrency != nil {
+		resolved, err := s.entityCurrency.DeclaredCurrency(ctx, orgID, req.LegalEntityID)
+		if err != nil {
+			return nil, fmt.Errorf("payslips: CreateRun: resolve currency: %w", err)
+		}
+		currency = strings.ToUpper(strings.TrimSpace(resolved))
+	}
+	if currency == "" {
+		currency = "BDT"
 	}
 
 	run := &PayslipRun{
 		OrgID: orgID, PeriodYear: req.Year, PeriodMonth: req.Month,
 		RunType:     runType,
 		Description: req.Description, Currency: currency,
+		LegalEntityID:      req.LegalEntityID,
 		AttendancePeriodID: req.AttendancePeriodID,
 		Status:             RunDraft, CreatedBy: createdBy,
 	}
@@ -477,8 +508,15 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 		      OR (est.category = 'terminated'
 		          AND e.termination_date IS NOT NULL
 		          AND e.termination_date >= make_date($2,$3,1))
-		  )`,
-		orgID, run.PeriodYear, run.PeriodMonth)
+		  )
+		  -- ⚠ Entity narrowing (11B-2). $4 NULL means the WHOLE
+		  -- ORGANIZATION, which is every run that already exists — the
+		  -- predicate short-circuits to TRUE and the query is unchanged.
+		  -- Writing this as a plain equality would have emptied the payroll
+		  -- run of every organization in this database, none of which has
+		  -- entities.
+		  AND ($4::uuid IS NULL OR e.legal_entity_id = $4::uuid)`,
+		orgID, run.PeriodYear, run.PeriodMonth, run.LegalEntityID)
 	if err != nil {
 		return nil, fmt.Errorf("payslips: computePayslips: load employees: %w", err)
 	}
@@ -653,16 +691,28 @@ func (s *serviceImpl) computePayslips(ctx context.Context, orgID string, run *Pa
 				if comp.Formula != nil {
 					env["GROSS"] = grossForCalc.InexactFloat64()
 					if result, err := s.evalFormula(*comp.Formula, env); err == nil {
+						// ⚠ THE ONE REMAINING float64 BOUNDARY IN PAYROLL MONEY.
+						// expr-lang evaluates user-authored formulas in float64
+						// (expr.AsFloat64), so a formula component's result is
+						// inexact before it ever gets here. Making formulas
+						// exact means replacing the evaluator, which is its own
+						// piece of work — this conversion is the single, named
+						// place that imprecision enters, and it is rounded
+						// immediately below.
 						amount = decimal.NewFromFloat(result)
 					}
 				}
 			case "slab":
 				if comp.SlabConfigRaw != nil {
-					env["GROSS"] = grossForCalc.InexactFloat64()
 					var cfg hrmsalary.SlabConfig
 					if err := json.Unmarshal(comp.SlabConfigRaw, &cfg); err == nil {
-						if base, ok := env[cfg.BaseVariable].(float64); ok {
-							amount = decimal.NewFromFloat(ComputeSlab(base, &cfg))
+						// Resolved from the DECIMAL sources, never from the
+						// float formula env. Routing the base through that map
+						// is what made the arithmetic lossy before it even
+						// reached ComputeSlab.
+						if base, ok := slabBase(cfg.BaseVariable, emp.BasicPay, grossForCalc,
+							presentDays, workDays, tenureYears); ok {
+							amount = ComputeSlab(base, &cfg)
 						}
 					}
 				}
@@ -1052,9 +1102,46 @@ func (s *serviceImpl) computeBonusPayslips(ctx context.Context, orgID string, ru
 // Exported (rather than a package-private helper) specifically so it can be
 // unit tested directly — ComputeRun as a whole talks straight to *pgxpool.Pool
 // and isn't unit-testable without a live database.
-func ComputeSlab(base float64, cfg *hrmsalary.SlabConfig) float64 {
-	if cfg == nil || len(cfg.Slabs) == 0 || base <= 0 {
-		return 0
+// slabBase resolves a slab table's base_variable to its exact decimal value.
+//
+// It mirrors the formula environment's variable set exactly, so a slab table
+// that worked before still works — but it reads BASIC and GROSS from their
+// decimal sources rather than from that float64 map. The day counts are whole
+// numbers and exact either way; TENURE_YEARS is a float by nature and is the
+// only variable here that cannot be represented exactly, which is fine because
+// no money is denominated in it.
+//
+// An unrecognised variable returns false and the component computes nothing —
+// the same outcome the old `env[name].(float64)` type assertion produced for a
+// name that was not in the map.
+func slabBase(name string, basic, gross decimal.Decimal, presentDays, workDays int, tenureYears float64) (decimal.Decimal, bool) {
+	switch strings.ToUpper(strings.TrimSpace(name)) {
+	case "BASIC":
+		return basic, true
+	case "GROSS":
+		return gross, true
+	case "PRESENT_DAYS":
+		return decimal.NewFromInt(int64(presentDays)), true
+	case "WORK_DAYS":
+		return decimal.NewFromInt(int64(workDays)), true
+	case "TENURE_YEARS":
+		return decimal.NewFromFloat(tenureYears), true
+	default:
+		return decimal.Zero, false
+	}
+}
+
+// ⚠ THE ARITHMETIC HERE IS decimal, NOT float64, AND THAT IS LOAD-BEARING.
+// This walk previously ran in float64 with its decimal inputs converted via
+// InexactFloat64(). Both ends of the calculation were already exact — only the
+// middle was lossy — and it produced genuinely wrong money: scanning 28,572
+// ordinary salary bases against a three-bracket table, 42 of them came out
+// ONE PAISA different after rounding (base 1030.10 gave 51.50 where the exact
+// answer is 51.51). This is the statutory deduction on every payslip, so a
+// paisa is not a rounding curiosity, it is a wrong figure on somebody's pay.
+func ComputeSlab(base decimal.Decimal, cfg *hrmsalary.SlabConfig) decimal.Decimal {
+	if cfg == nil || len(cfg.Slabs) == 0 || !base.IsPositive() {
+		return decimal.Zero
 	}
 
 	slabs := make([]hrmsalary.Slab, len(cfg.Slabs))
@@ -1069,19 +1156,19 @@ func ComputeSlab(base float64, cfg *hrmsalary.SlabConfig) float64 {
 		return slabs[i].UpTo.LessThan(*slabs[j].UpTo)
 	})
 
-	total, lower := 0.0, 0.0
+	total, lower := decimal.Zero, decimal.Zero
 	for _, sl := range slabs {
 		upper := base // uncapped (UpTo == nil) slab absorbs whatever remains
 		if sl.UpTo != nil {
-			upper = sl.UpTo.InexactFloat64()
+			upper = *sl.UpTo
 		}
-		if upper > base {
+		if upper.GreaterThan(base) {
 			upper = base
 		}
-		if upper > lower {
-			total += (upper - lower) * sl.Rate.InexactFloat64()
+		if upper.GreaterThan(lower) {
+			total = total.Add(upper.Sub(lower).Mul(sl.Rate))
 		}
-		if sl.UpTo == nil || upper >= base {
+		if sl.UpTo == nil || upper.GreaterThanOrEqual(base) {
 			break
 		}
 		lower = upper
@@ -1284,3 +1371,6 @@ func (s *serviceImpl) GetPayslip(ctx context.Context, orgID, ref string) (*Paysl
 	}
 	return p, nil
 }
+
+// SetBaseCurrencySource attaches the legal-entity layer (11B-2).
+func (s *serviceImpl) SetBaseCurrencySource(src BaseCurrencySource) { s.entityCurrency = src }
