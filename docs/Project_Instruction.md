@@ -1,5 +1,32 @@
 # BUSINESSSAAS — PROJECT MASTER INSTRUCTION
 
+## ⚑ MISSION
+
+> **BusinessSAAS is TWO modules: CRM and HRM. Both complete → deploy → business.**
+
+Neither module is the product on its own. The sequence is deliberate and in this order:
+
+1. **CRM + HRM both production-grade** — HRM's backend is complete (Phases 0–11); its frontend is
+   not. CRM is production-*shaped* but not production-*grade*
+   (see `docs/CrmExtendedBuildPlan.md`).
+2. **Deploy** — ⚠ `.github/workflows/deploy.yml` is still an explicit placeholder; nothing is live.
+   ⚠ Automated, restore-tested Postgres backups are required before any real customer touches
+   payroll data.
+3. **Business** — ⚠ `subscriptions` (00009) and `organization_usage` (00010) have complete schemas
+   and **zero Go code**; nobody can be charged today.
+
+**The product's actual advantage is that these two modules share one system.** A won deal can become
+a commission on a payslip; a sales quota can feed a performance review; the sales hierarchy *is* the
+org chart. A standalone CRM cannot pay your rep, and a standalone HR system does not know what a
+deal is. That connection — not CRM feature count — is what makes this worth building.
+
+**The two module build plans:**
+- `docs/HrmExtendedBuildPlan.md` — Phases 0–11 ✅ complete (backend)
+- `docs/CrmExtendedBuildPlan.md` — Phases 0–5, Phase 0 ✅ audit complete
+
+---
+
+
 > Last updated: 2026-09-01 (r43 — **HRM Extended Phase 11B-2: entity re-scoping. PHASE 11 IS
 > COMPLETE, AND WITH IT THE ENTIRE HRM EXTENDED BUILD PLAN.** Migrations `00131`/`00132`/`00133`,
 > no new tables, 1 new permission, 322 integration tests passing.

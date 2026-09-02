@@ -12,19 +12,40 @@ capture API.
 
 ---
 
+## ⚑ Mission
+
+> **Two modules: CRM and HRM. Both complete → deploy → business.**
+
+Neither module ships alone. The advantage is that they share one system: a won deal can become a
+commission on a payslip, a sales quota can feed a performance review, and the sales hierarchy *is*
+the org chart. A standalone CRM cannot pay your rep; a standalone HR system does not know what a
+deal is.
+
+Build plans: [`docs/HrmExtendedBuildPlan.md`](docs/HrmExtendedBuildPlan.md) ·
+[`docs/CrmExtendedBuildPlan.md`](docs/CrmExtendedBuildPlan.md)
+
+---
+
 ## Status
 
 | Component             | State                                    |
 | --------------------- | ---------------------------------------- |
-| Backend               | 🔵 Active — 391 routes across 12 domains |
+| Backend               | 🔵 Active — 805 routes, 133 migrations   |
 | Web frontend          | 🔵 Active                                |
 | Mobile                | 🔵 Active — auth, dashboard, tasks, CRM  |
 | Production deployment | ⚪ Not started                           |
 
-**Shipped:** auth, organizations, RBAC, security, tasks, platform layer (contacts and engagement),
-CRM, HRM.
+**Shipped:** auth, organizations, RBAC, security, tasks, the platform layer (contacts, engagement,
+activities, notes, tasks, forms, checklists, tickets, KB, notifications, scheduler), CRM, and
+**HRM backend Phases 0–11** — 322 integration tests, six architecture guards.
 
-**In progress:** lead capture, mobile.
+**In progress:** Extended CRM (Phases 0–5), the HRM frontend, lead capture, mobile.
+
+⚠ **HRM backend complete ≠ product complete.** The HRM *frontend* covers roughly Phases 0–3 only —
+about 37 backend packages have no dedicated UI yet.
+
+⚠ **Not deployable or chargeable yet.** `deploy.yml` is an explicit placeholder, and the
+`subscriptions` / `organization_usage` tables have complete schemas with no code behind them.
 
 Capture is written end-to-end but **not functional** — three of its five sources cannot create a
 lead, and both webhook endpoints ship without signature verification. It must not be exposed to

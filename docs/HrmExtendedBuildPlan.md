@@ -1,5 +1,12 @@
 # HRM EXTENDED — BUILD PLAN
 
+> ⚑ **ONE OF TWO MODULE PLANS.** The mission is **CRM + HRM → deploy → business**
+> (`docs/Project_Instruction.md` § Mission). Its companion is `docs/CrmExtendedBuildPlan.md`.
+>
+> ⚠ **HRM backend complete ≠ product complete.** Phases 0–11 are done and tested, but the HRM
+> *frontend* covers roughly Phases 0–3 only — ~37 backend packages have no dedicated UI — and CRM
+> is not yet production-grade. Neither module ships alone.
+
 > Source-audited 2026-07-29 against `business_saas-develop.zip`.
 > This plan supersedes assumptions in `docs/Project_Instruction.md` r15 → Section 9 →
 > HRM EXTENDED MODULES wherever the two disagree. Source wins.
