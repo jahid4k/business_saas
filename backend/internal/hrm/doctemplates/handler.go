@@ -37,10 +37,15 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) List(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	activeOnly := strings.ToLower(c.Query("active")) == "true"
 	result, err := h.service.List(c.Context(), orgID, activeOnly, c.Query("document_type"))
-	if err != nil { log.Error("doctemplates: List", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("doctemplates: List", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, result, "OK")
 }
 
@@ -68,13 +73,21 @@ func (h *Handler) List(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/document-templates [post]
 func (h *Handler) Create(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateDocumentTemplateRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	t, err := h.service.Create(c.Context(), orgID, userID, req)
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.Created(c, fiber.Map{"template": t}, "Document template created")
 }
 
@@ -97,9 +110,13 @@ func (h *Handler) Create(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/document-templates/{templateId} [get]
 func (h *Handler) Get(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	t, err := h.service.Get(c.Context(), orgID, c.Params("templateId"))
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.OK(c, fiber.Map{"template": t}, "OK")
 }
 
@@ -126,11 +143,17 @@ func (h *Handler) Get(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/document-templates/{templateId} [patch]
 func (h *Handler) Update(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateDocumentTemplateRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	t, err := h.service.Update(c.Context(), orgID, c.Params("templateId"), req)
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.OK(c, fiber.Map{"template": t}, "Template updated")
 }
 
@@ -154,8 +177,12 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/document-templates/{templateId} [delete]
 func (h *Handler) Delete(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.Delete(c.Context(), orgID, c.Params("templateId")); err != nil { return h.tmplError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.Delete(c.Context(), orgID, c.Params("templateId")); err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.NoContent(c)
 }
 
@@ -182,12 +209,20 @@ func (h *Handler) Delete(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/document-templates/{templateId}/preview [post]
 func (h *Handler) Preview(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req PreviewTemplateRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
-	if req.Variables == nil { req.Variables = map[string]string{} }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
+	if req.Variables == nil {
+		req.Variables = map[string]string{}
+	}
 	result, err := h.service.Preview(c.Context(), orgID, c.Params("templateId"), req)
-	if err != nil { return h.tmplError(c, err) }
+	if err != nil {
+		return h.tmplError(c, err)
+	}
 	return response.OK(c, fiber.Map{"preview": result}, "OK")
 }
 

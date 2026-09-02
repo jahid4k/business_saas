@@ -9,9 +9,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/approvals"
 	"github.com/mridha/businesssaas/internal/hrm/terminations"
+	"github.com/shopspring/decimal"
 )
+
+func ptrDecimal(v decimal.Decimal) *decimal.Decimal { return &v }
 
 type stubRepo struct {
 	byID map[string]*terminations.Termination
@@ -27,20 +31,25 @@ func (r *stubRepo) nextID() string {
 	return fmt.Sprintf("term-%d", r.seq)
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*terminations.Termination, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter terminations.TerminationListFilter) ([]*terminations.Termination, error) {
 	var out []*terminations.Termination
 	for _, t := range r.byID {
 		if t.OrgID == orgID {
-			if employeeID != "" && t.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && t.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(t.Status) != status {
+			if filter.Status != "" && string(t.Status) != filter.Status {
 				continue
 			}
 			out = append(out, t)
 		}
 	}
 	return out, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter terminations.TerminationListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*terminations.Termination, error) {
@@ -118,6 +127,9 @@ func (s *stubApprovalsSvc) GetInstance(context.Context, string, string) (*approv
 func (s *stubApprovalsSvc) Decide(context.Context, string, string, string, approvals.DecisionRequest) (*approvals.ApprovalInstance, error) { return nil, nil }
 func (s *stubApprovalsSvc) CancelInstance(context.Context, string, string, string) (*approvals.ApprovalInstance, error) { return nil, nil }
 func (s *stubApprovalsSvc) RegisterCallback(string, approvals.EntityCallback) {}
+func (s *stubApprovalsSvc) ListInstances(context.Context, string, int, int, string, string) (*approvals.InstanceListResponse, error) {
+	return nil, nil
+}
 
 func newDummyPool() *pgxpool.Pool {
 	cfg, _ := pgxpool.ParseConfig("postgres://dummy:dummy@127.0.0.1:5432/dummy?sslmode=disable")
@@ -169,7 +181,7 @@ func TestTerminationsService(t *testing.T) {
 			t.Errorf("ID mismatch")
 		}
 
-		list, err := svc.List(ctx, "org1", "emp3", "")
+		list, err := svc.List(ctx, "org1", terminations.TerminationListFilter{EmployeeID: "emp3", Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -182,12 +194,12 @@ func TestTerminationsService(t *testing.T) {
 		req := terminations.CreateTerminationRequest{TerminationType: terminations.TypeVoluntary, TerminationDate: "2026-08-01", LastWorkingDate: "2026-08-15"}
 		term, _ := svc.Create(ctx, "org1", "emp4", "admin", req)
 
-		updateReq := terminations.UpdateTerminationRequest{SeveranceAmount: ptrFloat(1000.0)}
+		updateReq := terminations.UpdateTerminationRequest{SeveranceAmount: ptrDecimal(decimal.NewFromInt(1000))}
 		updated, err := svc.Update(ctx, "org1", "emp4", term.ID, updateReq)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
-		if updated.SeveranceAmount == nil || *updated.SeveranceAmount != 1000.0 {
+		if updated.SeveranceAmount == nil || !updated.SeveranceAmount.Equal(decimal.NewFromInt(1000)) {
 			t.Errorf("expected updated severance amount")
 		}
 	})

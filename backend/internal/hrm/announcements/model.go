@@ -7,6 +7,7 @@ import (
 )
 
 type AnnouncementCategory string
+
 const (
 	CatGeneral   AnnouncementCategory = "general"
 	CatPolicy    AnnouncementCategory = "policy"
@@ -16,12 +17,17 @@ const (
 	CatEmergency AnnouncementCategory = "emergency"
 	CatHRUpdate  AnnouncementCategory = "hr_update"
 )
+
 func (c AnnouncementCategory) IsValid() bool {
-	switch c { case CatGeneral, CatPolicy, CatEvent, CatAward, CatReminder, CatEmergency, CatHRUpdate: return true }
+	switch c {
+	case CatGeneral, CatPolicy, CatEvent, CatAward, CatReminder, CatEmergency, CatHRUpdate:
+		return true
+	}
 	return false
 }
 
 type ScopeType string
+
 const (
 	ScopeOrganization ScopeType = "organization"
 	ScopeDepartment   ScopeType = "department"
@@ -29,6 +35,7 @@ const (
 )
 
 type AnnStatus string
+
 const (
 	StatusDraft     AnnStatus = "draft"
 	StatusScheduled AnnStatus = "scheduled"
@@ -75,16 +82,16 @@ type CreateAnnouncementRequest struct {
 }
 
 type UpdateAnnouncementRequest struct {
-	Title                   *string              `json:"title"`
-	Content                 *string              `json:"content"`
+	Title                   *string               `json:"title"`
+	Content                 *string               `json:"content"`
 	Category                *AnnouncementCategory `json:"category"`
-	ScopeIDs                []string             `json:"scope_ids"`
-	ScheduledAt             *time.Time           `json:"scheduled_at"`
-	ExpiresAt               *time.Time           `json:"expires_at"`
-	RequiresAcknowledgement *bool                `json:"requires_acknowledgement"`
-	AcknowledgementDeadline *string              `json:"acknowledgement_deadline"`
-	IsPinned                *bool                `json:"is_pinned"`
-	PinOrder                *int                 `json:"pin_order"`
+	ScopeIDs                []string              `json:"scope_ids"`
+	ScheduledAt             *time.Time            `json:"scheduled_at"`
+	ExpiresAt               *time.Time            `json:"expires_at"`
+	RequiresAcknowledgement *bool                 `json:"requires_acknowledgement"`
+	AcknowledgementDeadline *string               `json:"acknowledgement_deadline"`
+	IsPinned                *bool                 `json:"is_pinned"`
+	PinOrder                *int                  `json:"pin_order"`
 }
 
 type AnnouncementListResponse struct {
@@ -93,10 +100,10 @@ type AnnouncementListResponse struct {
 }
 
 var (
-	ErrNotFound        = errors.New("announcement not found")
-	ErrTitleRequired   = errors.New("title is required")
-	ErrContentRequired = errors.New("content is required")
-	ErrInvalidCategory = errors.New("invalid category")
-	ErrWrongStatus     = errors.New("action not allowed in current announcement status")
+	ErrNotFound         = errors.New("announcement not found")
+	ErrTitleRequired    = errors.New("title is required")
+	ErrContentRequired  = errors.New("content is required")
+	ErrInvalidCategory  = errors.New("invalid category")
+	ErrWrongStatus      = errors.New("action not allowed in current announcement status")
 	ErrAlreadyPublished = errors.New("announcement is already published")
 )

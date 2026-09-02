@@ -34,9 +34,16 @@ func (r *repoImpl) GetSummary(ctx context.Context, orgID string) (*HRMSummary, e
 	const q = `
 		SELECT
 		    (SELECT COUNT(*) FROM hrm_employees    WHERE org_id = $1),
-		    (SELECT COUNT(*) FROM hrm_employees    WHERE org_id = $1 AND status = 'active'),
-		    (SELECT COUNT(*) FROM hrm_employees    WHERE org_id = $1 AND status = 'on_leave'),
-		    (SELECT COUNT(*) FROM hrm_employees    WHERE org_id = $1 AND status = 'terminated'),
+		    -- Headcount by status resolves through hrm_employee_statuses.category.
+		    -- hrm_employees.status was dropped by migration 00053 in favour of
+		    -- status_id; querying it fails 42703, and because all four counts sit
+		    -- in one statement that failure took the ENTIRE summary with it.
+		    (SELECT COUNT(*) FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id = e.status_id
+		        WHERE e.org_id = $1 AND es.category = 'active'),
+		    (SELECT COUNT(*) FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id = e.status_id
+		        WHERE e.org_id = $1 AND es.category = 'on_leave'),
+		    (SELECT COUNT(*) FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id = e.status_id
+		        WHERE e.org_id = $1 AND es.category = 'terminated'),
 		    (SELECT COUNT(*) FROM hrm_departments  WHERE org_id = $1 AND is_active = TRUE),
 		    (SELECT COUNT(*) FROM hrm_positions    WHERE org_id = $1 AND is_active = TRUE),
 		    (SELECT COUNT(*) FROM hrm_leave_requests WHERE org_id = $1 AND status = 'pending'),

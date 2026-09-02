@@ -4,9 +4,12 @@ package resignations
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type ResignationStatus string
+
 const (
 	StatusSubmitted ResignationStatus = "submitted"
 	StatusAccepted  ResignationStatus = "accepted"
@@ -15,6 +18,7 @@ const (
 )
 
 type ReasonCategory string
+
 const (
 	ReasonPersonal          ReasonCategory = "personal"
 	ReasonCareerGrowth      ReasonCategory = "career_growth"
@@ -61,12 +65,12 @@ type Resignation struct {
 }
 
 type SubmitResignationRequest struct {
-	ResignationDate  string         `json:"resignation_date"`
-	ReasonCategory   ReasonCategory `json:"reason_category"`
-	ReasonRemarks    *string        `json:"reason_remarks"`
+	ResignationDate string         `json:"resignation_date"`
+	ReasonCategory  ReasonCategory `json:"reason_category"`
+	ReasonRemarks   *string        `json:"reason_remarks"`
 	// Optional — if not set, computed from active contract notice_period_days
-	LastWorkingDate  *string        `json:"last_working_date"`
-	IsNoticeWaived   bool           `json:"is_notice_waived"`
+	LastWorkingDate *string `json:"last_working_date"`
+	IsNoticeWaived  bool    `json:"is_notice_waived"`
 }
 
 type UpdateResignationRequest struct {
@@ -79,6 +83,39 @@ type UpdateResignationRequest struct {
 type ResignationListResponse struct {
 	Resignations []*Resignation `json:"resignations"`
 	Total        int            `json:"total"`
+	Limit        int            `json:"limit"`
+	Offset       int            `json:"offset"`
+}
+
+// ResignationListFilter narrows the resignation list query.
+type ResignationListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *ResignationListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (
@@ -89,4 +126,10 @@ var (
 	ErrInvalidReasonCategory = errors.New("invalid reason_category")
 	ErrWrongStatus           = errors.New("action not allowed in current resignation status")
 	ErrAlreadyAccepted       = errors.New("resignation has already been accepted")
+	// ErrNoResignedStatus means the org has no employee status in the
+	// 'terminated' category, so there is nothing to move the employee to.
+	// Organizations created through the API are seeded no statuses at all —
+	// only migration 00053's backfill and POST /hrm/employee-statuses create
+	// them — so this is reachable, not defensive.
+	ErrNoResignedStatus = errors.New("organization has no employee status to mark a resignation — create one before accepting")
 )

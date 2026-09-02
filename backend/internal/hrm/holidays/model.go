@@ -7,37 +7,41 @@ import (
 )
 
 type HolidayType string
+
 const (
 	HolidayTypePublic   HolidayType = "public"
 	HolidayTypeCompany  HolidayType = "company"
 	HolidayTypeOptional HolidayType = "optional"
 )
+
 func (t HolidayType) IsValid() bool {
 	return t == HolidayTypePublic || t == HolidayTypeCompany || t == HolidayTypeOptional
 }
 
 type CalendarAssigneeType string
+
 const (
 	AssigneeOrganization CalendarAssigneeType = "organization"
 	AssigneeDepartment   CalendarAssigneeType = "department"
 	AssigneeEmployee     CalendarAssigneeType = "employee"
 )
+
 func (t CalendarAssigneeType) IsValid() bool {
 	return t == AssigneeOrganization || t == AssigneeDepartment || t == AssigneeEmployee
 }
 
 type HolidayCalendar struct {
-	ID          string    `db:"id"           json:"id"`
-	PublicID    string    `db:"public_id"    json:"public_id"`
-	OrgID       string    `db:"org_id"       json:"org_id"`
-	Name        string    `db:"name"         json:"name"`
-	Description *string   `db:"description"  json:"description,omitempty"`
-	CountryCode *string   `db:"country_code" json:"country_code,omitempty"`
-	Year        int       `db:"year"         json:"year"`
-	IsActive    bool      `db:"is_active"    json:"is_active"`
-	CreatedBy   string    `db:"created_by"   json:"created_by"`
-	CreatedAt   time.Time `db:"created_at"   json:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at"   json:"updated_at"`
+	ID          string     `db:"id"           json:"id"`
+	PublicID    string     `db:"public_id"    json:"public_id"`
+	OrgID       string     `db:"org_id"       json:"org_id"`
+	Name        string     `db:"name"         json:"name"`
+	Description *string    `db:"description"  json:"description,omitempty"`
+	CountryCode *string    `db:"country_code" json:"country_code,omitempty"`
+	Year        int        `db:"year"         json:"year"`
+	IsActive    bool       `db:"is_active"    json:"is_active"`
+	CreatedBy   string     `db:"created_by"   json:"created_by"`
+	CreatedAt   time.Time  `db:"created_at"   json:"created_at"`
+	UpdatedAt   time.Time  `db:"updated_at"   json:"updated_at"`
 	Holidays    []*Holiday `db:"-"           json:"holidays,omitempty"`
 }
 

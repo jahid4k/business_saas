@@ -68,8 +68,14 @@ import (
 	"github.com/mridha/businesssaas/pkg/response"
 
 	// ── Internal — Platform (shared across modules) ───────────────────────────
+	"github.com/mridha/businesssaas/internal/platform/checklists"
 	"github.com/mridha/businesssaas/internal/platform/contacts"
 	"github.com/mridha/businesssaas/internal/platform/engagement"
+	"github.com/mridha/businesssaas/internal/platform/forms"
+	"github.com/mridha/businesssaas/internal/platform/kb"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
+	"github.com/mridha/businesssaas/internal/platform/scheduler"
+	"github.com/mridha/businesssaas/internal/platform/tickets"
 
 	// ── Internal — Capture ────────────────────────────────────────────────────
 	"github.com/mridha/businesssaas/internal/capture/apikeys"
@@ -87,11 +93,18 @@ import (
 	crmtemplates "github.com/mridha/businesssaas/internal/crm/templates"
 
 	// ── Internal — HRM Phase 1 (Core Employee Management) ────────────────────
+	hrmanalytics "github.com/mridha/businesssaas/internal/hrm/analytics"
 	hrmdepts "github.com/mridha/businesssaas/internal/hrm/departments"
 	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmentities "github.com/mridha/businesssaas/internal/hrm/entities"
+	hrmexits "github.com/mridha/businesssaas/internal/hrm/exits"
+	hrmfx "github.com/mridha/businesssaas/internal/hrm/fx"
 	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
+	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmorgchart "github.com/mridha/businesssaas/internal/hrm/orgchart"
 	hrmpositions "github.com/mridha/businesssaas/internal/hrm/positions"
 	hrmreports "github.com/mridha/businesssaas/internal/hrm/reports"
+	hrmsuccession "github.com/mridha/businesssaas/internal/hrm/succession"
 
 	// ── Internal — HRM Group A (Config / Setup) ───────────────────────────────
 	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
@@ -99,12 +112,20 @@ import (
 	hrmdoctmpls "github.com/mridha/businesssaas/internal/hrm/doctemplates"
 	hrmholidays "github.com/mridha/businesssaas/internal/hrm/holidays"
 	hrmsalary "github.com/mridha/businesssaas/internal/hrm/salary"
+	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
 	hrmshifts "github.com/mridha/businesssaas/internal/hrm/shifts"
 	hrmwarntypes "github.com/mridha/businesssaas/internal/hrm/warningtypes"
 
 	// ── Internal — HRM Group B (Core Employee Lifecycle) ─────────────────────
+	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
+	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
+	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
+	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
 	hrmpromotions "github.com/mridha/businesssaas/internal/hrm/promotions"
+	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
 	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
+	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
 	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	hrmtransfers "github.com/mridha/businesssaas/internal/hrm/transfers"
 
@@ -117,6 +138,23 @@ import (
 	// ── Internal — HRM Group D (Time and Compensation) ───────────────────────
 	hrmattendance "github.com/mridha/businesssaas/internal/hrm/attendance"
 	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
+
+	// ── Internal — HRM Extended Phase 7B (Compensation) ───────────────────────
+	hrmcompensation "github.com/mridha/businesssaas/internal/hrm/compensation"
+
+	// ── Internal — HRM Extended Phase 7C (Loans + Reimbursements) ─────────────
+	hrmloans "github.com/mridha/businesssaas/internal/hrm/loans"
+	hrmreimbursements "github.com/mridha/businesssaas/internal/hrm/reimbursements"
+
+	// ── Internal — HRM Extended Phase 7D (Statutory + Benefits) ───────────────
+	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
+	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
+
+	// ── Internal — HRM Extended Phase 8A (Assets) ─────────────────────────────
+	hrmassets "github.com/mridha/businesssaas/internal/hrm/assets"
+
+	// ── Internal — HRM Extended Phase 8B (Travel & Expense) ───────────────────
+	hrmexpenses "github.com/mridha/businesssaas/internal/hrm/expenses"
 
 	// ── Internal — HRM Group E (Recognition and Communication) ───────────────
 	hrmannouncements "github.com/mridha/businesssaas/internal/hrm/announcements"
@@ -209,8 +247,13 @@ func main() {
 	taskRepo := task.NewRepository(pgPool)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	checklistsRepo := checklists.NewRepository(pgPool)
+	formsRepo := forms.NewRepository(pgPool)
 	contactsRepo := contacts.NewRepository(pgPool)
 	engagementRepo := engagement.NewRepository(pgPool)
+	schedulerRepo := scheduler.NewRepository(pgPool)
+	ticketsRepo := tickets.NewRepository(pgPool)
+	kbRepo := kb.NewRepository(pgPool)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineRepo := crmpipeline.NewRepository(pgPool)
@@ -234,6 +277,7 @@ func main() {
 	hrmPosRepo := hrmpositions.NewRepository(pgPool)
 	hrmEmpRepo := hrmemployees.NewRepository(pgPool)
 	hrmLeaveRepo := hrmleave.NewRepository(pgPool)
+	hrmOnboardingRepo := hrmonboarding.NewRepository(pgPool)
 	hrmReportsRepo := hrmreports.NewRepository(pgPool)
 
 	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────
@@ -261,11 +305,37 @@ func main() {
 	hrmAttendanceRepo := hrmattendance.NewRepository(pgPool)
 	hrmPayslipsRepo := hrmpayslips.NewRepository(pgPool)
 
+	// ── HRM Extended Phase 7B — Compensation (migrations 00098–00099) ─────────
+	hrmCompensationRepo := hrmcompensation.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 7C — Loans + Reimbursements (migrations 00100–00101) ─
+	hrmLoansRepo := hrmloans.NewRepository(pgPool)
+	hrmReimbursementsRepo := hrmreimbursements.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 7D — Statutory + Benefits (migrations 00102–00105) ──
+	hrmStatutoryRepo := hrmstatutory.NewRepository(pgPool)
+	hrmBenefitsRepo := hrmbenefits.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 8A — Assets (migrations 00106–00107) ────────────────
+	hrmAssetsRepo := hrmassets.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 8B — Travel & Expense (migrations 00108–00109) ──────
+	hrmExpensesRepo := hrmexpenses.NewRepository(pgPool)
+
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	hrmAwardsRepo := hrmawards.NewRepository(pgPool)
 	hrmAnnsRepo := hrmannouncements.NewRepository(pgPool)
 	hrmCalRepo := hrmcalendar.NewRepository(pgPool)
 	hrmMilestonesRepo := hrmmilestones.NewRepository(pgPool)
+
+	// ── HRM Extended Phase 4A — Recruitment / ATS (migration 00078) ───────────
+	hrmRecruitmentRepo := hrmrecruitment.NewRepository(pgPool)
+	hrmPerformanceRepo := hrmperformance.NewRepository(pgPool)
+	hrmFeedbackRepo := hrmfeedback.NewRepository(pgPool)
+	hrmLearningRepo := hrmlearning.NewRepository(pgPool)
+	hrmSkillsRepo := hrmskills.NewRepository(pgPool)
+	hrmCertificationsRepo := hrmcertifications.NewRepository(pgPool)
+	hrmPipRepo := hrmpip.NewRepository(pgPool)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 7. SERVICES   (dependency order: leaf → composite)
@@ -275,16 +345,35 @@ func main() {
 	auditSvc := audit.NewService(auditRepo)
 	userSvc := user.NewService(userRepo)
 	avatarSvc := user.NewAvatarService(avatarRepo)
-	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc)
+
+	// ── Platform ──────────────────────────────────────────────────────────────
+	notifRepo := notifications.NewRepository(pgPool)
+	notifSvc := notifications.NewService(cfg.Notifications, notifRepo)
+
+	authSvc := auth.NewService(authRepo, userRepo, jwtManager, cfg.JWT, auditSvc, notifSvc)
 	authzSvc := authz.NewService(authzRepo, redisClient, auditSvc, authRepo)
+	hrmScopeResolver := hrmscope.NewResolver(pgPool)
 	businessSvc := organizations.NewService(businessRepo, authzRepo, jwtManager)
 	dashboardSvc := dashboard.NewService(dashboardRepo)
 	securitySvc := security.NewService(securityRepo)
 	taskSvc := task.NewService(taskRepo, auditSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	// checklistsSvc takes authzSvc directly as its AccessDirectory — authz.Service
+	// satisfies that narrow interface structurally, so no adapter is needed.
+	checklistsSvc := checklists.NewService(checklistsRepo, authzSvc)
+	// authzSvc satisfies forms.AccessDirectory structurally, exactly as it
+	// does checklists.AccessDirectory — no adapter needed.
+	formsSvc := forms.NewService(formsRepo, authzSvc)
 	contactsSvc := contacts.NewService(contactsRepo)
 	engagementSvc := engagement.NewService(engagementRepo)
+	schedulerSvc := scheduler.NewService(schedulerRepo, redisClient)
+	// authzSvc satisfies tickets.AccessDirectory structurally too — Can plus
+	// UserRoleName, the latter backing the sensitive-category assignee gate.
+	ticketsSvc := tickets.NewService(ticketsRepo, authzSvc)
+	// authzSvc satisfies kb.AccessDirectory too (Can only — the KB has no
+	// role-restricted content).
+	kbSvc := kb.NewService(kbRepo, authzSvc)
 
 	// ── CRM (wire in dependency order) ────────────────────────────────────────
 	crmSettingsSvc := crmsettings.NewService(crmSettingsRepo)
@@ -296,7 +385,10 @@ func main() {
 
 	// ── Capture ───────────────────────────────────────────────────────────────
 	apikeysSvc := apikeys.NewService(apikeysRepo)
-	emailSvc := email.NewService(emailRepo, leadsSvc)
+	// ticketsSvc satisfies email.TicketRaiser structurally — the interface
+	// names tickets' own types, so no adapter. capture/email imports
+	// platform/tickets; never the reverse.
+	emailSvc := email.NewService(emailRepo, leadsSvc, ticketsSvc)
 	socialSvc := social.NewService(socialRepo, leadsSvc, cfg.Social)
 	visitorsSvc := visitors.NewService(visitorsRepo, leadsSvc)
 
@@ -305,8 +397,13 @@ func main() {
 	// NewService(repo, auditSvc) below.
 	hrmDeptsSvc := hrmdepts.NewService(hrmDeptsRepo)
 	hrmPosSvc := hrmpositions.NewService(hrmPosRepo)
-	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc)
-	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc)
+	// hrmOnboardingSvc must be constructed before hrmEmpSvc — it is passed in
+	// as hrmEmpSvc's ChecklistHook (Phase 3). Building it here, not in a Group
+	// block below, is deliberate: doing it later would compile fine but wire
+	// a nil hook into hrmEmpSvc, a silent no-op rather than a build error.
+	hrmOnboardingSvc := hrmonboarding.NewService(hrmOnboardingRepo, checklistsSvc)
+	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc, hrmOnboardingSvc)
+	hrmLeaveSvc := hrmleave.NewService(hrmLeaveRepo, auditSvc, pgPool)
 	hrmPhase1Rpts := hrmreports.NewService(hrmReportsRepo)
 
 	// ── HRM Group A — config-layer services; no cross-module dependencies ──────
@@ -334,11 +431,77 @@ func main() {
 	hrmEmpDocsSvc := hrmemployeedocs.NewService(hrmEmpDocsRepo, pgPool)
 	hrmAcksSvc := hrmacks.NewService(hrmAcksRepo, pgPool)
 
+	// ── HRM Extended Phase 8A — Assets ─────────────────────────────────────────
+	// hrmAcksSvc satisfies assets.HandoverAcknowledger structurally — it names
+	// acknowledgements' own types, so no adapter is needed here (the corrected
+	// certifications.SkillGranter precedent). Handover sign-off is requested on
+	// every assignment; a nil acknowledger would simply skip it.
+	hrmAssetsSvc := hrmassets.NewService(hrmAssetsRepo, hrmApprovalsSvc, hrmAcksSvc)
+
+	// ── HRM Extended Phase 7B — Compensation ───────────────────────────────────
+	// Constructed before Group D so it can be wired into payslips as its
+	// BonusSource below — payslips is the CONSUMER of that narrow interface
+	// (see payslips.BonusSource's doc comment), so compensation must exist
+	// first. compensation imports payslips (not the reverse) to reference
+	// payslips.PendingBonus/PaidBonusLine — the recruitment.EmployeeCreator /
+	// pip.TerminationCreator direction.
+	hrmCompensationSvc := hrmcompensation.NewService(hrmCompensationRepo, pgPool, hrmApprovalsSvc)
+
+	// ── HRM Extended Phase 7C — Loans + Reimbursements ─────────────────────────
+	// Same reasoning and same construction-order requirement as compensation
+	// above — payslips is the CONSUMER of LoanSource/ReimbursementSource, so
+	// both must exist before hrmPayslipsSvc is constructed.
+	hrmLoansSvc := hrmloans.NewService(hrmLoansRepo, pgPool, hrmApprovalsSvc)
+	hrmReimbursementsSvc := hrmreimbursements.NewService(hrmReimbursementsRepo, pgPool, hrmApprovalsSvc)
+
+	// ── HRM Extended Phase 8B — Travel & Expense ───────────────────────────────
+	// hrmReimbursementsSvc satisfies expenses.ReimbursementCreator structurally
+	// — it names reimbursements' own types, so no adapter (the corrected
+	// certifications.SkillGranter precedent). This IS the 7C boundary: an
+	// approved claim becomes a reimbursement, which 7C's
+	// payslips.ReimbursementSource already pays out through payroll, so 8B
+	// adds no payroll coupling of its own.
+	hrmExpensesSvc := hrmexpenses.NewService(hrmExpensesRepo, hrmApprovalsSvc, hrmReimbursementsSvc)
+
+	// ── HRM Extended Phase 7D — Statutory + Benefits ───────────────────────────
+	// Same construction-order requirement — payslips is the CONSUMER of
+	// StatutorySource/BenefitsSource. hrmStatutoryRegistry ships with
+	// SlabProvider as the fallback for every country_code; a real
+	// country-specific Provider (proration rules, eligibility thresholds a
+	// slab table cannot express) registers here later without a schema
+	// change — see internal/hrm/statutory/provider.go's doc comment.
+	hrmStatutoryRegistry := hrmstatutory.NewRegistry(hrmstatutory.SlabProvider{})
+	hrmStatutorySvc := hrmstatutory.NewService(hrmStatutoryRepo, hrmStatutoryRegistry)
+	hrmBenefitsSvc := hrmbenefits.NewService(hrmBenefitsRepo)
+
 	// ── HRM Group D — time and compensation ───────────────────────────────────
 	// D1 attendance: pgPool for shift resolution queries
 	// D2 payslips:   pgPool for formula engine (employee+salary+attendance queries)
+	//                bonusSource = hrmCompensationSvc, feeding run_type='bonus' runs.
+	//                loanSource / reimbursementSource / statutorySource /
+	//                benefitsSource feed every OTHER run type.
 	hrmAttendanceSvc := hrmattendance.NewService(hrmAttendanceRepo, pgPool)
-	hrmPayslipsSvc := hrmpayslips.NewService(hrmPayslipsRepo, pgPool)
+
+	// hrmExitsSvc sits HERE, ahead of payslips, because payslips consumes it:
+	// exits.Service satisfies payslips.FnFSource structurally (it supplies a
+	// run_type='fnf' run its employee and its settlement lines), and it also
+	// satisfies recruitment.RehireChecker further down. Both are passed
+	// directly with no adapter.
+	// leave / loans / expenses each satisfy one of exits' settlement sources
+	// structurally, naming their own types, so all three are passed directly
+	// with no adapter. All three are nil-safe on the exits side.
+	// formsSvc backs the exit interview; authzSvc and authSvc are the two
+	// halves of access revocation — authz.SuspendMembership and
+	// auth.LogoutAll each satisfy their narrow interface structurally, so
+	// both are passed directly with no adapter.
+	hrmExitsSvc := hrmexits.NewService(hrmexits.NewRepository(pgPool), checklistsSvc, hrmScopeResolver,
+		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc,
+		formsSvc, authzSvc, authSvc)
+
+	hrmPayslipsSvc := hrmpayslips.NewService(
+		hrmPayslipsRepo, pgPool, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
+		hrmStatutorySvc, hrmBenefitsSvc, hrmExitsSvc,
+	)
 
 	// ── HRM Group E — recognition and communication ───────────────────────────
 	// E1 awards:         pgPool for auto-creating E2 announcement on Issue()
@@ -351,8 +514,57 @@ func main() {
 	hrmCalSvc := hrmcalendar.NewService(hrmCalRepo, pgPool)
 	hrmMilestonesSvc := hrmmilestones.NewService(hrmMilestonesRepo, pgPool)
 
-	// Wire approval-instance completion back into each of the five workflow
-	// modules. Must run after all five services above exist. entityType here
+	// ── HRM Extended Phase 4A/4B — Recruitment / ATS ───────────────────────────
+	// Requisitions and offers are approval-gated the same way promotions/
+	// transfers/etc. are — takes hrmApprovalsSvc so SubmitRequisition()/
+	// SubmitOffer() can route into an approval chain when one is configured.
+	// hrmEmpSvc (constructed above, in the HRM Phase 1 block) satisfies
+	// recruitment.EmployeeCreator structurally — HireApplication uses it to
+	// materialize an employee record from a hired application.
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc, hrmExitsSvc)
+
+	// ── HRM Extended Phase 5A — Performance / Goals ────────────────────────────
+	// hrmScopeResolver satisfies performance.RecordAuthorizer structurally, so
+	// it is passed directly with no adapter — the same shape as authzSvc
+	// satisfying checklists.AccessDirectory. The service takes no authz.Service
+	// of its own: the handler resolves the caller's scope tier and manage
+	// permission and hands both over on a Caller value.
+	// formsSvc (Platform block above) satisfies performance.FormEngine
+	// structurally — appraisals instantiate self/manager forms through it.
+	hrmPerformanceSvc := hrmperformance.NewService(hrmPerformanceRepo, hrmScopeResolver, formsSvc)
+
+	// ── HRM Extended Phase 5C — 360 feedback + PIP ─────────────────────────────
+	// formsSvc satisfies feedback.FormReader structurally. The feedback service
+	// reads form instances SERVER-SIDE through it and strips identity before
+	// returning anything, which is why no form instance id ever reaches a
+	// subject — see internal/hrm/feedback/model.go's anonymity contract.
+	hrmFeedbackSvc := hrmfeedback.NewService(hrmFeedbackRepo, hrmScopeResolver, formsSvc)
+
+	// hrmTerminationsSvc satisfies pip.TerminationCreator structurally, via
+	// CreateDraftFromPIP. The interface is declared in internal/hrm/pip and
+	// terminations imports pip, not the reverse — the consumer-owned narrow
+	// interface direction, matching recruitment.EmployeeCreator. A failed PIP
+	// creates a DRAFT termination and stops; Submit and Apply stay on the
+	// termination endpoints, behind the approval chain.
+	hrmPipSvc := hrmpip.NewService(hrmPipRepo, hrmScopeResolver, hrmTerminationsSvc)
+
+	// ── HRM Extended Phase 6A — Learning & Development ─────────────────────────
+	// formsSvc satisfies learning.FormEngine structurally. Quizzes are form
+	// instances, but the CORRECT ANSWERS live in hrm_quiz_answer_keys, owned by
+	// the learning package — platform/forms has no concept of a correct answer,
+	// and appraisals and 360 feedback carry no assessment columns as a result.
+	hrmLearningSvc := hrmlearning.NewService(hrmLearningRepo, hrmScopeResolver, formsSvc)
+
+	// ── HRM Extended Phase 6B — Certifications + the skills taxonomy ───────────
+	// hrmSkillsSvc satisfies certifications.SkillGranter structurally, so
+	// issuing a credential that carries a skill records that skill too. The
+	// import runs certifications → skills and never the reverse: skills is a
+	// SHARED taxonomy, and Phase 10 succession will consume it the same way.
+	hrmSkillsSvc := hrmskills.NewService(hrmSkillsRepo, hrmScopeResolver)
+	hrmCertificationsSvc := hrmcertifications.NewService(hrmCertificationsRepo, hrmScopeResolver, hrmSkillsSvc)
+
+	// Wire approval-instance completion back into each of the seven workflow
+	// modules. Must run after all seven services above exist. entityType here
 	// must match the EntityType string each Submit()/Issue() uses when calling
 	// approvalsSvc.CreateInstance — see each module's service.go.
 	hrmApprovalsSvc.RegisterCallback("promotion", hrmPromotionsSvc.HandleApprovalDecision)
@@ -360,6 +572,15 @@ func main() {
 	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("warning", hrmWarningsSvc.HandleApprovalDecision)
 	hrmApprovalsSvc.RegisterCallback("award", hrmAwardsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("salary_revision", hrmCompensationSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("reimbursement", hrmReimbursementsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("asset_request", hrmAssetsSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("travel_request", hrmExpensesSvc.HandleTravelApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("expense_claim", hrmExpensesSvc.HandleClaimApprovalDecision)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 8. HANDLERS
@@ -375,9 +596,63 @@ func main() {
 	taskHandler := task.NewHandler(taskSvc, authzSvc)
 
 	// ── Platform ──────────────────────────────────────────────────────────────
+	checklistsHandler := checklists.NewHandler(checklistsSvc)
+	formsHandler := forms.NewHandler(formsSvc)
 	contactsHandler := contacts.NewHandler(contactsSvc)
 	// When HRM arrives use: engagement.NewHandler(engagementSvc, "hrm")
 	engagementHandler := engagement.NewHandler(engagementSvc, "crm")
+	schedulerHandler := scheduler.NewHandler(schedulerSvc)
+	ticketsHandler := tickets.NewHandler(ticketsSvc)
+	hrmExitsHandler := hrmexits.NewHandler(hrmExitsSvc, authzSvc, hrmScopeResolver)
+	// The org chart takes no scope resolver: it is org-wide by design, so
+	// nothing here calls ResolveScope. See migration 00122's header.
+	hrmOrgChartSvc := hrmorgchart.NewService(hrmorgchart.NewRepository(pgPool))
+	hrmOrgChartHandler := hrmorgchart.NewHandler(hrmOrgChartSvc, authzSvc)
+
+	hrmSuccessionSvc := hrmsuccession.NewService(hrmsuccession.NewRepository(pgPool))
+	hrmSuccessionHandler := hrmsuccession.NewHandler(hrmSuccessionSvc, authzSvc)
+
+	hrmAnalyticsSvc := hrmanalytics.NewService(hrmanalytics.NewRepository(pgPool))
+	hrmAnalyticsHandler := hrmanalytics.NewHandler(hrmAnalyticsSvc, authzSvc)
+
+	hrmEntitiesSvc := hrmentities.NewService(hrmentities.NewRepository(pgPool))
+	hrmEntitiesHandler := hrmentities.NewHandler(hrmEntitiesSvc, authzSvc)
+
+	hrmFxSvc := hrmfx.NewService(hrmfx.NewRepository(pgPool))
+	hrmFxHandler := hrmfx.NewHandler(hrmFxSvc, authzSvc)
+
+	// 11B-1: give the two carried currency gaps a rate source.
+	//
+	// ⚠ Both are OPTIONAL attachments, and both degrade to their previous
+	// behaviour without one — expenses uses the caller's rate defaulting to
+	// 1, exits reports a foreign advance unconverted with its reason. Neither
+	// ever falls back to parity.
+	//
+	// hrmFxSvc satisfies expenses.RateSource and exits.RateSource
+	// structurally through RateAsOfPrimitive; hrmEntitiesSvc satisfies
+	// expenses.BaseCurrencySource through BaseCurrency. No adapter, and
+	// neither consumer imports the provider.
+	hrmExpensesSvc.SetRateSource(hrmFxSvc, hrmEntitiesSvc)
+	hrmExitsSvc.SetRateSource(hrmFxSvc)
+
+	// 11B-2: entity re-scoping. hrmEntitiesSvc satisfies every one of these
+	// consumer-declared interfaces structurally, through BaseCurrency and
+	// CountryForEmployee — primitives only, no adapter, and no consumer
+	// imports internal/hrm/entities.
+	//
+	// ⚠ EVERY ONE OF THESE IS OPTIONAL AND EVERY ONE FAILS OPEN. Without
+	// them: payroll uses the historical BDT default, statutory applies every
+	// active rule to everybody, and clearance/severance/award currencies fall
+	// back as they always did. Entity scoping that failed closed would empty
+	// the payroll run and zero the statutory deductions of every organization
+	// in this database, none of which has a legal entity configured.
+	hrmPayslipsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmStatutorySvc.SetCountryResolver(hrmEntitiesSvc)
+	hrmExitsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmTerminationsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	hrmAwardsSvc.SetBaseCurrencySource(hrmEntitiesSvc)
+	kbHandler := kb.NewHandler(kbSvc)
+	notifHandler := notifications.NewHandler(notifSvc)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	pipelineHandler := crmpipeline.NewHandler(pipelineSvc)
@@ -397,12 +672,13 @@ func main() {
 	// ── HRM Phase 1 ───────────────────────────────────────────────────────────
 	hrmDeptsHandler := hrmdepts.NewHandler(hrmDeptsSvc)
 	hrmPosHandler := hrmpositions.NewHandler(hrmPosSvc)
-	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc)
-	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc)
+	hrmEmpHandler := hrmemployees.NewHandler(hrmEmpSvc, authzSvc, hrmScopeResolver)
+	hrmLeaveHandler := hrmleave.NewHandler(hrmLeaveSvc, authzSvc, hrmScopeResolver)
+	hrmOnboardingHandler := hrmonboarding.NewHandler(hrmOnboardingSvc, authzSvc, hrmScopeResolver)
 	hrmRptsHandler := hrmreports.NewHandler(hrmPhase1Rpts)
 
 	// ── HRM Group A ───────────────────────────────────────────────────────────
-	hrmSalaryHandler := hrmsalary.NewHandler(hrmSalarySvc)
+	hrmSalaryHandler := hrmsalary.NewHandler(hrmSalarySvc, authzSvc, hrmScopeResolver)
 	hrmApprovalsHandler := hrmapprovals.NewHandler(hrmApprovalsSvc)
 	hrmWarnTypesHandler := hrmwarntypes.NewHandler(hrmWarnTypesSvc)
 	hrmDocTmplsHandler := hrmdoctmpls.NewHandler(hrmDocTmplsSvc)
@@ -411,26 +687,42 @@ func main() {
 	hrmContractsHandler := hrmcontracts.NewHandler(hrmContractsSvc)
 
 	// ── HRM Group B ───────────────────────────────────────────────────────────
-	hrmPromotionsHandler := hrmpromotions.NewHandler(hrmPromotionsSvc)
-	hrmTransfersHandler := hrmtransfers.NewHandler(hrmTransfersSvc)
-	hrmResignationsHandler := hrmresignations.NewHandler(hrmResignationsSvc)
-	hrmTerminationsHandler := hrmterminations.NewHandler(hrmTerminationsSvc)
+	hrmPromotionsHandler := hrmpromotions.NewHandler(hrmPromotionsSvc, authzSvc, hrmScopeResolver)
+	hrmTransfersHandler := hrmtransfers.NewHandler(hrmTransfersSvc, authzSvc, hrmScopeResolver)
+	hrmResignationsHandler := hrmresignations.NewHandler(hrmResignationsSvc, authzSvc, hrmScopeResolver)
+	hrmTerminationsHandler := hrmterminations.NewHandler(hrmTerminationsSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group C ───────────────────────────────────────────────────────────
-	hrmWarningsHandler := hrmwarnings.NewHandler(hrmWarningsSvc)
-	hrmCplHandler := hrmcomplaints.NewHandler(hrmCplSvc)
-	hrmEmpDocsHandler := hrmemployeedocs.NewHandler(hrmEmpDocsSvc)
+	hrmWarningsHandler := hrmwarnings.NewHandler(hrmWarningsSvc, authzSvc, hrmScopeResolver)
+	hrmCplHandler := hrmcomplaints.NewHandler(hrmCplSvc, authzSvc, hrmScopeResolver)
+	hrmEmpDocsHandler := hrmemployeedocs.NewHandler(hrmEmpDocsSvc, authzSvc, hrmScopeResolver)
 	hrmAcksHandler := hrmacks.NewHandler(hrmAcksSvc)
 
 	// ── HRM Group D ───────────────────────────────────────────────────────────
-	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc)
-	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc)
+	hrmAttendanceHandler := hrmattendance.NewHandler(hrmAttendanceSvc, authzSvc, hrmScopeResolver)
+	hrmPayslipsHandler := hrmpayslips.NewHandler(hrmPayslipsSvc, authzSvc, hrmScopeResolver)
+	hrmCompensationHandler := hrmcompensation.NewHandler(hrmCompensationSvc, authzSvc, hrmScopeResolver)
+	hrmLoansHandler := hrmloans.NewHandler(hrmLoansSvc, authzSvc, hrmScopeResolver)
+	hrmReimbursementsHandler := hrmreimbursements.NewHandler(hrmReimbursementsSvc, authzSvc, hrmScopeResolver)
+	hrmStatutoryHandler := hrmstatutory.NewHandler(hrmStatutorySvc)
+	hrmBenefitsHandler := hrmbenefits.NewHandler(hrmBenefitsSvc, authzSvc, hrmScopeResolver)
+	hrmAssetsHandler := hrmassets.NewHandler(hrmAssetsSvc, authzSvc, hrmScopeResolver)
+	hrmExpensesHandler := hrmexpenses.NewHandler(hrmExpensesSvc, authzSvc, hrmScopeResolver)
 
 	// ── HRM Group E ───────────────────────────────────────────────────────────
 	hrmAwardsHandler := hrmawards.NewHandler(hrmAwardsSvc)
 	hrmAnnsHandler := hrmannouncements.NewHandler(hrmAnnsSvc)
 	hrmCalHandler := hrmcalendar.NewHandler(hrmCalSvc)
 	hrmMilestonesHandler := hrmmilestones.NewHandler(hrmMilestonesSvc)
+
+	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
+	hrmRecruitmentHandler := hrmrecruitment.NewHandler(hrmRecruitmentSvc)
+	hrmPerformanceHandler := hrmperformance.NewHandler(hrmPerformanceSvc, authzSvc)
+	hrmFeedbackHandler := hrmfeedback.NewHandler(hrmFeedbackSvc, authzSvc)
+	hrmPipHandler := hrmpip.NewHandler(hrmPipSvc, authzSvc)
+	hrmLearningHandler := hrmlearning.NewHandler(hrmLearningSvc, authzSvc)
+	hrmSkillsHandler := hrmskills.NewHandler(hrmSkillsSvc, authzSvc)
+	hrmCertificationsHandler := hrmcertifications.NewHandler(hrmCertificationsSvc, authzSvc)
 
 	// ═════════════════════════════════════════════════════════════════════════
 	// 9. FIBER
@@ -500,8 +792,20 @@ func main() {
 	task.RegisterRoutes(api, taskHandler, permFn, requireAuth, requireOrgParam)
 
 	// ── Platform (shared layer — CRM and future modules) ──────────────────────
+	checklists.RegisterRoutes(api, checklistsHandler, permFn, requireAuth, requireOrgMatch)
+	forms.RegisterRoutes(api, formsHandler, permFn, requireAuth, requireOrgMatch)
 	contacts.RegisterRoutes(api, contactsHandler, permFn, requireAuth, requireOrgMatch)
 	engagement.RegisterRoutes(api, engagementHandler, permFn, requireAuth, requireOrgMatch)
+	scheduler.RegisterRoutes(api, schedulerHandler, requireAuth, permFn)
+	tickets.RegisterRoutes(api, ticketsHandler, permFn, requireAuth, requireOrgMatch)
+	kb.RegisterRoutes(api, kbHandler, permFn, requireAuth, requireOrgMatch)
+	hrmexits.RegisterRoutes(api, hrmExitsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmorgchart.RegisterRoutes(api, hrmOrgChartHandler, permFn, requireAuth, requireOrgMatch)
+	hrmsuccession.RegisterRoutes(api, hrmSuccessionHandler, permFn, requireAuth, requireOrgMatch)
+	hrmanalytics.RegisterRoutes(api, hrmAnalyticsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmentities.RegisterRoutes(api, hrmEntitiesHandler, permFn, requireAuth, requireOrgMatch)
+	hrmfx.RegisterRoutes(api, hrmFxHandler, permFn, requireAuth, requireOrgMatch)
+	notifications.RegisterRoutes(api, notifHandler, requireAuth)
 
 	// ── CRM ───────────────────────────────────────────────────────────────────
 	crmleads.RegisterRoutes(api, leadsHandler, permFn, requireAuth, requireOrgMatch)
@@ -524,6 +828,7 @@ func main() {
 	hrmpositions.RegisterRoutes(api, hrmPosHandler, permFn, requireAuth, requireOrgMatch)
 	hrmemployees.RegisterRoutes(api, hrmEmpHandler, permFn, requireAuth, requireOrgMatch)
 	hrmleave.RegisterRoutes(api, hrmLeaveHandler, permFn, requireAuth, requireOrgMatch)
+	hrmonboarding.RegisterRoutes(api, hrmOnboardingHandler, permFn, requireAuth, requireOrgMatch)
 	hrmreports.RegisterRoutes(api, hrmRptsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Group A — Config / Setup (migrations 00021–00028) ────────────────
@@ -558,6 +863,13 @@ func main() {
 	// D2 ComputeRun() checks D1 period is finalized before running formulas.
 	hrmattendance.RegisterRoutes(api, hrmAttendanceHandler, permFn, requireAuth, requireOrgMatch)
 	hrmpayslips.RegisterRoutes(api, hrmPayslipsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcompensation.RegisterRoutes(api, hrmCompensationHandler, permFn, requireAuth, requireOrgMatch)
+	hrmloans.RegisterRoutes(api, hrmLoansHandler, permFn, requireAuth, requireOrgMatch)
+	hrmreimbursements.RegisterRoutes(api, hrmReimbursementsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmstatutory.RegisterRoutes(api, hrmStatutoryHandler, permFn, requireAuth, requireOrgMatch)
+	hrmbenefits.RegisterRoutes(api, hrmBenefitsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmassets.RegisterRoutes(api, hrmAssetsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmexpenses.RegisterRoutes(api, hrmExpensesHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── HRM Group E — Recognition and Communication (migrations 00041–00045) ──
 	// Awards (E1), Announcements (E2), HR Calendar (E3), Employee Milestones (E4)
@@ -567,6 +879,19 @@ func main() {
 	hrmannouncements.RegisterRoutes(api, hrmAnnsHandler, permFn, requireAuth, requireOrgMatch)
 	hrmcalendar.RegisterRoutes(api, hrmCalHandler, permFn, requireAuth, requireOrgMatch)
 	hrmmilestones.RegisterRoutes(api, hrmMilestonesHandler, permFn, requireAuth, requireOrgMatch)
+
+	// ── HRM Extended Phase 4A — Recruitment / ATS ──────────────────────────────
+	// Internal-only: no /pub/careers/* route in this phase (blocked on Capture
+	// Fix Pass B rate limiting + real email sending — see
+	// docs/HrmExtendedBuildPlan.md PHASE 4 and Project_Instruction.md Section 5
+	// → HRM MODULE → Recruitment / ATS).
+	hrmrecruitment.RegisterRoutes(api, hrmRecruitmentHandler, permFn, requireAuth, requireOrgMatch)
+	hrmperformance.RegisterRoutes(api, hrmPerformanceHandler, permFn, requireAuth, requireOrgMatch)
+	hrmfeedback.RegisterRoutes(api, hrmFeedbackHandler, permFn, requireAuth, requireOrgMatch)
+	hrmpip.RegisterRoutes(api, hrmPipHandler, permFn, requireAuth, requireOrgMatch)
+	hrmlearning.RegisterRoutes(api, hrmLearningHandler, permFn, requireAuth, requireOrgMatch)
+	hrmskills.RegisterRoutes(api, hrmSkillsHandler, permFn, requireAuth, requireOrgMatch)
+	hrmcertifications.RegisterRoutes(api, hrmCertificationsHandler, permFn, requireAuth, requireOrgMatch)
 
 	// ── 404 fallback — must be registered last ────────────────────────────────
 	app.Use(func(c fiber.Ctx) error {
@@ -594,6 +919,186 @@ func main() {
 			os.Exit(1)
 		}
 	}()
+
+	// Start the background scheduler
+	go schedulerSvc.Start(ctx)
+
+	// Register scheduler jobs
+	schedulerSvc.Register("milestones.generate_upcoming", "0 1 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		now := time.Now()
+		req := hrmmilestones.GenerateRequest{
+			Year:                    now.Year(),
+			Month:                   int(now.Month()),
+			IncludeAnniversaries:    true,
+			IncludeBirthdays:        true,
+			IncludeProbation:        true,
+			IncludeContractRenewals: true,
+		}
+		var total int
+		for _, orgID := range orgIDs {
+			res, err := hrmMilestonesSvc.GenerateUpcoming(jCtx, orgID, scheduler.SystemUserID, req)
+			if err != nil {
+				slog.Error("scheduler: milestones generation failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			if res != nil {
+				total += res.Generated
+			}
+		}
+		return total, nil
+	})
+
+	schedulerSvc.Register("attendance.absence_sweep", "0 2 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		sweepDate := time.Now().AddDate(0, 0, -1).Format("2006-01-02") // yesterday
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmAttendanceSvc.RunAbsenceSweep(jCtx, orgID, scheduler.SystemUserID, sweepDate)
+			if err != nil {
+				slog.Error("scheduler: absence sweep failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
+
+	// Daily (not monthly-only): on_joining grants need to fire promptly for
+	// new hires; monthly/annual policies simply no-op on days they're not
+	// due. Also rolls the period into a hrm_leave_balances snapshot on the
+	// 1st of each month.
+	schedulerSvc.Register("leave.accrue_and_snapshot", "0 3 * * *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		today := time.Now().Format("2006-01-02")
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmLeaveSvc.RunAccrual(jCtx, orgID, scheduler.SystemUserID, today)
+			if err != nil {
+				slog.Error("scheduler: leave accrual failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
+
+	// Annual (Jan 1, after the 03:00 accrual run): forfeits any balance in
+	// excess of a policy's carry_forward_cap. Its Dec-31-dated forfeiture is
+	// picked up by the next accrual run's snapshot window — ordering is
+	// enforced only by this cron gap, not an explicit call chain.
+	// The build plan calls this the highest-value feature in Phase 6. It runs
+	// instance-wide rather than per-org — the sweep queries an indexed slice of
+	// hrm_employee_certifications directly, so there is no org loop to write.
+	//
+	// 04:00, after the leave jobs, so a night's writes are spread out rather
+	// than contending on the same connection pool.
+	schedulerSvc.Register("certifications.expiry_sweep", "0 4 * * *", func(jCtx context.Context) (int, error) {
+		res, err := hrmCertificationsSvc.SweepExpiries(jCtx)
+		if err != nil {
+			// The partial count is still reported: the expiring pass may have
+			// committed before the expired pass failed.
+			return res.Total(), fmt.Errorf("certification expiry sweep: %w", err)
+		}
+		return res.Total(), nil
+	})
+
+	schedulerSvc.Register("leave.year_end_carry_forward", "30 2 1 1 *", func(jCtx context.Context) (int, error) {
+		orgIDs, err := businessSvc.FindAllIDs(jCtx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to list organizations: %w", err)
+		}
+		today := time.Now().Format("2006-01-02")
+		var total int
+		for _, orgID := range orgIDs {
+			n, err := hrmLeaveSvc.RunCarryForward(jCtx, orgID, scheduler.SystemUserID, today)
+			if err != nil {
+				slog.Error("scheduler: leave carry-forward failed for org", "orgID", orgID, "error", err)
+				continue
+			}
+			total += n
+		}
+		return total, nil
+	})
+
+	// benefits.activate_pending_enrollments — instance-wide, the
+	// attendance.absence_sweep / certifications.expiry_sweep shape (r24):
+	// flips every 'pending' enrollment whose effective_date has arrived to
+	// 'active', so a benefit signed up for ahead of its start date actually
+	// begins deducting once that date arrives, without a human having to
+	// notice and flip it manually.
+	schedulerSvc.Register("benefits.activate_pending_enrollments", "0 5 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmBenefitsSvc.ActivatePendingEnrollments(jCtx)
+		if err != nil {
+			return n, fmt.Errorf("benefits enrollment activation sweep: %w", err)
+		}
+		return n, nil
+	})
+
+	// exits.send_exit_interviews — instance-wide, the
+	// benefits.activate_pending_enrollments shape. Sends every interview whose
+	// scheduled date has arrived, which is normally the day AFTER the last
+	// working date: an interview answered while still on the payroll gets a
+	// different answer from one answered after leaving, and the honest one is
+	// the entire point of asking.
+	schedulerSvc.Register("exits.send_exit_interviews", "0 6 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmExitsSvc.RunInterviewSweep(jCtx, time.Now())
+		if err != nil {
+			return n, fmt.Errorf("exit interview sweep: %w", err)
+		}
+		return n, nil
+	})
+
+	// exits.revoke_departed_access — instance-wide. Suspends org membership
+	// and kills live sessions for anyone whose last working date has passed.
+	//
+	// ⚠ Destructive but REVERSIBLE and IDEMPOTENT: the membership is
+	// suspended rather than deleted (an admin can re-activate it), no user
+	// account or HR record is touched, and the query filters on
+	// access_revoked_at IS NULL so a revoked exit leaves the set permanently
+	// instead of being re-revoked every night. Runs at 07:00 rather than
+	// alongside the others so its log line is easy to find when somebody asks
+	// why their access stopped.
+	schedulerSvc.Register("exits.revoke_departed_access", "0 7 * * *", func(jCtx context.Context) (int, error) {
+		n, err := hrmExitsSvc.RunAccessRevocationSweep(jCtx, time.Now())
+		if err != nil {
+			return n, fmt.Errorf("exit access revocation sweep: %w", err)
+		}
+		return n, nil
+	})
+
+	// analytics.nightly_snapshot — instance-wide, the
+	// benefits.activate_pending_enrollments shape.
+	//
+	// ⚠ THIS JOB IS THE ONLY THING IN THE ANALYTICS PATH THAT READS OLTP.
+	// Every analytics endpoint reads hrm_headcount_snapshots and
+	// hrm_attrition_facts only, which is what makes a metric stable between
+	// two refreshes of the same page and stops a correction to an old record
+	// silently rewriting last March.
+	//
+	// ⚠ Facts are built BEFORE snapshots inside RunSnapshot, because the
+	// snapshot's leaver counts are read from the facts. Reversing the order
+	// would report a month with no leavers and then never correct it — the
+	// snapshot row for that date already exists and the next run writes a
+	// different date.
+	//
+	// Runs at 00:30 so a day's snapshot is taken after that day has ended.
+	schedulerSvc.Register("analytics.nightly_snapshot", "30 0 * * *", func(jCtx context.Context) (int, error) {
+		res, err := hrmAnalyticsSvc.RunSnapshot(jCtx, time.Now())
+		if err != nil {
+			return 0, fmt.Errorf("analytics nightly snapshot: %w", err)
+		}
+		return res.RowsWritten + res.FactsWritten, nil
+	})
 
 	<-quit
 	slog.Info("shutdown signal received")

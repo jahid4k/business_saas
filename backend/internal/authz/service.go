@@ -25,12 +25,33 @@ var roleNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _-]{1,49}$`)
 
 type Service interface {
 	Can(ctx context.Context, userID, organizationID, resource, action string) (bool, error)
+	// ResolveScope returns the highest resource-level visibility tier userID holds
+	// for resource within organizationID, checking "<resource>.view_all" →
+	// ".view_team" → ".view_own" in priority order via Can (each check is a cached
+	// lookup, not a new DB round trip). Callers invoke this once instead of calling
+	// Can three times themselves. ScopeNone means the caller holds none of the
+	// three tiers — the base "<resource>.view" route gate is unaffected by this.
+	ResolveScope(ctx context.Context, userID, organizationID, resource string) (Scope, error)
+	// RoleExists reports whether roleName resolves to a role visible to
+	// organizationID. Used by platform/checklists to validate owner_role
+	// on write, so a typo doesn't silently produce an item nobody can claim.
+	RoleExists(ctx context.Context, organizationID, roleName string) (bool, error)
+	// UserRoleName returns the name of the role userID holds in
+	// organizationID via a live membership, or "" if none. Used by
+	// platform/checklists for completion authorization and /items/mine.
+	UserRoleName(ctx context.Context, organizationID, userID string) (string, error)
 	GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error)
 	MyMembership(ctx context.Context, userID, organizationID string) (*MyMembershipResponse, error)
 	ListMembers(ctx context.Context, organizationID string) ([]*MemberWithUser, error)
 	GetMember(ctx context.Context, organizationID, memberRef string) (*MemberWithUser, error)
 	AssignRole(ctx context.Context, callerID, targetUserID, organizationID, roleName string) error
 	UpdateMember(ctx context.Context, callerID, organizationID, memberRef string, req UpdateMemberRequest) (*Membership, error)
+	// SuspendMembership satisfies exits.MembershipSuspender — the offboarding
+	// sweep cutting a departed employee's org access. Separate from
+	// UpdateMember because that path takes a callerID for audit and a whole
+	// request body; a scheduler has neither. IDEMPOTENT: suspending an
+	// already-suspended member is a no-op, which the nightly sweep relies on.
+	SuspendMembership(ctx context.Context, organizationID, userID string) error
 	InviteMember(ctx context.Context, callerID, organizationID string, req InviteMemberRequest) (*InviteMemberResponse, error)
 	AcceptInvitation(ctx context.Context, userID, organizationID, rawToken string) (*Membership, *OrganizationInvitation, error)
 	ResendInvitation(ctx context.Context, organizationID, invitationRef string) (*ResendInvitationResponse, error)
@@ -115,6 +136,43 @@ func (s *serviceImpl) Can(ctx context.Context, userID, organizationID, resource,
 	return false, nil
 }
 
+func (s *serviceImpl) ResolveScope(ctx context.Context, userID, organizationID, resource string) (Scope, error) {
+	tiers := []struct {
+		action string
+		scope  Scope
+	}{
+		{"view_all", ScopeAll},
+		{"view_team", ScopeTeam},
+		{"view_own", ScopeOwn},
+	}
+	for _, t := range tiers {
+		ok, err := s.Can(ctx, userID, organizationID, resource, t.action)
+		if err != nil {
+			return ScopeNone, fmt.Errorf("authz: ResolveScope: %w", err)
+		}
+		if ok {
+			return t.scope, nil
+		}
+	}
+	return ScopeNone, nil
+}
+
+func (s *serviceImpl) RoleExists(ctx context.Context, organizationID, roleName string) (bool, error) {
+	ok, err := s.repo.RoleExists(ctx, organizationID, roleName)
+	if err != nil {
+		return false, fmt.Errorf("authz: RoleExists: %w", err)
+	}
+	return ok, nil
+}
+
+func (s *serviceImpl) UserRoleName(ctx context.Context, organizationID, userID string) (string, error) {
+	name, err := s.repo.UserRoleName(ctx, organizationID, userID)
+	if err != nil {
+		return "", fmt.Errorf("authz: UserRoleName: %w", err)
+	}
+	return name, nil
+}
+
 func (s *serviceImpl) GetMembership(ctx context.Context, userID, organizationID string) (*Membership, error) {
 	m, err := s.repo.GetMembership(ctx, userID, organizationID)
 	if err != nil {
@@ -196,6 +254,26 @@ func (s *serviceImpl) AssignRole(ctx context.Context, callerID, targetUserID, or
 		return fmt.Errorf("authz: AssignRole: update: %w", err)
 	}
 	s.invalidateUser(ctx, targetUserID, organizationID)
+	return nil
+}
+
+// SuspendMembership sets a member's status to 'suspended'.
+//
+// Deliberately narrow and idempotent: it names no caller (the offboarding
+// sweep has none), touches nothing but status, and a member who is already
+// suspended — or who has no membership in this org at all — is not an error.
+// The nightly sweep re-reads the same set until each exit is stamped, so
+// anything that errors on a repeat would turn into a permanent alarm.
+//
+// Suspension is REVERSIBLE: the membership row survives, an admin can
+// re-activate it, and no HR record is touched.
+func (s *serviceImpl) SuspendMembership(ctx context.Context, organizationID, userID string) error {
+	if err := s.repo.SetMembershipStatus(ctx, organizationID, userID, MemberStatusSuspended); err != nil {
+		return fmt.Errorf("authz: SuspendMembership: %w", err)
+	}
+	// The permission cache keys on (user, org) and would otherwise keep
+	// answering from a membership that is no longer active.
+	s.invalidateUser(ctx, userID, organizationID)
 	return nil
 }
 

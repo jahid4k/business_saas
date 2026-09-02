@@ -5,13 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 type Repository interface {
-	FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Complaint, error)
+	FindAll(ctx context.Context, orgID string, filter ComplaintListFilter) ([]*Complaint, error)
+	Count(ctx context.Context, orgID string, filter ComplaintListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Complaint, error)
 	Create(ctx context.Context, c *Complaint) error
 	Update(ctx context.Context, c *Complaint) error
@@ -19,6 +24,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, is_anonymous, complaint_type,
@@ -38,29 +44,71 @@ func scan(row pgx.Row) (*Complaint, error) {
 		&c.Resolution, &c.ResolutionAction, &c.ResolvedAt, &c.ResolvedBy,
 		&c.DocumentID, &c.Status, &c.CreatedBy, &c.CreatedAt, &c.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
-func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Complaint, error) {
-	q := `SELECT ` + sel + ` FROM hrm_complaints WHERE org_id=$1`
+func buildComplaintsWhere(orgID string, filter ComplaintListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter ComplaintListFilter) ([]*Complaint, error) {
+	where, args := buildComplaintsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_complaints WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("complaints: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("complaints: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Complaint, 0)
-	for rows.Next() { c, err := scan(rows); if err != nil { return nil, err }; list = append(list, c) }
+	for rows.Next() {
+		c, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter ComplaintListFilter) (int, error) {
+	where, args := buildComplaintsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_complaints WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("complaints: Count: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Complaint, error) {
 	q := `SELECT ` + sel + ` FROM hrm_complaints WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scan(r.db.QueryRow(ctx, q, args...))
 }
 

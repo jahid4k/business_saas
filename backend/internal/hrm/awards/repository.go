@@ -21,6 +21,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, award_type,
@@ -38,22 +39,40 @@ func scan(row pgx.Row) (*Award, error) {
 		&a.ApprovalInstanceID, &a.CertificateDocumentID, &a.AnnouncementID,
 		&a.Status, &a.IssuedAt, &a.CreatedBy, &a.CreatedAt, &a.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return a, nil
 }
 
 func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Award, error) {
 	q := `SELECT ` + sel + ` FROM hrm_awards WHERE org_id=$1`
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
+	if status != "" {
+		args = append(args, status)
+		q += fmt.Sprintf(` AND status=$%d`, len(args))
+	}
 	q += ` ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("awards: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("awards: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Award, 0)
-	for rows.Next() { a, err := scan(rows); if err != nil { return nil, err }; list = append(list, a) }
+	for rows.Next() {
+		a, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
 	return list, rows.Err()
 }
 

@@ -17,8 +17,49 @@ import (
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/authz"
+	captureemail "github.com/mridha/businesssaas/internal/capture/email"
 	"github.com/mridha/businesssaas/internal/config"
+	crmdeals "github.com/mridha/businesssaas/internal/crm/deals"
+	crmleads "github.com/mridha/businesssaas/internal/crm/leads"
+	crmpipeline "github.com/mridha/businesssaas/internal/crm/pipeline"
+	crmsettings "github.com/mridha/businesssaas/internal/crm/settings"
+	hrmacks "github.com/mridha/businesssaas/internal/hrm/acknowledgements"
+	hrmanalytics "github.com/mridha/businesssaas/internal/hrm/analytics"
+	hrmapprovals "github.com/mridha/businesssaas/internal/hrm/approvals"
+	hrmassets "github.com/mridha/businesssaas/internal/hrm/assets"
+	hrmbenefits "github.com/mridha/businesssaas/internal/hrm/benefits"
+	hrmcertifications "github.com/mridha/businesssaas/internal/hrm/certifications"
+	hrmcompensation "github.com/mridha/businesssaas/internal/hrm/compensation"
+	hrmemployees "github.com/mridha/businesssaas/internal/hrm/employees"
+	hrmentities "github.com/mridha/businesssaas/internal/hrm/entities"
+	hrmexits "github.com/mridha/businesssaas/internal/hrm/exits"
+	hrmexpenses "github.com/mridha/businesssaas/internal/hrm/expenses"
+	hrmfeedback "github.com/mridha/businesssaas/internal/hrm/feedback"
+	hrmfx "github.com/mridha/businesssaas/internal/hrm/fx"
+	hrmlearning "github.com/mridha/businesssaas/internal/hrm/learning"
+	hrmleave "github.com/mridha/businesssaas/internal/hrm/leave"
+	hrmloans "github.com/mridha/businesssaas/internal/hrm/loans"
+	hrmonboarding "github.com/mridha/businesssaas/internal/hrm/onboarding"
+	hrmorgchart "github.com/mridha/businesssaas/internal/hrm/orgchart"
+	hrmpayslips "github.com/mridha/businesssaas/internal/hrm/payslips"
+	hrmperformance "github.com/mridha/businesssaas/internal/hrm/performance"
+	hrmpip "github.com/mridha/businesssaas/internal/hrm/pip"
+	hrmrecruitment "github.com/mridha/businesssaas/internal/hrm/recruitment"
+	hrmreimbursements "github.com/mridha/businesssaas/internal/hrm/reimbursements"
+	hrmresignations "github.com/mridha/businesssaas/internal/hrm/resignations"
+	hrmscope "github.com/mridha/businesssaas/internal/hrm/scope"
+	hrmskills "github.com/mridha/businesssaas/internal/hrm/skills"
+	hrmstatutory "github.com/mridha/businesssaas/internal/hrm/statutory"
+	hrmsuccession "github.com/mridha/businesssaas/internal/hrm/succession"
+	hrmterminations "github.com/mridha/businesssaas/internal/hrm/terminations"
 	"github.com/mridha/businesssaas/internal/organizations"
+	"github.com/mridha/businesssaas/internal/platform/checklists"
+	crmcontacts "github.com/mridha/businesssaas/internal/platform/contacts"
+	platformengagement "github.com/mridha/businesssaas/internal/platform/engagement"
+	"github.com/mridha/businesssaas/internal/platform/forms"
+	"github.com/mridha/businesssaas/internal/platform/kb"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
+	"github.com/mridha/businesssaas/internal/platform/tickets"
 	"github.com/mridha/businesssaas/internal/task"
 	"github.com/mridha/businesssaas/internal/user"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
@@ -26,13 +67,50 @@ import (
 
 // testEnv holds fully-wired services for integration tests.
 type testEnv struct {
-	db          *pgxpool.Pool
-	redis       *redis.Client
-	authSvc     auth.Service
-	userSvc     user.Service
-	authzSvc    authz.Service
-	orgSvc      organizations.Service
-	taskSvc     task.Service
+	db                   *pgxpool.Pool
+	redis                *redis.Client
+	authSvc              auth.Service
+	userSvc              user.Service
+	authzSvc             authz.Service
+	orgSvc               organizations.Service
+	taskSvc              task.Service
+	checklistsSvc        checklists.Service
+	hrmOnboardingSvc     hrmonboarding.Service
+	hrmEmpSvc            hrmemployees.Service
+	hrmApprovalsSvc      hrmapprovals.Service
+	hrmRecruitmentSvc    hrmrecruitment.Service
+	hrmTerminationSvc    hrmterminations.Service
+	hrmPerformanceSvc    hrmperformance.Service
+	hrmFeedbackSvc       hrmfeedback.Service
+	hrmLearningSvc       hrmlearning.Service
+	hrmSkillsSvc         hrmskills.Service
+	hrmCertSvc           hrmcertifications.Service
+	hrmPayslipsSvc       hrmpayslips.Service
+	hrmCompensationSvc   hrmcompensation.Service
+	hrmLeaveSvc          hrmleave.Service
+	hrmLoansSvc          hrmloans.Service
+	hrmReimbursementsSvc hrmreimbursements.Service
+	hrmStatutorySvc      hrmstatutory.Service
+	hrmBenefitsSvc       hrmbenefits.Service
+	hrmAssetsSvc         hrmassets.Service
+	hrmExpensesSvc       hrmexpenses.Service
+	hrmAcksSvc           hrmacks.Service
+	hrmPipSvc            hrmpip.Service
+	hrmScopeResolver     *hrmscope.Resolver
+	formsSvc             forms.Service
+	ticketsSvc           tickets.Service
+	kbSvc                kb.Service
+	emailSvc             captureemail.Service
+	leadsSvc             crmleads.Service
+	hrmResignationSvc    hrmresignations.Service
+	hrmExitsSvc          hrmexits.Service
+	hrmOrgChartSvc       hrmorgchart.Service
+	hrmSuccessionSvc     hrmsuccession.Service
+	hrmSuccessionRepo    hrmsuccession.Repository
+	hrmAnalyticsSvc      hrmanalytics.Service
+	hrmAnalyticsRepo     hrmanalytics.Repository
+	hrmEntitiesSvc       hrmentities.Service
+	hrmFxSvc             hrmfx.Service
 }
 
 // skipIfUnit gates all integration tests behind INTEGRATION=1.
@@ -94,15 +172,206 @@ func newTestEnv(t *testing.T) *testEnv {
 	authzRepo := authz.NewRepository(db)
 	orgRepo := organizations.NewRepository(db)
 	taskRepo := task.NewRepository(db)
+	notifRepo := notifications.NewRepository(db)
+	notifSvc := notifications.NewService(config.NotificationsConfig{}, notifRepo)
+	// Hoisted out of the return block so exits can consume it: auth.Service
+	// satisfies exits.SessionRevoker structurally via LogoutAll.
+	authSvc := auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc, notifSvc)
+
+	authzSvc := authz.NewService(authzRepo, rdb, auditSvc, authRepo)
+
+	// checklistsSvc takes authzSvc directly as its AccessDirectory, mirroring
+	// main.go's wiring — authz.Service satisfies that narrow interface
+	// structurally, so no adapter is needed here either.
+	checklistsRepo := checklists.NewRepository(db)
+	checklistsSvc := checklists.NewService(checklistsRepo, authzSvc)
+
+	hrmOnboardingRepo := hrmonboarding.NewRepository(db)
+	hrmOnboardingSvc := hrmonboarding.NewService(hrmOnboardingRepo, checklistsSvc)
+
+	hrmEmpRepo := hrmemployees.NewRepository(db)
+	hrmEmpSvc := hrmemployees.NewService(hrmEmpRepo, auditSvc, hrmOnboardingSvc)
+
+	hrmApprovalsRepo := hrmapprovals.NewRepository(db)
+	hrmApprovalsSvc := hrmapprovals.NewService(hrmApprovalsRepo)
+
+	// The scope resolver is constructed here rather than further down because
+	// exits needs it, and recruitment needs exits — mirroring main.go's
+	// dependency order.
+	hrmScopeResolver := hrmscope.NewResolver(db)
+
+	// hrmExitsSvc before recruitment: exits.Service satisfies
+	// recruitment.RehireChecker structurally, so it is passed with no adapter,
+	// exactly as in main.go. Wiring the REAL service rather than a stub is the
+	// point — the claim under test is that a not-rehire-eligible leaver
+	// actually surfaces on a candidate.
+	// leave / loans / expenses are constructed HERE, ahead of exits, because
+	// exits consumes all three as settlement sources — mirroring main.go's
+	// dependency order. Wiring the REAL services rather than stubs is the
+	// point: the claims under test are that recorded encashment becomes money,
+	// that a loan actually forecloses, and that an advance is actually
+	// recovered.
+	hrmLeaveSvc := hrmleave.NewService(hrmleave.NewRepository(db), auditSvc, db)
+	hrmLoansSvc := hrmloans.NewService(hrmloans.NewRepository(db), db, hrmApprovalsSvc)
+	hrmReimbursementsSvc := hrmreimbursements.NewService(hrmreimbursements.NewRepository(db), db, hrmApprovalsSvc)
+	hrmExpensesSvc := hrmexpenses.NewService(hrmexpenses.NewRepository(db), hrmApprovalsSvc, hrmReimbursementsSvc)
+	hrmApprovalsSvc.RegisterCallback("travel_request", hrmExpensesSvc.HandleTravelApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("expense_claim", hrmExpensesSvc.HandleClaimApprovalDecision)
+
+	// formsSvc / authzSvc / authSvc back the 9C offboarding paths, mirroring
+	// main.go. formsSvc is constructed further down for the appraisal/360
+	// consumers, so it is built here instead and reused there.
+	formsSvc := forms.NewService(forms.NewRepository(db), authzSvc)
+	hrmExitsSvc := hrmexits.NewService(hrmexits.NewRepository(db), checklistsSvc, hrmScopeResolver,
+		hrmLeaveSvc, hrmLoansSvc, hrmExpensesSvc,
+		formsSvc, authzSvc, authSvc)
+
+	hrmRecruitmentRepo := hrmrecruitment.NewRepository(db)
+	// 11B-1: the FX layer, attached to the two consumers that carried a
+	// currency gap. Both attachments are optional and both degrade to the
+	// pre-11B behaviour without one; the tests exercise both states.
+	hrmFxSvc := hrmfx.NewService(hrmfx.NewRepository(db))
+	hrmEntitiesSvcLocal := hrmentities.NewService(hrmentities.NewRepository(db))
+	hrmExpensesSvc.SetRateSource(hrmFxSvc, hrmEntitiesSvcLocal)
+	hrmExitsSvc.SetRateSource(hrmFxSvc)
+
+	hrmRecruitmentSvc := hrmrecruitment.NewService(hrmRecruitmentRepo, hrmApprovalsSvc, hrmEmpSvc, hrmExitsSvc)
+	hrmApprovalsSvc.RegisterCallback("job_requisition", hrmRecruitmentSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("offer", hrmRecruitmentSvc.HandleOfferApprovalDecision)
+
+	hrmTerminationSvc := hrmterminations.NewService(hrmterminations.NewRepository(db), db, hrmApprovalsSvc)
+	hrmTerminationSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
+	hrmApprovalsSvc.RegisterCallback("termination", hrmTerminationSvc.HandleApprovalDecision)
+	hrmResignationSvc := hrmresignations.NewService(hrmresignations.NewRepository(db), db)
+
+	// formsSvc is built above (exits consumes it); authzSvc satisfies
+	// forms.AccessDirectory structurally, mirroring main.go.
+	// authzSvc satisfies tickets.AccessDirectory structurally too, mirroring
+	// main.go — Can plus UserRoleName, the latter backing the
+	// sensitive-category assignee gate.
+	ticketsSvc := tickets.NewService(tickets.NewRepository(db), authzSvc)
+
+	// The inbound-email pipeline with its REAL leads dependency, wired in the
+	// same dependency order main.go uses. Stubbing leads here would defeat the
+	// point: the claim under test is that lead capture keeps working.
+	crmSettingsSvc := crmsettings.NewService(crmsettings.NewRepository(db))
+	platformEngagementSvc := platformengagement.NewService(platformengagement.NewRepository(db))
+	crmDealsSvc := crmdeals.NewService(crmdeals.NewRepository(db),
+		crmpipeline.NewService(crmpipeline.NewRepository(db)), platformEngagementSvc)
+	leadsSvc := crmleads.NewService(crmleads.NewRepository(db),
+		crmcontacts.NewService(crmcontacts.NewRepository(db)), crmDealsSvc,
+		crmSettingsSvc, platformEngagementSvc)
+	// ticketsSvc satisfies captureemail.TicketRaiser structurally, mirroring
+	// main.go — wiring the REAL ticket service is the point, since the claim
+	// under test is that a support@ address produces a real ticket.
+	emailSvc := captureemail.NewService(captureemail.NewRepository(db), leadsSvc, ticketsSvc)
+	kbSvc := kb.NewService(kb.NewRepository(db), authzSvc)
+
+	// *hrmscope.Resolver (built above, before exits) satisfies
+	// performance.RecordAuthorizer structurally, mirroring main.go — no adapter.
+	hrmPerformanceSvc := hrmperformance.NewService(hrmperformance.NewRepository(db), hrmScopeResolver, formsSvc)
+	hrmFeedbackSvc := hrmfeedback.NewService(hrmfeedback.NewRepository(db), hrmScopeResolver, formsSvc)
+
+	// hrmTerminationSvc satisfies pip.TerminationCreator structurally, exactly
+	// as in main.go. Wiring the REAL service rather than a stub is the point:
+	// the failed-PIP handoff is only proved by a draft actually landing in
+	// hrm_terminations.
+	hrmPipSvc := hrmpip.NewService(hrmpip.NewRepository(db), hrmScopeResolver, hrmTerminationSvc)
+	hrmLearningSvc := hrmlearning.NewService(hrmlearning.NewRepository(db), hrmScopeResolver, formsSvc)
+	// hrmSkillsSvc satisfies certifications.SkillGranter structurally, as in main.go.
+	hrmSkillsSvc := hrmskills.NewService(hrmskills.NewRepository(db), hrmScopeResolver)
+	hrmCertSvc := hrmcertifications.NewService(hrmcertifications.NewRepository(db), hrmScopeResolver, hrmSkillsSvc)
+
+	// hrmCompensationSvc/hrmLoansSvc/hrmReimbursementsSvc satisfy
+	// payslips.BonusSource/LoanSource/ReimbursementSource structurally,
+	// exactly as in main.go — constructed first so they can be wired into
+	// payslips.
+	hrmCompensationSvc := hrmcompensation.NewService(hrmcompensation.NewRepository(db), db, hrmApprovalsSvc)
+	// hrmStatutorySvc/hrmBenefitsSvc satisfy payslips.StatutorySource/
+	// BenefitsSource structurally, exactly as in main.go.
+	hrmStatutorySvc := hrmstatutory.NewService(hrmstatutory.NewRepository(db), hrmstatutory.NewRegistry(hrmstatutory.SlabProvider{}))
+	hrmBenefitsSvc := hrmbenefits.NewService(hrmbenefits.NewRepository(db))
+	// hrmExitsSvc satisfies payslips.FnFSource structurally, mirroring
+	// main.go — wiring the REAL service is the point: the claim under test is
+	// that an F&F run picks up its settlement from a real exit record.
+	hrmPayslipsSvc := hrmpayslips.NewService(
+		hrmpayslips.NewRepository(db), db, hrmCompensationSvc, hrmLoansSvc, hrmReimbursementsSvc,
+		hrmStatutorySvc, hrmBenefitsSvc, hrmExitsSvc,
+	)
+	// 11B-2: entity re-scoping. hrmEntitiesSvcLocal satisfies each
+	// consumer-declared interface structurally, exactly as in main.go.
+	//
+	// ⚠ All optional and all FAIL OPEN — without them payroll uses the
+	// historical default currency and statutory applies every active rule to
+	// everybody. Wiring the REAL entities service is the point: the claim
+	// under test is that an org with no entities is completely unaffected.
+	hrmPayslipsSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
+	hrmStatutorySvc.SetCountryResolver(hrmEntitiesSvcLocal)
+	hrmExitsSvc.SetBaseCurrencySource(hrmEntitiesSvcLocal)
+
+	hrmApprovalsSvc.RegisterCallback("salary_revision", hrmCompensationSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("bonus", hrmCompensationSvc.HandleBonusApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("loan", hrmLoansSvc.HandleApprovalDecision)
+	hrmApprovalsSvc.RegisterCallback("reimbursement", hrmReimbursementsSvc.HandleApprovalDecision)
+
+	// hrmAcksSvc satisfies assets.HandoverAcknowledger structurally, exactly as
+	// in main.go. Wiring the REAL acknowledgements service rather than a stub is
+	// the point — handover sign-off is only proved by a row actually landing in
+	// hrm_acknowledgements. The hrmPipSvc/hrmTerminationSvc precedent.
+	hrmAcksSvc := hrmacks.NewService(hrmacks.NewRepository(db), db)
+	hrmAssetsSvc := hrmassets.NewService(hrmassets.NewRepository(db), hrmApprovalsSvc, hrmAcksSvc)
+	hrmApprovalsSvc.RegisterCallback("asset_request", hrmAssetsSvc.HandleApprovalDecision)
+
+	// hrmReimbursementsSvc satisfies expenses.ReimbursementCreator structurally,
+	// exactly as in main.go. Wiring the REAL reimbursements service is the
+	// point — the 7C boundary is only proved by a row actually landing in
+	// hrm_reimbursements, ready for payroll to pay.
 
 	return &testEnv{
-		db:       db,
-		redis:    rdb,
-		authSvc:  auth.NewService(authRepo, userRepo, jwtMgr, jwtCfg, auditSvc),
-		userSvc:  user.NewService(userRepo),
-		authzSvc: authz.NewService(authzRepo, rdb, auditSvc, authRepo),
-		orgSvc:   organizations.NewService(orgRepo, authzRepo, jwtMgr),
-		taskSvc:  task.NewService(taskRepo, auditSvc),
+		db:                   db,
+		redis:                rdb,
+		authSvc:              authSvc,
+		userSvc:              user.NewService(userRepo),
+		authzSvc:             authzSvc,
+		orgSvc:               organizations.NewService(orgRepo, authzRepo, jwtMgr),
+		taskSvc:              task.NewService(taskRepo, auditSvc),
+		checklistsSvc:        checklistsSvc,
+		hrmOnboardingSvc:     hrmOnboardingSvc,
+		hrmEmpSvc:            hrmEmpSvc,
+		hrmApprovalsSvc:      hrmApprovalsSvc,
+		hrmRecruitmentSvc:    hrmRecruitmentSvc,
+		hrmTerminationSvc:    hrmTerminationSvc,
+		hrmResignationSvc:    hrmResignationSvc,
+		hrmPerformanceSvc:    hrmPerformanceSvc,
+		hrmFeedbackSvc:       hrmFeedbackSvc,
+		hrmLearningSvc:       hrmLearningSvc,
+		hrmSkillsSvc:         hrmSkillsSvc,
+		hrmCertSvc:           hrmCertSvc,
+		hrmPayslipsSvc:       hrmPayslipsSvc,
+		hrmCompensationSvc:   hrmCompensationSvc,
+		hrmLeaveSvc:          hrmLeaveSvc,
+		hrmLoansSvc:          hrmLoansSvc,
+		hrmReimbursementsSvc: hrmReimbursementsSvc,
+		hrmStatutorySvc:      hrmStatutorySvc,
+		hrmBenefitsSvc:       hrmBenefitsSvc,
+		hrmAssetsSvc:         hrmAssetsSvc,
+		hrmExpensesSvc:       hrmExpensesSvc,
+		hrmAcksSvc:           hrmAcksSvc,
+		hrmPipSvc:            hrmPipSvc,
+		hrmScopeResolver:     hrmScopeResolver,
+		hrmExitsSvc:          hrmExitsSvc,
+		hrmOrgChartSvc:       hrmorgchart.NewService(hrmorgchart.NewRepository(db)),
+		hrmSuccessionSvc:     hrmsuccession.NewService(hrmsuccession.NewRepository(db)),
+		hrmSuccessionRepo:    hrmsuccession.NewRepository(db),
+		hrmAnalyticsSvc:      hrmanalytics.NewService(hrmanalytics.NewRepository(db)),
+		hrmAnalyticsRepo:     hrmanalytics.NewRepository(db),
+		hrmEntitiesSvc:       hrmEntitiesSvcLocal,
+		hrmFxSvc:             hrmFxSvc,
+		formsSvc:             formsSvc,
+		ticketsSvc:           ticketsSvc,
+		emailSvc:             emailSvc,
+		kbSvc:                kbSvc,
+		leadsSvc:             leadsSvc,
 	}
 }
 
@@ -122,4 +391,31 @@ func cleanupUser(t *testing.T, env *testEnv, userID string) {
 	ctx := context.Background()
 	_ = env.authSvc.LogoutAll(ctx, userID)
 	_, _ = env.db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID)
+}
+
+// statusIDFor returns an org's employee-status id by name, creating it only if
+// it is genuinely absent.
+//
+// Since the hardening pass, organizations.Create seeds the five default
+// statuses (Active / Inactive / On Leave / Resigned / Terminated), so a test
+// that blindly INSERTs one now collides with
+// hrm_employee_statuses_org_id_name_key. Fixtures should ASK for the status
+// they need rather than create it — which is also what a real caller does.
+func statusIDFor(t *testing.T, env *testEnv, orgID, name, category string) string {
+	t.Helper()
+	ctx := context.Background()
+	var id string
+	err := env.db.QueryRow(ctx,
+		`SELECT id::text FROM hrm_employee_statuses WHERE org_id=$1 AND name=$2`,
+		orgID, name).Scan(&id)
+	if err == nil {
+		return id
+	}
+	if err := env.db.QueryRow(ctx,
+		`INSERT INTO hrm_employee_statuses (org_id, name, category, color)
+		 VALUES ($1,$2,$3,'') RETURNING id::text`,
+		orgID, name, category).Scan(&id); err != nil {
+		t.Fatalf("status %q for org %s: %v", name, orgID, err)
+	}
+	return id
 }

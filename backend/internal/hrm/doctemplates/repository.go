@@ -30,24 +30,37 @@ func scan(row pgx.Row) (*DocumentTemplate, error) {
 	err := row.Scan(&t.ID, &t.PublicID, &t.OrgID, &t.Name, &t.DocumentType, &t.Description,
 		&t.BodyMarkdown, &t.AvailableVariables, &t.RequiresAcknowledgement,
 		&t.IsActive, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
 func (r *repoImpl) FindAll(ctx context.Context, orgID string, activeOnly bool, docType string) ([]*DocumentTemplate, error) {
 	q := `SELECT ` + tmplSelect + ` FROM hrm_document_templates WHERE org_id=$1`
 	args := []any{orgID}
-	if activeOnly { q += ` AND is_active=TRUE` }
-	if docType != "" { args = append(args, docType); q += fmt.Sprintf(` AND document_type=$%d`, len(args)) }
+	if activeOnly {
+		q += ` AND is_active=TRUE`
+	}
+	if docType != "" {
+		args = append(args, docType)
+		q += fmt.Sprintf(` AND document_type=$%d`, len(args))
+	}
 	q += ` ORDER BY document_type, name`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("doctemplates: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("doctemplates: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*DocumentTemplate, 0)
 	for rows.Next() {
 		t, err := scan(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, t)
 	}
 	return list, rows.Err()
@@ -80,8 +93,12 @@ func (r *repoImpl) Update(ctx context.Context, t *DocumentTemplate) error {
 
 func (r *repoImpl) Delete(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_document_templates WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("doctemplates: Delete: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrTemplateNotFound }
+	if err != nil {
+		return fmt.Errorf("doctemplates: Delete: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrTemplateNotFound
+	}
 	return nil
 }
 

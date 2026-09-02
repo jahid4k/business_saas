@@ -4,6 +4,8 @@ package employees
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // EmploymentType defines the allowed values for an employee's employment type.
@@ -74,35 +76,39 @@ func (g Gender) IsValid() bool {
 // Employee is the core domain type for an HRM employee record.
 // Mirrors hrm_employees table columns exactly.
 type Employee struct {
-	ID              string         `db:"id"               json:"id"`
-	PublicID        string         `db:"public_id"        json:"public_id"`
-	OrgID           string         `db:"org_id"           json:"org_id"`
-	UserID          *string        `db:"user_id"          json:"user_id,omitempty"`
-	EmployeeNumber  *string        `db:"employee_number"  json:"employee_number,omitempty"`
-	FirstName       string         `db:"first_name"       json:"first_name"`
-	LastName        *string        `db:"last_name"        json:"last_name,omitempty"`
-	Email           *string        `db:"email"            json:"email,omitempty"`
-	WorkEmail       *string        `db:"work_email"       json:"work_email,omitempty"`
-	Phone           *string        `db:"phone"            json:"phone,omitempty"`
-	WorkPhone       *string        `db:"work_phone"       json:"work_phone,omitempty"`
-	DateOfBirth     *time.Time     `db:"date_of_birth"    json:"date_of_birth,omitempty"`
-	Gender          *string        `db:"gender"           json:"gender,omitempty"`
-	AvatarURL       *string        `db:"avatar_url"       json:"avatar_url,omitempty"`
-	HireDate        time.Time      `db:"hire_date"        json:"hire_date"`
-	TerminationDate *time.Time     `db:"termination_date" json:"termination_date,omitempty"`
+	ID              string               `db:"id"               json:"id"`
+	PublicID        string               `db:"public_id"        json:"public_id"`
+	OrgID           string               `db:"org_id"           json:"org_id"`
+	UserID          *string              `db:"user_id"          json:"user_id,omitempty"`
+	EmployeeNumber  *string              `db:"employee_number"  json:"employee_number,omitempty"`
+	FirstName       string               `db:"first_name"       json:"first_name"`
+	LastName        *string              `db:"last_name"        json:"last_name,omitempty"`
+	Email           *string              `db:"email"            json:"email,omitempty"`
+	WorkEmail       *string              `db:"work_email"       json:"work_email,omitempty"`
+	Phone           *string              `db:"phone"            json:"phone,omitempty"`
+	WorkPhone       *string              `db:"work_phone"       json:"work_phone,omitempty"`
+	DateOfBirth     *time.Time           `db:"date_of_birth"    json:"date_of_birth,omitempty"`
+	Gender          *string              `db:"gender"           json:"gender,omitempty"`
+	AvatarURL       *string              `db:"avatar_url"       json:"avatar_url,omitempty"`
+	HireDate        time.Time            `db:"hire_date"        json:"hire_date"`
+	TerminationDate *time.Time           `db:"termination_date" json:"termination_date,omitempty"`
 	EmploymentType  EmploymentType       `db:"employment_type"  json:"employment_type"`
 	StatusID        string               `db:"status_id"        json:"status_id"`
 	Status          *EmployeeStatusModel `db:"-"                json:"status,omitempty"`
-	DepartmentID    *string        `db:"department_id"    json:"department_id,omitempty"`
-	PositionID      *string        `db:"position_id"      json:"position_id,omitempty"`
-	ManagerID       *string        `db:"manager_id"       json:"manager_id,omitempty"`
-	Address         *string        `db:"address"          json:"address,omitempty"`
-	City            *string        `db:"city"             json:"city,omitempty"`
-	Country         *string        `db:"country"          json:"country,omitempty"`
-	Notes           *string        `db:"notes"            json:"notes,omitempty"`
-	CreatedBy       string         `db:"created_by"       json:"created_by"`
-	CreatedAt       time.Time      `db:"created_at"       json:"created_at"`
-	UpdatedAt       time.Time      `db:"updated_at"       json:"updated_at"`
+	DepartmentID    *string              `db:"department_id"    json:"department_id,omitempty"`
+	PositionID      *string              `db:"position_id"      json:"position_id,omitempty"`
+	ManagerID       *string              `db:"manager_id"       json:"manager_id,omitempty"`
+	Address         *string              `db:"address"          json:"address,omitempty"`
+	City            *string              `db:"city"             json:"city,omitempty"`
+	Country         *string              `db:"country"          json:"country,omitempty"`
+	Notes           *string              `db:"notes"            json:"notes,omitempty"`
+	// SourceCandidateID is provenance for hire-converted employees, set by
+	// recruitment.HireApplication via CreateEmployeeTx. Nil for ordinary
+	// HR-created employees — never set by the plain Create path.
+	SourceCandidateID *string   `db:"source_candidate_id" json:"source_candidate_id,omitempty"`
+	CreatedBy         string    `db:"created_by"       json:"created_by"`
+	CreatedAt         time.Time `db:"created_at"       json:"created_at"`
+	UpdatedAt         time.Time `db:"updated_at"       json:"updated_at"`
 }
 
 // ListFilter narrows the employee list query.
@@ -115,6 +121,14 @@ type ListFilter struct {
 	Search         string // fuzzy match on first_name, last_name, email, employee_number
 	Limit          int
 	Offset         int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List — never left for the service/repository to
+	// resolve themselves. Scope zero value (authz.ScopeNone) means "no rows",
+	// not "no filter" — callers that intend no scoping must explicitly pass
+	// authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
 }
 
 const (
@@ -136,26 +150,26 @@ func (f *ListFilter) Normalise() {
 
 // CreateEmployeeRequest is the body for POST /hrm/employees.
 type CreateEmployeeRequest struct {
-	FirstName       string  `json:"first_name"`
-	LastName        *string `json:"last_name"`
-	Email           *string `json:"email"`
-	WorkEmail       *string `json:"work_email"`
-	Phone           *string `json:"phone"`
-	WorkPhone       *string `json:"work_phone"`
-	EmployeeNumber  *string `json:"employee_number"`
-	DateOfBirth     *string `json:"date_of_birth"`      // ISO 8601 date: "YYYY-MM-DD"
-	Gender          *string `json:"gender"`
-	HireDate        string  `json:"hire_date"`           // required — ISO 8601 date: "YYYY-MM-DD"
-	EmploymentType  *string `json:"employment_type"`     // default: full_time
-	DepartmentID    *string `json:"department_id"`
-	PositionID      *string `json:"position_id"`
-	ManagerID       *string `json:"manager_id"`
-	UserID          *string `json:"user_id"`            // optional platform user link
-	Address         *string `json:"address"`
-	City            *string `json:"city"`
-	Country         *string `json:"country"`
-	AvatarURL       *string `json:"avatar_url"`
-	Notes           *string `json:"notes"`
+	FirstName      string  `json:"first_name"`
+	LastName       *string `json:"last_name"`
+	Email          *string `json:"email"`
+	WorkEmail      *string `json:"work_email"`
+	Phone          *string `json:"phone"`
+	WorkPhone      *string `json:"work_phone"`
+	EmployeeNumber *string `json:"employee_number"`
+	DateOfBirth    *string `json:"date_of_birth"` // ISO 8601 date: "YYYY-MM-DD"
+	Gender         *string `json:"gender"`
+	HireDate       string  `json:"hire_date"`       // required — ISO 8601 date: "YYYY-MM-DD"
+	EmploymentType *string `json:"employment_type"` // default: full_time
+	DepartmentID   *string `json:"department_id"`
+	PositionID     *string `json:"position_id"`
+	ManagerID      *string `json:"manager_id"`
+	UserID         *string `json:"user_id"` // optional platform user link
+	Address        *string `json:"address"`
+	City           *string `json:"city"`
+	Country        *string `json:"country"`
+	AvatarURL      *string `json:"avatar_url"`
+	Notes          *string `json:"notes"`
 }
 
 // UpdateEmployeeRequest is the body for PATCH /hrm/employees/:empId.

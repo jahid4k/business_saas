@@ -82,7 +82,12 @@ export const GROUPS: { label: string; resources: string[] }[] = [
   },
   {
     label: "HRM — Time & Compensation",
-    resources: ["hrm.leave", "hrm.attendance", "hrm.payroll"],
+    resources: [
+      "hrm.leave",
+      "hrm.attendance",
+      "hrm.salary.employee",
+      "hrm.payroll",
+    ],
   },
   {
     label: "HRM — Recognition & Communication",
@@ -143,6 +148,7 @@ export const RESOURCE_LABEL: Record<string, string> = {
   "hrm.acknowledgements": "Acknowledgements",
   "hrm.leave": "Leave",
   "hrm.attendance": "Attendance",
+  "hrm.salary.employee": "Employee Salary Records",
   "hrm.payroll": "Payroll",
   "hrm.awards": "Awards",
   "hrm.announcements": "Announcements",

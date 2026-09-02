@@ -14,15 +14,19 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/authStore";
 import { usePermissionStore } from "@/stores/permissionStore";
 import { useUiStore } from "@/stores/uiStore";
 import { useCommandStore } from "@/stores/commandStore";
+import { useDrawer } from "@/contexts/DrawerContext";
 import { logout } from "@/lib/auth";
 import { setToken } from "@/lib/token";
 import { resolveAssetUrl } from "@/lib/constants";
+import { listNotifications } from "@/lib/notifications";
+import { queryKeys } from "@/lib/queryKeys";
 import CommandMenu from "@/components/ui/CommandMenu";
+import NotificationDrawer from "@/components/notifications/NotificationDrawer";
 
 const FONT_INTER = "var(--font-inter, Inter, sans-serif)";
 const FONT_SYNE = "var(--font-syne, Syne, sans-serif)";
@@ -58,6 +62,14 @@ export default function Topbar({ orgId }: { orgId: string }) {
   const { user, reset: resetAuth } = useAuthStore();
   const { reset: resetPerms } = usePermissionStore();
   const queryClient = useQueryClient();
+  const { openDrawer } = useDrawer();
+
+  const unreadQuery = useQuery({
+    queryKey: queryKeys.notifications.list(),
+    queryFn: () => listNotifications({ limit: 50 }),
+    refetchInterval: 60_000,
+  });
+  const unreadCount = unreadQuery.data?.unread_count ?? 0;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -193,9 +205,42 @@ export default function Topbar({ orgId }: { orgId: string }) {
             </button>
           </div>
 
-          {/* Notifications placeholder */}
-          <TopbarBtn title="Notifications">
-            <Bell size={15} style={{ color: "var(--text-muted)" }} />
+          {/* Notifications */}
+          <TopbarBtn
+            title="Notifications"
+            onClick={() =>
+              openDrawer({
+                title: "Notifications",
+                content: <NotificationDrawer />,
+              })
+            }
+          >
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <Bell size={15} style={{ color: "var(--text-muted)" }} />
+              {unreadCount > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -4,
+                    right: -6,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: 14,
+                    minWidth: 14,
+                    padding: "0 2px",
+                    borderRadius: 999,
+                    background: "#ef4444",
+                    color: "white",
+                    fontSize: 9,
+                    fontWeight: 600,
+                    lineHeight: 1,
+                  }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </span>
           </TopbarBtn>
 
           {/* ★ Theme toggle — only shown after mount to avoid hydration mismatch */}

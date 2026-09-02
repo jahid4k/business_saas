@@ -29,6 +29,19 @@ type PermissionFunc func(permission string) fiber.Handler
 // NOTE: approve/reject/cancel sub-routes are registered BEFORE /:reqId
 // to prevent Fiber matching the literal strings "approve", "reject", "cancel"
 // as the :reqId path parameter.
+//
+// Leave Balances (Phase 2 — accrual/carry-forward/encashment):
+//
+//	GET    /organizations/:orgId/hrm/leave/policies                                        <- hrm.leave.view
+//	POST   /organizations/:orgId/hrm/leave/policies                                        <- hrm.leave.create
+//	GET    /organizations/:orgId/hrm/leave/policies/:policyId                              <- hrm.leave.view
+//	PATCH  /organizations/:orgId/hrm/leave/policies/:policyId                              <- hrm.leave.update
+//	GET    /organizations/:orgId/hrm/employees/:employeeId/leave/balances                  <- hrm.leave.view
+//	GET    /organizations/:orgId/hrm/employees/:employeeId/leave/balances/:leaveTypeId      <- hrm.leave.view
+//	GET    /organizations/:orgId/hrm/employees/:employeeId/leave/balances/:leaveTypeId/history <- hrm.leave.view
+//	GET    /organizations/:orgId/hrm/employees/:employeeId/leave/transactions              <- hrm.leave.view
+//	POST   /organizations/:orgId/hrm/employees/:employeeId/leave/balances/:leaveTypeId/adjust <- hrm.leave.adjust_balance
+//	POST   /organizations/:orgId/hrm/employees/:employeeId/leave/balances/:leaveTypeId/encash <- hrm.leave.encash
 func RegisterRoutes(
 	router fiber.Router,
 	handler *Handler,
@@ -59,4 +72,28 @@ func RegisterRoutes(
 
 	requests.Get("/:reqId", permFn("hrm.leave.view"), handler.GetRequest)
 	requests.Delete("/:reqId", permFn("hrm.leave.delete"), handler.DeleteRequest)
+
+	// ── Leave Policies (config-side, flat like /types) ──────────────────────
+	policies := leave.Group("/policies")
+	policies.Get("/", permFn("hrm.leave.view"), handler.ListPolicies)
+	policies.Post("/", permFn("hrm.leave.create"), handler.CreatePolicy)
+	policies.Get("/:policyId", permFn("hrm.leave.view"), handler.GetPolicy)
+	policies.Patch("/:policyId", permFn("hrm.leave.update"), handler.UpdatePolicy)
+
+	// ── Leave Balances (employee-scoped, nested like salary) ────────────────
+	empLeave := router.Group(
+		"/organizations/:orgId/hrm/employees/:employeeId/leave",
+		requireAuth, requireOrgMatch,
+	)
+	empLeave.Get("/transactions", permFn("hrm.leave.view"), handler.ListTransactions)
+	empLeave.Get("/balances", permFn("hrm.leave.view"), handler.ListBalances)
+
+	// history/adjust/encash are one segment deeper than /:leaveTypeId, so
+	// (unlike requests/:reqId/approve above) there's no real path-depth
+	// collision to order around here — registered in this grouping purely
+	// for readability, matching this file's existing route layout style.
+	empLeave.Get("/balances/:leaveTypeId/history", permFn("hrm.leave.view"), handler.GetBalanceHistory)
+	empLeave.Post("/balances/:leaveTypeId/adjust", permFn("hrm.leave.adjust_balance"), handler.AdjustBalance)
+	empLeave.Post("/balances/:leaveTypeId/encash", permFn("hrm.leave.encash"), handler.EncashBalance)
+	empLeave.Get("/balances/:leaveTypeId", permFn("hrm.leave.view"), handler.GetBalance)
 }

@@ -41,7 +41,7 @@ func (r *stubContactRepo) nextID(prefix string) string {
 
 // ── Contact repo methods ──────────────────────────────────────────────────────
 
-func (r *stubContactRepo) FindContacts(_ context.Context, orgID string, _ pagination.Params) ([]*contacts.Contact, error) {
+func (r *stubContactRepo) FindContacts(_ context.Context, orgID string, _ pagination.Params, search string) ([]*contacts.Contact, error) {
 	var out []*contacts.Contact
 	for _, c := range r.contacts {
 		if c.OrgID == orgID {
@@ -51,7 +51,7 @@ func (r *stubContactRepo) FindContacts(_ context.Context, orgID string, _ pagina
 	return out, nil
 }
 
-func (r *stubContactRepo) CountContacts(_ context.Context, orgID string) (int, error) {
+func (r *stubContactRepo) CountContacts(_ context.Context, orgID, search string) (int, error) {
 	count := 0
 	for _, c := range r.contacts {
 		if c.OrgID == orgID {
@@ -111,7 +111,7 @@ func (r *stubContactRepo) FindContactsByCompany(_ context.Context, orgID, compan
 
 // ── Company repo methods ──────────────────────────────────────────────────────
 
-func (r *stubContactRepo) FindCompanies(_ context.Context, orgID string, _ pagination.Params) ([]*contacts.Company, error) {
+func (r *stubContactRepo) FindCompanies(_ context.Context, orgID string, _ pagination.Params, search string) ([]*contacts.Company, error) {
 	var out []*contacts.Company
 	for _, c := range r.companies {
 		if c.OrgID == orgID {
@@ -121,7 +121,7 @@ func (r *stubContactRepo) FindCompanies(_ context.Context, orgID string, _ pagin
 	return out, nil
 }
 
-func (r *stubContactRepo) CountCompanies(_ context.Context, orgID string) (int, error) {
+func (r *stubContactRepo) CountCompanies(_ context.Context, orgID, search string) (int, error) {
 	count := 0
 	for _, c := range r.companies {
 		if c.OrgID == orgID {
@@ -273,7 +273,7 @@ func TestUpdateContact_CrossOrgReturnsNotFound(t *testing.T) {
 
 func TestListContacts_EmptySliceNotNil(t *testing.T) {
 	svc := newSvc(newStubContactRepo())
-	resp, err := svc.ListContacts(context.Background(), "org-empty", defaultPage())
+	resp, err := svc.ListContacts(context.Background(), "org-empty", defaultPage(), "")
 	if err != nil {
 		t.Fatalf("ListContacts() error: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestDeleteCompany_CrossOrgIsNoOp(t *testing.T) {
 
 func TestListCompanies_EmptySliceNotNil(t *testing.T) {
 	svc := newSvc(newStubContactRepo())
-	resp, err := svc.ListCompanies(context.Background(), "org-empty", defaultPage())
+	resp, err := svc.ListCompanies(context.Background(), "org-empty", defaultPage(), "")
 	if err != nil {
 		t.Fatalf("ListCompanies() error: %v", err)
 	}

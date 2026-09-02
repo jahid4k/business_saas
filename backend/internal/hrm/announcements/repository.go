@@ -21,6 +21,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, title, content, category,
@@ -38,23 +39,43 @@ func scan(row pgx.Row) (*Announcement, error) {
 		&a.RequiresAcknowledgement, &a.AcknowledgementDeadline,
 		&a.IsPinned, &a.PinOrder, &a.AuthorID, &a.Status, &a.CreatedBy, &a.CreatedAt, &a.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
-	if a.ScopeIDs == nil { a.ScopeIDs = []string{} }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if a.ScopeIDs == nil {
+		a.ScopeIDs = []string{}
+	}
 	return a, nil
 }
 
 func (r *repoImpl) FindAll(ctx context.Context, orgID, category, status string) ([]*Announcement, error) {
 	q := `SELECT ` + sel + ` FROM hrm_announcements WHERE org_id=$1`
 	args := []any{orgID}
-	if category != "" { args = append(args, category); q += fmt.Sprintf(` AND category=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
+	if category != "" {
+		args = append(args, category)
+		q += fmt.Sprintf(` AND category=$%d`, len(args))
+	}
+	if status != "" {
+		args = append(args, status)
+		q += fmt.Sprintf(` AND status=$%d`, len(args))
+	}
 	q += ` ORDER BY is_pinned DESC, pin_order, created_at DESC`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("announcements: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("announcements: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Announcement, 0)
-	for rows.Next() { a, err := scan(rows); if err != nil { return nil, err }; list = append(list, a) }
+	for rows.Next() {
+		a, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
 	return list, rows.Err()
 }
 
@@ -65,7 +86,9 @@ func (r *repoImpl) FindByRef(ctx context.Context, orgID, ref string) (*Announcem
 }
 
 func (r *repoImpl) Create(ctx context.Context, a *Announcement) error {
-	if a.ScopeIDs == nil { a.ScopeIDs = []string{} }
+	if a.ScopeIDs == nil {
+		a.ScopeIDs = []string{}
+	}
 	return r.db.QueryRow(ctx,
 		`INSERT INTO hrm_announcements
 		(org_id, title, content, category, scope_type, scope_ids,
@@ -96,7 +119,9 @@ func (r *repoImpl) Update(ctx context.Context, a *Announcement) error {
 
 func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status AnnStatus, publishedAt *interface{}) error {
 	q := `UPDATE hrm_announcements SET status=$1`
-	if publishedAt != nil { q += `, published_at=NOW()` }
+	if publishedAt != nil {
+		q += `, published_at=NOW()`
+	}
 	q += `, updated_at=NOW() WHERE id=$2`
 	_, err := r.db.Exec(ctx, q, status, id)
 	return err
@@ -107,20 +132,30 @@ func (r *repoImpl) GetTargetEmployeeIDs(ctx context.Context, orgID string, scope
 	var q string
 	var args []any
 	switch scopeType {
+	// Active employees resolve through hrm_employee_statuses.category. There is
+	// no hrm_employees.status column — migration 00053 replaced it with
+	// status_id, and querying the dropped column failed 42703, taking the whole
+	// audience resolution with it.
 	case ScopeOrganization:
-		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND status='active'`
+		q = `SELECT e.id::text FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id=e.status_id WHERE e.org_id=$1 AND es.category='active'`
 		args = []any{orgID}
 	case ScopeDepartment:
-		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND status='active' AND department_id = ANY($2::uuid[])`
+		q = `SELECT e.id::text FROM hrm_employees e JOIN hrm_employee_statuses es ON es.id=e.status_id WHERE e.org_id=$1 AND es.category='active' AND e.department_id = ANY($2::uuid[])`
 		args = []any{orgID, scopeIDs}
 	case ScopeIndividual:
 		q = `SELECT id::text FROM hrm_employees WHERE org_id=$1 AND id::text = ANY($2)`
 		args = []any{orgID, scopeIDs}
 	}
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var ids []string
-	for rows.Next() { var id string; _ = rows.Scan(&id); ids = append(ids, id) }
+	for rows.Next() {
+		var id string
+		_ = rows.Scan(&id)
+		ids = append(ids, id)
+	}
 	return ids, rows.Err()
 }

@@ -4,11 +4,12 @@
 import { use, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Loader2, Workflow, Trash2 } from "lucide-react";
-import type { Employee, ApprovalTemplate } from "@/types/hrm";
+import type { Employee, ApprovalTemplate, ApprovalInstance } from "@/types/hrm";
 import {
   listApprovalTemplates,
   createApprovalTemplate,
   deleteApprovalTemplate,
+  listApprovalInstances,
 } from "@/lib/hrm/approvals";
 import { listEmployees } from "@/lib/hrm/employees";
 import { usePermissionStore } from "@/stores/permissionStore";
@@ -37,6 +38,9 @@ export default function ApprovalsPage({
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"templates" | "instances">(
+    "templates",
+  );
 
   useEffect(() => {
     listEmployees(orgId, { limit: 200 })
@@ -50,6 +54,13 @@ export default function ApprovalsPage({
     queryFn: () => listApprovalTemplates(orgId).then((r) => r.templates),
   });
   const items = listQuery.data ?? [];
+
+  const instancesKey = queryKeys.hrm.approvalInstances.list(orgId);
+  const instancesQuery = useQuery({
+    queryKey: instancesKey,
+    queryFn: () => listApprovalInstances(orgId).then((r) => r.instances),
+  });
+  const instances = instancesQuery.data ?? [];
 
   const openCreate = () => {
     openDrawer({
@@ -112,81 +123,144 @@ export default function ApprovalsPage({
         )}
       </div>
 
-      {listQuery.isPending ? (
-        <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
-          <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
-          Loading…
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
-            <Workflow size={20} className="text-(--text-muted)" />
+      <div className="flex items-center gap-6 border-b border-(--border) mb-6">
+        <button
+          onClick={() => setActiveTab("templates")}
+          className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "templates"
+              ? "border-purple-500 text-purple-400"
+              : "border-transparent text-(--text-muted) hover:text-(--text-secondary)"
+          }`}
+        >
+          Templates
+        </button>
+        <button
+          onClick={() => setActiveTab("instances")}
+          className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "instances"
+              ? "border-purple-500 text-purple-400"
+              : "border-transparent text-(--text-muted) hover:text-(--text-secondary)"
+          }`}
+        >
+          Active Requests
+        </button>
+      </div>
+
+      {activeTab === "templates" &&
+        (listQuery.isPending ? (
+          <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
+            <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
+            Loading…
           </div>
-          <p className="text-sm font-medium text-(--text-secondary)">
-            No approval templates yet
-          </p>
-          <p className="text-xs text-(--text-muted) mt-1">
-            Without one, Promotions/Transfers/Terminations/Warnings/Awards keep
-            auto-approving on submit.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-1.5">
-          {items.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
-            >
-              <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
-                <Workflow size={15} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-(--text-primary)">
-                  {t.name}{" "}
-                  {t.is_default && (
-                    <span className="text-xs text-purple-400 ml-1">
-                      (default)
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-(--text-muted) mt-0.5">
-                  {t.action_type.replace("_", " ")} ·{" "}
-                  {(t.levels ?? [])
-                    .map((l) => APPROVER_LABEL[l.approver_type])
-                    .join(" → ") || "no levels"}
-                </p>
-              </div>
-              {canManage &&
-                (deleteConfirm === t.id ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-(--text-muted)">
-                      Delete?
-                    </span>
-                    <button
-                      onClick={() => handleDelete(t.id)}
-                      className="px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-red-500 hover:bg-red-400"
-                    >
-                      Yes
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(null)}
-                      className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
-                    >
-                      No
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setDeleteConfirm(t.id)}
-                    className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 shrink-0"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                ))}
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-12 h-12 rounded-xl bg-(--bg-elevated) border border-(--border) flex items-center justify-center mb-4">
+              <Workflow size={20} className="text-(--text-muted)" />
             </div>
-          ))}
-        </div>
-      )}
+            <p className="text-sm font-medium text-(--text-secondary)">
+              No approval templates yet
+            </p>
+            <p className="text-xs text-(--text-muted) mt-1">
+              Without one, Promotions/Transfers/Terminations/Warnings/Awards
+              keep auto-approving on submit.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {items.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-start gap-3.5 px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
+              >
+                <div className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-purple-500/10 text-purple-400">
+                  <Workflow size={15} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-(--text-primary)">
+                    {t.name}{" "}
+                    {t.is_default && (
+                      <span className="text-xs text-purple-400 ml-1">
+                        (default)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-(--text-muted) mt-0.5">
+                    {t.action_type.replace("_", " ")} ·{" "}
+                    {(t.levels ?? [])
+                      .map((l) => APPROVER_LABEL[l.approver_type])
+                      .join(" → ") || "no levels"}
+                  </p>
+                </div>
+                {canManage &&
+                  (deleteConfirm === t.id ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-(--text-muted)">
+                        Delete?
+                      </span>
+                      <button
+                        onClick={() => handleDelete(t.id)}
+                        className="px-2.5 py-1 rounded-md text-xs font-semibold text-white bg-red-500 hover:bg-red-400"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(null)}
+                        className="px-2.5 py-1 rounded-md text-xs text-(--text-secondary) hover:bg-(--bg-elevated)"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirm(t.id)}
+                      className="p-1.5 rounded-md text-red-400 hover:bg-red-500/10 shrink-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ))}
+              </div>
+            ))}
+          </div>
+        ))}
+
+      {activeTab === "instances" &&
+        (instancesQuery.isPending ? (
+          <div className="flex items-center justify-center py-20 text-sm text-(--text-muted) gap-3">
+            <Loader2 size={16} className="animate-spin text-purple-500" />{" "}
+            Loading…
+          </div>
+        ) : instances.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-sm font-medium text-(--text-secondary)">
+              No active approval requests found.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {instances.map((i) => (
+              <div
+                key={i.id}
+                className="flex items-center justify-between px-4 py-3.5 rounded-xl bg-(--bg-surface) border border-(--border)"
+              >
+                <div>
+                  <p className="text-sm font-medium text-(--text-primary)">
+                    {i.entity_type}{" "}
+                    <span className="text-xs text-(--text-muted)">
+                      ({i.entity_id})
+                    </span>
+                  </p>
+                  <p className="text-xs text-(--text-muted) mt-0.5">
+                    Status:{" "}
+                    <span className="text-purple-400 font-medium capitalize">
+                      {i.overall_status}
+                    </span>{" "}
+                    · Level {i.current_level}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

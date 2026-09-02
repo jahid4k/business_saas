@@ -5,14 +5,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 // Repository defines data access for employee warning records.
 type Repository interface {
-	FindAll(ctx context.Context, orgID, employeeID, status string, activeOnly bool) ([]*EmployeeWarning, error)
+	FindAll(ctx context.Context, orgID string, filter WarningListFilter) ([]*EmployeeWarning, error)
+	Count(ctx context.Context, orgID string, filter WarningListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error)
 	CountActiveByTypeAndEmployee(ctx context.Context, orgID, employeeID, warningTypeID string, withinDays int) (int, error)
 	Create(ctx context.Context, w *EmployeeWarning) error
@@ -50,34 +55,74 @@ func scanW(row pgx.Row) (*EmployeeWarning, error) {
 		&w.ExpiresAt, &w.IsActive,
 		&w.IssuedAt, &w.Status, &w.CreatedBy, &w.CreatedAt, &w.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return w, nil
 }
 
-func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string, activeOnly bool) ([]*EmployeeWarning, error) {
-	q := `SELECT ` + sel + ` FROM hrm_employee_warnings WHERE org_id=$1`
+func buildWarningsWhere(orgID string, filter WarningListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
-	if activeOnly { q += ` AND is_active=TRUE` }
-	q += ` ORDER BY created_at DESC`
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.ActiveOnly {
+		clauses = append(clauses, "is_active = TRUE")
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter WarningListFilter) ([]*EmployeeWarning, error) {
+	where, args := buildWarningsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_employee_warnings WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("warnings: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("warnings: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*EmployeeWarning, 0)
 	for rows.Next() {
 		w, err := scanW(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, w)
 	}
 	return list, rows.Err()
 }
 
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter WarningListFilter) (int, error) {
+	where, args := buildWarningsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_employee_warnings WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("warnings: Count: %w", err)
+	}
+	return count, nil
+}
+
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeWarning, error) {
 	q := `SELECT ` + sel + ` FROM hrm_employee_warnings WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanW(r.db.QueryRow(ctx, q, args...))
 }
 

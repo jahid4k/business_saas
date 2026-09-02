@@ -23,6 +23,7 @@ type Repository interface {
 	FindTemplateLevels(ctx context.Context, templateID string) ([]*ApprovalTemplateLevel, error)
 
 	// Instances
+	FindAllInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) ([]*ApprovalInstance, int, error)
 	FindInstanceByRef(ctx context.Context, orgID, ref string) (*ApprovalInstance, error)
 	FindInstanceByEntity(ctx context.Context, entityType, entityID string) (*ApprovalInstance, error)
 	CreateInstance(ctx context.Context, inst *ApprovalInstance) error
@@ -31,7 +32,7 @@ type Repository interface {
 	FindDecisions(ctx context.Context, instanceID string) ([]*ApprovalDecision, error)
 }
 
-type repoImpl struct { db *pgxpool.Pool }
+type repoImpl struct{ db *pgxpool.Pool }
 
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
@@ -41,8 +42,12 @@ func scanTemplate(row pgx.Row) (*ApprovalTemplate, error) {
 	t := &ApprovalTemplate{}
 	err := row.Scan(&t.ID, &t.PublicID, &t.OrgID, &t.Name, &t.Description, &t.ActionType,
 		&t.ConditionExpression, &t.IsDefault, &t.IsActive, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
@@ -55,12 +60,16 @@ func (r *repoImpl) FindAllTemplates(ctx context.Context, orgID, actionType strin
 	}
 	q += ` ORDER BY action_type, name`
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("approvals: FindAllTemplates: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: FindAllTemplates: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*ApprovalTemplate, 0)
 	for rows.Next() {
 		t, err := scanTemplate(rows)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		list = append(list, t)
 	}
 	return list, rows.Err()
@@ -78,7 +87,9 @@ func (r *repoImpl) FindDefaultTemplate(ctx context.Context, orgID string, action
 
 func (r *repoImpl) CreateTemplate(ctx context.Context, t *ApprovalTemplate, levels []*ApprovalTemplateLevel) error {
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx,
@@ -86,7 +97,9 @@ func (r *repoImpl) CreateTemplate(ctx context.Context, t *ApprovalTemplate, leve
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, public_id, created_at, updated_at`,
 		t.OrgID, t.Name, t.Description, t.ActionType, t.ConditionExpression, t.IsDefault, true, t.CreatedBy,
 	).Scan(&t.ID, &t.PublicID, &t.CreatedAt, &t.UpdatedAt)
-	if err != nil { return fmt.Errorf("approvals: CreateTemplate: %w", err) }
+	if err != nil {
+		return fmt.Errorf("approvals: CreateTemplate: %w", err)
+	}
 
 	for _, lv := range levels {
 		lv.TemplateID = t.ID
@@ -94,7 +107,9 @@ func (r *repoImpl) CreateTemplate(ctx context.Context, t *ApprovalTemplate, leve
 			`INSERT INTO hrm_approval_template_levels (template_id,level,approver_type,approver_role,approver_user_id,sla_hours,on_sla_breach)
 			VALUES ($1,$2,$3,$4,$5,$6,$7)`,
 			lv.TemplateID, lv.Level, lv.ApproverType, lv.ApproverRole, lv.ApproverUserID, lv.SLAHours, lv.OnSLABreach,
-		); err != nil { return fmt.Errorf("approvals: CreateTemplate level: %w", err) }
+		); err != nil {
+			return fmt.Errorf("approvals: CreateTemplate level: %w", err)
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -109,8 +124,12 @@ func (r *repoImpl) UpdateTemplate(ctx context.Context, t *ApprovalTemplate) erro
 
 func (r *repoImpl) DeleteTemplate(ctx context.Context, orgID, ref string) error {
 	cmd, err := r.db.Exec(ctx, `DELETE FROM hrm_approval_templates WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`, orgID, ref)
-	if err != nil { return fmt.Errorf("approvals: DeleteTemplate: %w", err) }
-	if cmd.RowsAffected() == 0 { return ErrTemplateNotFound }
+	if err != nil {
+		return fmt.Errorf("approvals: DeleteTemplate: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrTemplateNotFound
+	}
 	return nil
 }
 
@@ -119,7 +138,9 @@ func (r *repoImpl) FindTemplateLevels(ctx context.Context, templateID string) ([
 		`SELECT id, template_id, level, approver_type, approver_role, approver_user_id, sla_hours, on_sla_breach
 		FROM hrm_approval_template_levels WHERE template_id=$1 ORDER BY level`,
 		templateID)
-	if err != nil { return nil, fmt.Errorf("approvals: FindTemplateLevels: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("approvals: FindTemplateLevels: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*ApprovalTemplateLevel, 0)
 	for rows.Next() {
@@ -132,6 +153,51 @@ func (r *repoImpl) FindTemplateLevels(ctx context.Context, templateID string) ([
 	return list, rows.Err()
 }
 
+func (r *repoImpl) FindAllInstances(ctx context.Context, orgID string, limit, offset int, status string, requesterID string) ([]*ApprovalInstance, int, error) {
+	where := "WHERE org_id=$1"
+	args := []any{orgID}
+
+	if status != "" {
+		args = append(args, status)
+		where += fmt.Sprintf(" AND overall_status=$%d", len(args))
+	}
+	if requesterID != "" {
+		args = append(args, requesterID)
+		where += fmt.Sprintf(" AND requested_by=$%d", len(args))
+	}
+
+	var total int
+	err := r.db.QueryRow(ctx, "SELECT count(*) FROM hrm_approval_instances "+where, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	q := `SELECT id, public_id, org_id, template_id, entity_type, entity_id, instance_snapshot,
+		current_level, overall_status, requested_by, created_at, updated_at, completed_at
+		FROM hrm_approval_instances ` + where + ` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", len(args)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, q, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	list := make([]*ApprovalInstance, 0)
+	for rows.Next() {
+		inst := &ApprovalInstance{}
+		err := rows.Scan(&inst.ID, &inst.PublicID, &inst.OrgID, &inst.TemplateID, &inst.EntityType, &inst.EntityID,
+			&inst.InstanceSnapshot, &inst.CurrentLevel, &inst.OverallStatus, &inst.RequestedBy,
+			&inst.CreatedAt, &inst.UpdatedAt, &inst.CompletedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		_ = inst.ParseSnapshot()
+		list = append(list, inst)
+	}
+	return list, total, rows.Err()
+}
+
 func (r *repoImpl) FindInstanceByRef(ctx context.Context, orgID, ref string) (*ApprovalInstance, error) {
 	inst := &ApprovalInstance{}
 	err := r.db.QueryRow(ctx,
@@ -142,8 +208,12 @@ func (r *repoImpl) FindInstanceByRef(ctx context.Context, orgID, ref string) (*A
 	).Scan(&inst.ID, &inst.PublicID, &inst.OrgID, &inst.TemplateID, &inst.EntityType, &inst.EntityID,
 		&inst.InstanceSnapshot, &inst.CurrentLevel, &inst.OverallStatus, &inst.RequestedBy,
 		&inst.CreatedAt, &inst.UpdatedAt, &inst.CompletedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, fmt.Errorf("approvals: FindInstanceByRef: %w", err) }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("approvals: FindInstanceByRef: %w", err)
+	}
 	_ = inst.ParseSnapshot()
 	return inst, nil
 }
@@ -158,15 +228,21 @@ func (r *repoImpl) FindInstanceByEntity(ctx context.Context, entityType, entityI
 	).Scan(&inst.ID, &inst.PublicID, &inst.OrgID, &inst.TemplateID, &inst.EntityType, &inst.EntityID,
 		&inst.InstanceSnapshot, &inst.CurrentLevel, &inst.OverallStatus, &inst.RequestedBy,
 		&inst.CreatedAt, &inst.UpdatedAt, &inst.CompletedAt)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, fmt.Errorf("approvals: FindInstanceByEntity: %w", err) }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("approvals: FindInstanceByEntity: %w", err)
+	}
 	_ = inst.ParseSnapshot()
 	return inst, nil
 }
 
 func (r *repoImpl) CreateInstance(ctx context.Context, inst *ApprovalInstance) error {
 	snapshotJSON, err := json.Marshal(inst.Snapshot)
-	if err != nil { return fmt.Errorf("approvals: CreateInstance marshal: %w", err) }
+	if err != nil {
+		return fmt.Errorf("approvals: CreateInstance marshal: %w", err)
+	}
 	return r.db.QueryRow(ctx,
 		`INSERT INTO hrm_approval_instances (org_id, template_id, entity_type, entity_id, instance_snapshot, current_level, overall_status, requested_by)
 		VALUES ($1,$2,$3,$4,$5,$6,'pending',$7) RETURNING id, public_id, created_at, updated_at`,
@@ -195,7 +271,9 @@ func (r *repoImpl) FindDecisions(ctx context.Context, instanceID string) ([]*App
 		`SELECT id, instance_id, level, approver_id, action, note, decided_at
 		FROM hrm_approval_decisions WHERE instance_id=$1 ORDER BY level`,
 		instanceID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	list := make([]*ApprovalDecision, 0)
 	for rows.Next() {

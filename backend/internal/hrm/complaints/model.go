@@ -4,33 +4,41 @@ package complaints
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 type ComplaintType string
+
 const (
-	TypeHarassment     ComplaintType = "harassment"
-	TypeDiscrimination ComplaintType = "discrimination"
-	TypeSafety         ComplaintType = "workplace_safety"
+	TypeHarassment      ComplaintType = "harassment"
+	TypeDiscrimination  ComplaintType = "discrimination"
+	TypeSafety          ComplaintType = "workplace_safety"
 	TypePolicyViolation ComplaintType = "policy_violation"
-	TypeManagerConduct ComplaintType = "manager_conduct"
-	TypeWageDispute    ComplaintType = "wage_dispute"
-	TypeRetaliation    ComplaintType = "retaliation"
-	TypeGeneral        ComplaintType = "general"
+	TypeManagerConduct  ComplaintType = "manager_conduct"
+	TypeWageDispute     ComplaintType = "wage_dispute"
+	TypeRetaliation     ComplaintType = "retaliation"
+	TypeGeneral         ComplaintType = "general"
 )
+
 func (t ComplaintType) IsValid() bool {
-	switch t { case TypeHarassment, TypeDiscrimination, TypeSafety, TypePolicyViolation,
-		TypeManagerConduct, TypeWageDispute, TypeRetaliation, TypeGeneral: return true }
+	switch t {
+	case TypeHarassment, TypeDiscrimination, TypeSafety, TypePolicyViolation,
+		TypeManagerConduct, TypeWageDispute, TypeRetaliation, TypeGeneral:
+		return true
+	}
 	return false
 }
 
 type ComplaintStatus string
+
 const (
-	StatusSubmitted   ComplaintStatus = "submitted"
-	StatusUnderReview ComplaintStatus = "under_review"
+	StatusSubmitted     ComplaintStatus = "submitted"
+	StatusUnderReview   ComplaintStatus = "under_review"
 	StatusInvestigating ComplaintStatus = "investigating"
-	StatusResolved    ComplaintStatus = "resolved"
-	StatusDismissed   ComplaintStatus = "dismissed"
-	StatusWithdrawn   ComplaintStatus = "withdrawn"
+	StatusResolved      ComplaintStatus = "resolved"
+	StatusDismissed     ComplaintStatus = "dismissed"
+	StatusWithdrawn     ComplaintStatus = "withdrawn"
 )
 
 type Complaint struct {
@@ -70,11 +78,11 @@ type CreateComplaintRequest struct {
 }
 
 type UpdateComplaintRequest struct {
-	Title             *string `json:"title"`
-	Description       *string `json:"description"`
-	IncidentDate      *string `json:"incident_date"`
-	AgainstDetails    *string `json:"against_details"`
-	DocumentID        *string `json:"document_id"`
+	Title          *string `json:"title"`
+	Description    *string `json:"description"`
+	IncidentDate   *string `json:"incident_date"`
+	AgainstDetails *string `json:"against_details"`
+	DocumentID     *string `json:"document_id"`
 }
 
 type StartReviewRequest struct{}
@@ -96,15 +104,53 @@ type DismissRequest struct {
 type ComplaintListResponse struct {
 	Complaints []*Complaint `json:"complaints"`
 	Total      int          `json:"total"`
+	Limit      int          `json:"limit"`
+	Offset     int          `json:"offset"`
+}
+
+// ComplaintListFilter narrows the complaint list query.
+//
+// Scope is enforced against employee_id (the filer) only — never
+// against_employee_id (the accused). A complaint filed against the caller
+// must never surface under view_own; that would let a subject of a complaint
+// discover it exists and potentially retaliate before HR has reviewed it.
+type ComplaintListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *ComplaintListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (
-	ErrNotFound            = errors.New("complaint not found")
-	ErrTitleRequired       = errors.New("title is required")
-	ErrDescriptionRequired = errors.New("description is required")
-	ErrInvalidType         = errors.New("invalid complaint_type")
-	ErrInvalidDate         = errors.New("date must be a valid YYYY-MM-DD")
-	ErrWrongStatus         = errors.New("action not allowed in current complaint status")
+	ErrNotFound             = errors.New("complaint not found")
+	ErrTitleRequired        = errors.New("title is required")
+	ErrDescriptionRequired  = errors.New("description is required")
+	ErrInvalidType          = errors.New("invalid complaint_type")
+	ErrInvalidDate          = errors.New("date must be a valid YYYY-MM-DD")
+	ErrWrongStatus          = errors.New("action not allowed in current complaint status")
 	ErrInvestigatorRequired = errors.New("investigator_id is required")
 	ErrResolutionRequired   = errors.New("resolution text is required")
 )

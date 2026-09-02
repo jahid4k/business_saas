@@ -4,9 +4,12 @@ package terminations
 import (
 	"errors"
 	"log/slog"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -14,9 +17,15 @@ import (
 
 // Handler handles HRM termination HTTP endpoints.
 // Terminations are always HR-initiated — employees use /resignations.
-type Handler struct{ service Service }
+type Handler struct {
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
+}
 
-func NewHandler(service Service) *Handler { return &Handler{service: service} }
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
+}
 
 // ListAll godoc
 //
@@ -38,10 +47,36 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 //	@Router			/organizations/{orgId}/hrm/terminations [get]
 func (h *Handler) ListAll(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	res, err := h.service.List(c.Context(), orgID, c.Query("employee_id"), c.Query("status"))
-	if err != nil { log.Error("terminations: ListAll", slog.Any("error", err)); return response.InternalServerError(c) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.terminations")
+	if err != nil {
+		log.Error("terminations: ListAll", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	filter := TerminationListFilter{
+		EmployeeID:   c.Query("employee_id"),
+		Status:       c.Query("status"),
+		Scope:        scopeTier,
+		CallerUserID: userID,
+	}
+	if limit, err := strconv.Atoi(c.Query("limit", "")); err == nil {
+		filter.Limit = limit
+	}
+	if offset, err := strconv.Atoi(c.Query("offset", "")); err == nil {
+		filter.Offset = offset
+	}
+	res, err := h.service.List(c.Context(), orgID, filter)
+	if err != nil {
+		log.Error("terminations: ListAll", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -75,13 +110,21 @@ func (h *Handler) ListAll(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations [post]
 func (h *Handler) Create(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateTerminationRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	t, err := h.service.Create(c.Context(), orgID, c.Params("employeeId"), userID, req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.Created(c, fiber.Map{"termination": t}, "Termination record created")
 }
 
@@ -104,10 +147,33 @@ func (h *Handler) Create(c fiber.Ctx) error {
 //	@Failure		500				{object}	response.Error
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId} [get]
 func (h *Handler) Get(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	t, err := h.service.Get(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"))
-	if err != nil { return h.err(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	employeeID := c.Params("employeeId")
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.terminations")
+	if err != nil {
+		log.Error("terminations: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, employeeID)
+	if err != nil {
+		log.Error("terminations: Get", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
+	}
+	t, err := h.service.Get(c.Context(), orgID, employeeID, c.Params("terminationId"))
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"termination": t}, "OK")
 }
 
@@ -135,11 +201,17 @@ func (h *Handler) Get(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId} [patch]
 func (h *Handler) Update(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateTerminationRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	t, err := h.service.Update(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"), req)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"termination": t}, "Termination updated")
 }
 
@@ -164,11 +236,17 @@ func (h *Handler) Update(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId}/submit [post]
 func (h *Handler) Submit(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	t, err := h.service.Submit(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"termination": t}, "Termination submitted")
 }
 
@@ -193,9 +271,13 @@ func (h *Handler) Submit(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId}/cancel [post]
 func (h *Handler) Cancel(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	t, err := h.service.Cancel(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"))
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"termination": t}, "Termination cancelled")
 }
 
@@ -224,11 +306,17 @@ func (h *Handler) Cancel(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/employees/{employeeId}/terminations/{terminationId}/apply [post]
 func (h *Handler) Apply(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	t, err := h.service.Apply(c.Context(), orgID, c.Params("employeeId"), c.Params("terminationId"), userID)
-	if err != nil { return h.err(c, err) }
+	if err != nil {
+		return h.err(c, err)
+	}
 	return response.OK(c, fiber.Map{"termination": t}, "Termination applied — employee is now terminated")
 }
 
@@ -254,6 +342,8 @@ func (h *Handler) err(c fiber.Ctx, err error) error {
 		return response.Conflict(c, "ALREADY_APPLIED", "Termination has already been applied")
 	case errors.Is(err, ErrNotApproved):
 		return response.Conflict(c, "NOT_APPROVED", "Termination must be approved before applying")
+	case errors.Is(err, ErrNoTerminatedStatus):
+		return response.Conflict(c, "NO_TERMINATED_STATUS", "This organization has no employee status in the 'terminated' category — create one before applying a termination")
 	default:
 		log.Error("terminations: error", slog.Any("error", err))
 		return response.InternalServerError(c)

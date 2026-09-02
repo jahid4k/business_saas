@@ -9,6 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 // Repository defines data access for HRM employees.
@@ -21,6 +24,13 @@ type Repository interface {
 	Count(ctx context.Context, orgID string, filter ListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, ref string) (*Employee, error)
 	Create(ctx context.Context, e *Employee) error
+	// CreateTx inserts an employee inside an existing transaction — used by
+	// recruitment.HireApplication to keep the employee insert, the
+	// application's converted_employee_id, and the requisition's
+	// filled_count atomic. The interface accepts pgx.Tx, not pgxpool.Pool,
+	// so the caller owns the transaction (the contacts.CreateContactTx
+	// precedent).
+	CreateTx(ctx context.Context, tx pgx.Tx, e *Employee) error
 	Update(ctx context.Context, e *Employee) error
 	Delete(ctx context.Context, orgID, ref string) error
 	GetDefaultStatusID(ctx context.Context, orgID string, category EmployeeStatusCategory) (string, error)
@@ -48,7 +58,7 @@ const empSelect = `
 	date_of_birth, gender, avatar_url,
 	hire_date, termination_date, employment_type, status_id,
 	department_id, position_id, manager_id,
-	address, city, country, notes,
+	address, city, country, notes, source_candidate_id,
 	created_by, created_at, updated_at`
 
 func scanEmployee(row pgx.Row) (*Employee, error) {
@@ -59,7 +69,7 @@ func scanEmployee(row pgx.Row) (*Employee, error) {
 		&e.DateOfBirth, &e.Gender, &e.AvatarURL,
 		&e.HireDate, &e.TerminationDate, &e.EmploymentType, &e.StatusID,
 		&e.DepartmentID, &e.PositionID, &e.ManagerID,
-		&e.Address, &e.City, &e.Country, &e.Notes,
+		&e.Address, &e.City, &e.Country, &e.Notes, &e.SourceCandidateID,
 		&e.CreatedBy, &e.CreatedAt, &e.UpdatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -102,6 +112,11 @@ func buildListWhere(orgID string, filter ListFilter) (string, []any) {
 			  OR LOWER(COALESCE(email,'')) LIKE $%d OR LOWER(COALESCE(employee_number,'')) LIKE $%d)`,
 			n, n, n, n,
 		))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
 	}
 	return strings.Join(clauses, " AND "), args
 }
@@ -217,34 +232,51 @@ func (r *repoImpl) DeleteStatus(ctx context.Context, orgID, statusID string) err
 	return nil
 }
 
-func (r *repoImpl) Create(ctx context.Context, e *Employee) error {
-	const q = `
-		INSERT INTO hrm_employees (
-			org_id, user_id, employee_number,
-			first_name, last_name, email, work_email, phone, work_phone,
-			date_of_birth, gender, avatar_url,
-			hire_date, employment_type, status_id,
-			department_id, position_id, manager_id,
-			address, city, country, notes, created_by
-		) VALUES (
-			$1, $2, $3,
-			$4, $5, $6, $7, $8, $9,
-			$10, $11, $12,
-			$13, $14, $15,
-			$16, $17, $18,
-			$19, $20, $21, $22, $23
-		) RETURNING ` + empSelect
+// insertEmployeeSQL is shared by Create and CreateTx — the contacts
+// insertContactSQL precedent, so the two paths can never drift out of sync.
+const insertEmployeeSQL = `
+	INSERT INTO hrm_employees (
+		org_id, user_id, employee_number,
+		first_name, last_name, email, work_email, phone, work_phone,
+		date_of_birth, gender, avatar_url,
+		hire_date, employment_type, status_id,
+		department_id, position_id, manager_id,
+		address, city, country, notes, source_candidate_id, created_by
+	) VALUES (
+		$1, $2, $3,
+		$4, $5, $6, $7, $8, $9,
+		$10, $11, $12,
+		$13, $14, $15,
+		$16, $17, $18,
+		$19, $20, $21, $22, $23, $24
+	) RETURNING ` + empSelect
 
-	created, err := scanEmployee(r.db.QueryRow(ctx, q,
+func employeeInsertArgs(e *Employee) []any {
+	return []any{
 		e.OrgID, e.UserID, e.EmployeeNumber,
 		e.FirstName, e.LastName, e.Email, e.WorkEmail, e.Phone, e.WorkPhone,
 		e.DateOfBirth, e.Gender, e.AvatarURL,
 		e.HireDate, e.EmploymentType, e.StatusID,
 		e.DepartmentID, e.PositionID, e.ManagerID,
-		e.Address, e.City, e.Country, e.Notes, e.CreatedBy,
-	))
+		e.Address, e.City, e.Country, e.Notes, e.SourceCandidateID, e.CreatedBy,
+	}
+}
+
+func (r *repoImpl) Create(ctx context.Context, e *Employee) error {
+	created, err := scanEmployee(r.db.QueryRow(ctx, insertEmployeeSQL, employeeInsertArgs(e)...))
 	if err != nil {
 		return fmt.Errorf("employees: Create: %w", err)
+	}
+	*e = *created
+	return nil
+}
+
+// CreateTx inserts an employee within an existing pgx.Tx. The caller is
+// responsible for committing or rolling back the transaction.
+func (r *repoImpl) CreateTx(ctx context.Context, tx pgx.Tx, e *Employee) error {
+	created, err := scanEmployee(tx.QueryRow(ctx, insertEmployeeSQL, employeeInsertArgs(e)...))
+	if err != nil {
+		return fmt.Errorf("employees: CreateTx: %w", err)
 	}
 	*e = *created
 	return nil

@@ -9,6 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 	"github.com/mridha/businesssaas/internal/middleware"
 	"github.com/mridha/businesssaas/pkg/logger"
 	"github.com/mridha/businesssaas/pkg/response"
@@ -16,11 +18,13 @@ import (
 
 // Handler handles all HRM leave endpoints — both leave types and leave requests.
 type Handler struct {
-	service Service
+	service       Service
+	authz         authz.Service
+	scopeResolver *scope.Resolver
 }
 
-func NewHandler(service Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service Service, authzSvc authz.Service, scopeResolver *scope.Resolver) *Handler {
+	return &Handler{service: service, authz: authzSvc, scopeResolver: scopeResolver}
 }
 
 // ─────────────────────────────────────────────────────────
@@ -120,12 +124,22 @@ func (h *Handler) DeleteLeaveType(c fiber.Ctx) error {
 // Query: employee_id, leave_type_id, status, limit, offset
 func (h *Handler) ListRequests(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
 
-	filter := LeaveRequestFilter{}
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.leave")
+	if err != nil {
+		log.Error("leave: ListRequests: resolve scope", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+
+	filter := LeaveRequestFilter{Scope: scopeTier, CallerUserID: userID}
 	filter.EmployeeID = strings.TrimSpace(c.Query("employee_id"))
 	filter.LeaveTypeID = strings.TrimSpace(c.Query("leave_type_id"))
 
@@ -177,6 +191,11 @@ func (h *Handler) CreateRequest(c fiber.Ctx) error {
 // GetRequest handles GET /api/v1/organizations/:orgId/hrm/leave/requests/:reqId
 // Requires: hrm.leave.view
 func (h *Handler) GetRequest(c fiber.Ctx) error {
+	log := logger.FromCtx(c)
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
@@ -184,6 +203,19 @@ func (h *Handler) GetRequest(c fiber.Ctx) error {
 	lr, err := h.service.GetRequest(c.Context(), orgID, c.Params("reqId"))
 	if err != nil {
 		return h.leaveRequestError(c, err)
+	}
+	scopeTier, err := h.authz.ResolveScope(c.Context(), userID, orgID, "hrm.leave")
+	if err != nil {
+		log.Error("leave: GetRequest", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	allowed, err := h.scopeResolver.AuthorizeRecordAccess(c.Context(), scopeTier, orgID, userID, lr.EmployeeID)
+	if err != nil {
+		log.Error("leave: GetRequest", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
+	if !allowed {
+		return response.Forbidden(c, "RECORD_ACCESS_DENIED", "You do not have access to this record")
 	}
 	return response.OK(c, fiber.Map{"leave_request": lr}, "OK")
 }
@@ -249,11 +281,15 @@ func (h *Handler) CancelRequest(c fiber.Ctx) error {
 // DeleteRequest handles DELETE /api/v1/organizations/:orgId/hrm/leave/requests/:reqId
 // Requires: hrm.leave.delete
 func (h *Handler) DeleteRequest(c fiber.Ctx) error {
+	userID, ok := middleware.UserIDFromCtx(c)
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
 	if !ok {
 		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
 	}
-	if err := h.service.DeleteRequest(c.Context(), orgID, c.Params("reqId")); err != nil {
+	if err := h.service.DeleteRequest(c.Context(), orgID, c.Params("reqId"), userID); err != nil {
 		return h.leaveRequestError(c, err)
 	}
 	return response.NoContent(c)

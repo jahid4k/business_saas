@@ -4,6 +4,7 @@ package crm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -179,7 +180,21 @@ type stubEngagementCreator struct {
 	createdNotes []engagement.CreateNoteRequest
 }
 
+// CreateNote VALIDATES related_type the way the real service does.
+//
+// It used to accept anything, which is precisely how a real bug survived: the
+// caller passed the bare "lead" (the vocabulary is "<module>.<entity>"), the
+// real service rejected it with "invalid related_type value", the caller
+// discarded the error with `_, _ =` — and this stub happily recorded the note
+// so the test agreed with the bug. A stub that accepts what the real
+// implementation refuses is worse than no stub.
 func (c *stubEngagementCreator) CreateNote(_ context.Context, _, _, _ string, req engagement.CreateNoteRequest) (*engagement.Note, error) {
+	switch engagement.RelatedType(req.RelatedType) {
+	case engagement.RelatedContact, engagement.RelatedCompany,
+		engagement.RelatedCRMLead, engagement.RelatedCRMDeal:
+	default:
+		return nil, fmt.Errorf("invalid related_type value: %q", req.RelatedType)
+	}
 	c.createdNotes = append(c.createdNotes, req)
 	return &engagement.Note{ID: "note_new"}, nil
 }
@@ -214,8 +229,32 @@ func TestCreateLead_Success(t *testing.T) {
 	if l.Status != leads.LeadStatusNew {
 		t.Errorf("expected default status=new, got %q", l.Status)
 	}
-	if l.CreatedBy != "user-1" {
-		t.Errorf("expected CreatedBy=user-1, got %q", l.CreatedBy)
+	if l.CreatedBy == nil || *l.CreatedBy != "user-1" {
+		t.Errorf("expected CreatedBy=user-1, got %v", l.CreatedBy)
+	}
+}
+
+// TestCreateLead_SystemCaptureHasNoCreator covers the caller every
+// internal/capture/* path actually is: no acting user. created_by was
+// uuid NOT NULL and each of those inserts died with 22P02, silently, into a
+// log row — see migration 00112. An empty userID must become NULL, not the
+// empty string.
+func TestCreateLead_SystemCaptureHasNoCreator(t *testing.T) {
+	svc := newSvc(newStubLeadRepo())
+	source := "email"
+	l, err := svc.CreateLead(context.Background(), "org-1", "", leads.CreateLeadRequest{
+		FirstName:     "jane",
+		CaptureSource: &source,
+	})
+	if err != nil {
+		t.Fatalf("CreateLead() error: %v", err)
+	}
+	if l.CreatedBy != nil {
+		t.Errorf("expected CreatedBy=nil for a system capture, got %q", *l.CreatedBy)
+	}
+	// capture_source is what records the origin instead.
+	if l.CaptureSource == nil || *l.CaptureSource != "email" {
+		t.Errorf("expected CaptureSource=email, got %v", l.CaptureSource)
 	}
 }
 
@@ -270,7 +309,7 @@ func TestCreateLead_DuplicateEmail_AppendsNote(t *testing.T) {
 		t.Fatalf("expected 1 note created for deduplication, got %d", len(engStub.createdNotes))
 	}
 	note := engStub.createdNotes[0]
-	if note.RelatedType != "lead" || note.RelatedID != created1.ID {
+	if note.RelatedType != string(engagement.RelatedCRMLead) || note.RelatedID != created1.ID {
 		t.Errorf("note has wrong related entity: %v", note)
 	}
 }
@@ -439,4 +478,3 @@ func TestGetLeadsBySource_Success(t *testing.T) {
 		t.Error("expected non-nil result")
 	}
 }
-

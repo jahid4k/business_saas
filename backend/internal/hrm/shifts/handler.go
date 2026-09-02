@@ -14,6 +14,7 @@ import (
 )
 
 type Handler struct{ service Service }
+
 func NewHandler(service Service) *Handler { return &Handler{service: service} }
 
 // ListShifts godoc
@@ -35,10 +36,15 @@ func NewHandler(service Service) *Handler { return &Handler{service: service} }
 func (h *Handler) ListShifts(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	activeOnly := strings.ToLower(c.Query("active")) == "true"
 	res, err := h.service.List(c.Context(), orgID, activeOnly)
-	if err != nil { log.Error("shifts: List", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("shifts: List", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -67,13 +73,21 @@ func (h *Handler) ListShifts(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts [post]
 func (h *Handler) CreateShift(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req CreateShiftRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	sh, err := h.service.Create(c.Context(), orgID, userID, req)
-	if err != nil { return h.shiftError(c, err) }
+	if err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.Created(c, fiber.Map{"shift": sh}, "Shift created")
 }
 
@@ -96,9 +110,13 @@ func (h *Handler) CreateShift(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts/{shiftId} [get]
 func (h *Handler) GetShift(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	sh, err := h.service.Get(c.Context(), orgID, c.Params("shiftId"))
-	if err != nil { return h.shiftError(c, err) }
+	if err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.OK(c, fiber.Map{"shift": sh}, "OK")
 }
 
@@ -125,11 +143,17 @@ func (h *Handler) GetShift(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts/{shiftId} [patch]
 func (h *Handler) UpdateShift(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req UpdateShiftRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	sh, err := h.service.Update(c.Context(), orgID, c.Params("shiftId"), req)
-	if err != nil { return h.shiftError(c, err) }
+	if err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.OK(c, fiber.Map{"shift": sh}, "Shift updated")
 }
 
@@ -152,8 +176,12 @@ func (h *Handler) UpdateShift(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts/{shiftId} [delete]
 func (h *Handler) DeleteShift(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.Delete(c.Context(), orgID, c.Params("shiftId")); err != nil { return h.shiftError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.Delete(c.Context(), orgID, c.Params("shiftId")); err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.NoContent(c)
 }
 
@@ -177,9 +205,14 @@ func (h *Handler) DeleteShift(c fiber.Ctx) error {
 func (h *Handler) ListAssignments(c fiber.Ctx) error {
 	log := logger.FromCtx(c)
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	res, err := h.service.ListAssignments(c.Context(), orgID, c.Query("assignee_type"), c.Query("assignee_id"))
-	if err != nil { log.Error("shifts: ListAssignments", slog.Any("error", err)); return response.InternalServerError(c) }
+	if err != nil {
+		log.Error("shifts: ListAssignments", slog.Any("error", err))
+		return response.InternalServerError(c)
+	}
 	return response.OK(c, res, "OK")
 }
 
@@ -205,13 +238,21 @@ func (h *Handler) ListAssignments(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts/assignments [post]
 func (h *Handler) Assign(c fiber.Ctx) error {
 	userID, ok := middleware.UserIDFromCtx(c)
-	if !ok { return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required") }
+	if !ok {
+		return response.Unauthorized(c, "UNAUTHORIZED", "Authentication required")
+	}
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
 	var req AssignShiftRequest
-	if err := c.Bind().JSON(&req); err != nil { return response.BadRequest(c, "INVALID_BODY", "Invalid request body") }
+	if err := c.Bind().JSON(&req); err != nil {
+		return response.BadRequest(c, "INVALID_BODY", "Invalid request body")
+	}
 	a, err := h.service.Assign(c.Context(), orgID, userID, req)
-	if err != nil { return h.shiftError(c, err) }
+	if err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.Created(c, fiber.Map{"assignment": a}, "Shift assigned")
 }
 
@@ -234,24 +275,40 @@ func (h *Handler) Assign(c fiber.Ctx) error {
 //	@Router			/organizations/{orgId}/hrm/setup/shifts/assignments/{assignmentId} [delete]
 func (h *Handler) RemoveAssignment(c fiber.Ctx) error {
 	orgID, ok := middleware.OrganizationIDFromCtx(c)
-	if !ok { return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required") }
-	if err := h.service.RemoveAssignment(c.Context(), orgID, c.Params("assignmentId")); err != nil { return h.shiftError(c, err) }
+	if !ok {
+		return response.BadRequest(c, "NO_ORGANIZATION_CONTEXT", "Organization context is required")
+	}
+	if err := h.service.RemoveAssignment(c.Context(), orgID, c.Params("assignmentId")); err != nil {
+		return h.shiftError(c, err)
+	}
 	return response.NoContent(c)
 }
 
 func (h *Handler) shiftError(c fiber.Ctx, err error) error {
 	log := logger.FromCtx(c)
 	switch {
-	case errors.Is(err, ErrShiftNotFound): return response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
-	case errors.Is(err, ErrAssignmentNotFound): return response.NotFound(c, "ASSIGNMENT_NOT_FOUND", "Assignment not found")
-	case errors.Is(err, ErrNameRequired): return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
-	case errors.Is(err, ErrNameConflict): return response.Conflict(c, "SHIFT_NAME_CONFLICT", "A shift with this name already exists")
-	case errors.Is(err, ErrInvalidShiftType): return response.BadRequest(c, "INVALID_SHIFT_TYPE", "shift_type must be: fixed or flexible")
-	case errors.Is(err, ErrFixedTimeRequired): return response.BadRequest(c, "FIXED_TIME_REQUIRED", "start_time and end_time are required for fixed shifts")
-	case errors.Is(err, ErrFlexHoursRequired): return response.BadRequest(c, "FLEX_HOURS_REQUIRED", "weekly_hours_target is required for flexible shifts")
-	case errors.Is(err, ErrInvalidAssigneeType): return response.BadRequest(c, "INVALID_ASSIGNEE_TYPE", "assignee_type must be: organization, department, or employee")
-	case errors.Is(err, ErrAssigneeIDRequired): return response.BadRequest(c, "ASSIGNEE_ID_REQUIRED", "assignee_id is required")
-	case errors.Is(err, ErrEffectiveDateRequired): return response.BadRequest(c, "EFFECTIVE_DATE_REQUIRED", "effective_date must be a valid YYYY-MM-DD date")
-	default: log.Error("shifts: error", slog.Any("error", err)); return response.InternalServerError(c)
+	case errors.Is(err, ErrShiftNotFound):
+		return response.NotFound(c, "SHIFT_NOT_FOUND", "Shift not found")
+	case errors.Is(err, ErrAssignmentNotFound):
+		return response.NotFound(c, "ASSIGNMENT_NOT_FOUND", "Assignment not found")
+	case errors.Is(err, ErrNameRequired):
+		return response.BadRequest(c, "NAME_REQUIRED", "Name is required")
+	case errors.Is(err, ErrNameConflict):
+		return response.Conflict(c, "SHIFT_NAME_CONFLICT", "A shift with this name already exists")
+	case errors.Is(err, ErrInvalidShiftType):
+		return response.BadRequest(c, "INVALID_SHIFT_TYPE", "shift_type must be: fixed or flexible")
+	case errors.Is(err, ErrFixedTimeRequired):
+		return response.BadRequest(c, "FIXED_TIME_REQUIRED", "start_time and end_time are required for fixed shifts")
+	case errors.Is(err, ErrFlexHoursRequired):
+		return response.BadRequest(c, "FLEX_HOURS_REQUIRED", "weekly_hours_target is required for flexible shifts")
+	case errors.Is(err, ErrInvalidAssigneeType):
+		return response.BadRequest(c, "INVALID_ASSIGNEE_TYPE", "assignee_type must be: organization, department, or employee")
+	case errors.Is(err, ErrAssigneeIDRequired):
+		return response.BadRequest(c, "ASSIGNEE_ID_REQUIRED", "assignee_id is required")
+	case errors.Is(err, ErrEffectiveDateRequired):
+		return response.BadRequest(c, "EFFECTIVE_DATE_REQUIRED", "effective_date must be a valid YYYY-MM-DD date")
+	default:
+		log.Error("shifts: error", slog.Any("error", err))
+		return response.InternalServerError(c)
 	}
 }

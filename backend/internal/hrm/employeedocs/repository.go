@@ -5,13 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 type Repository interface {
-	FindAll(ctx context.Context, orgID, employeeID, status, relatedType string) ([]*EmployeeDocument, error)
+	FindAll(ctx context.Context, orgID string, filter DocListFilter) ([]*EmployeeDocument, error)
+	Count(ctx context.Context, orgID string, filter DocListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeDocument, error)
 	Create(ctx context.Context, d *EmployeeDocument) error
 	UpdateStatus(ctx context.Context, id string, status DocStatus) error
@@ -19,6 +24,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, template_id,
@@ -40,30 +46,75 @@ func scanDoc(row pgx.Row) (*EmployeeDocument, error) {
 		&d.Status, &d.IssuedBy, &d.SentAt, &d.AcknowledgedAt, &d.AcknowledgementNote,
 		&d.CreatedBy, &d.CreatedAt, &d.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return d, nil
 }
 
-func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status, relatedType string) ([]*EmployeeDocument, error) {
-	q := `SELECT ` + sel + ` FROM hrm_employee_documents WHERE org_id=$1`
+func buildDocsWhere(orgID string, filter DocListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
-	if relatedType != "" { args = append(args, relatedType); q += fmt.Sprintf(` AND related_type=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.RelatedType != "" {
+		args = append(args, filter.RelatedType)
+		clauses = append(clauses, fmt.Sprintf("related_type = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter DocListFilter) ([]*EmployeeDocument, error) {
+	where, args := buildDocsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_employee_documents WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("employeedocs: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("employeedocs: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*EmployeeDocument, 0)
-	for rows.Next() { d, err := scanDoc(rows); if err != nil { return nil, err }; list = append(list, d) }
+	for rows.Next() {
+		d, err := scanDoc(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter DocListFilter) (int, error) {
+	where, args := buildDocsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_employee_documents WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("employeedocs: Count: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*EmployeeDocument, error) {
 	q := `SELECT ` + sel + ` FROM hrm_employee_documents WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanDoc(r.db.QueryRow(ctx, q, args...))
 }
 
@@ -81,7 +132,9 @@ func (r *repoImpl) Create(ctx context.Context, d *EmployeeDocument) error {
 
 func (r *repoImpl) UpdateStatus(ctx context.Context, id string, status DocStatus) error {
 	extra := ""
-	if status == StatusSent { extra = `, sent_at=NOW()` }
+	if status == StatusSent {
+		extra = `, sent_at=NOW()`
+	}
 	_, err := r.db.Exec(ctx,
 		`UPDATE hrm_employee_documents SET status=$1`+extra+`, updated_at=NOW() WHERE id=$2`,
 		status, id)

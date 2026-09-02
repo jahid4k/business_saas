@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/attendance"
 )
 
@@ -19,16 +20,21 @@ func newStubRepo() *stubRepo {
 	}
 }
 
-func (s *stubRepo) FindRecords(ctx context.Context, orgID, employeeID, status string, year, month int) ([]*attendance.AttendanceRecord, error) {
+func (s *stubRepo) FindRecords(ctx context.Context, orgID string, filter attendance.RecordListFilter) ([]*attendance.AttendanceRecord, error) {
 	var res []*attendance.AttendanceRecord
 	for _, r := range s.recs {
 		if r.OrgID == orgID {
-			if employeeID != "" && r.EmployeeID != employeeID { continue }
-			if status != "" && string(r.Status) != status { continue }
+			if filter.EmployeeID != "" && r.EmployeeID != filter.EmployeeID { continue }
+			if filter.Status != "" && string(r.Status) != filter.Status { continue }
 			res = append(res, r)
 		}
 	}
 	return res, nil
+}
+
+func (s *stubRepo) CountRecords(ctx context.Context, orgID string, filter attendance.RecordListFilter) (int, error) {
+	out, err := s.FindRecords(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (s *stubRepo) FindByRef(ctx context.Context, orgID, ref string) (*attendance.AttendanceRecord, error) {
@@ -226,7 +232,7 @@ func TestAttendanceService_ListGet(t *testing.T) {
 	})
 
 	t.Run("list", func(t *testing.T) {
-		res, err := svc.ListRecords(ctx, "org1", "", "", 0, 0)
+		res, err := svc.ListRecords(ctx, "org1", attendance.RecordListFilter{Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

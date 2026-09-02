@@ -17,13 +17,13 @@ func RegisterRoutes(router fiber.Router, handler *Handler, permFn PermissionFunc
 
 	emp := router.Group("/organizations/:orgId/hrm/employees/:employeeId/warnings", requireAuth, requireOrgMatch)
 	// Action sub-routes BEFORE /:warningId to avoid Fiber param capture
-	emp.Post("/:warningId/issue",       permFn("hrm.warnings.issue"),       handler.Issue)
+	emp.Post("/:warningId/issue", permFn("hrm.warnings.issue"), handler.Issue)
 	emp.Post("/:warningId/acknowledge", permFn("hrm.warnings.acknowledge"), handler.Acknowledge)
-	emp.Post("/:warningId/appeal",      permFn("hrm.warnings.acknowledge"), handler.Appeal)
-	emp.Post("/:warningId/close",       permFn("hrm.warnings.close"),       handler.Close)
-	emp.Post("/:warningId/cancel",      permFn("hrm.warnings.close"),       handler.Cancel)
-	emp.Get("/",           permFn("hrm.warnings.view"),   handler.ListForEmployee)
-	emp.Post("/",          permFn("hrm.warnings.manage"), handler.Create)
-	emp.Get("/:warningId",  permFn("hrm.warnings.view"),   handler.Get)
-	emp.Patch("/:warningId",permFn("hrm.warnings.manage"), handler.Update)
+	emp.Post("/:warningId/appeal", permFn("hrm.warnings.acknowledge"), handler.Appeal)
+	emp.Post("/:warningId/close", permFn("hrm.warnings.close"), handler.Close)
+	emp.Post("/:warningId/cancel", permFn("hrm.warnings.close"), handler.Cancel)
+	emp.Get("/", permFn("hrm.warnings.view"), handler.ListForEmployee)
+	emp.Post("/", permFn("hrm.warnings.manage"), handler.Create)
+	emp.Get("/:warningId", permFn("hrm.warnings.view"), handler.Get)
+	emp.Patch("/:warningId", permFn("hrm.warnings.manage"), handler.Update)
 }

@@ -28,6 +28,7 @@ func RegisterRoutes(
 
 	// Instance sub-actions before /:instanceId to avoid param collision
 	instances := router.Group("/organizations/:orgId/hrm/setup/approvals/instances", requireAuth, requireOrgMatch)
+	instances.Get("/", permFn("hrm.approvals.view"), handler.ListInstances)
 	instances.Post("/:instanceId/approve", permFn("hrm.approvals.action"), handler.Approve)
 	instances.Post("/:instanceId/reject", permFn("hrm.approvals.action"), handler.Reject)
 	instances.Get("/:instanceId", permFn("hrm.approvals.view"), handler.GetInstance)

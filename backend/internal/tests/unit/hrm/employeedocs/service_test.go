@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/employeedocs"
 )
 
@@ -19,23 +20,28 @@ func newStubRepo() *stubRepo {
 	}
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status, relatedType string) ([]*employeedocs.EmployeeDocument, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter employeedocs.DocListFilter) ([]*employeedocs.EmployeeDocument, error) {
 	var res []*employeedocs.EmployeeDocument
 	for _, d := range r.data {
 		if d.OrgID == orgID {
-			if employeeID != "" && d.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && d.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(d.Status) != status {
+			if filter.Status != "" && string(d.Status) != filter.Status {
 				continue
 			}
-			if relatedType != "" && d.RelatedType != nil && *d.RelatedType != relatedType {
+			if filter.RelatedType != "" && d.RelatedType != nil && *d.RelatedType != filter.RelatedType {
 				continue
 			}
 			res = append(res, d)
 		}
 	}
 	return res, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter employeedocs.DocListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*employeedocs.EmployeeDocument, error) {
@@ -141,7 +147,7 @@ func TestEmployeeDocsService(t *testing.T) {
 		}
 
 		// List
-		list, err := svc.List(ctx, orgID, empID, string(employeedocs.StatusSent), "")
+		list, err := svc.List(ctx, orgID, employeedocs.DocListFilter{EmployeeID: empID, Status: string(employeedocs.StatusSent), Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

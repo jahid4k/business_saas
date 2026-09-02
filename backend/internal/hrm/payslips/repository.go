@@ -5,31 +5,52 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 type Repository interface {
 	// Runs
 	FindRuns(ctx context.Context, orgID string) ([]*PayslipRun, error)
 	FindRunByRef(ctx context.Context, orgID, ref string) (*PayslipRun, error)
-	FindRunByPeriod(ctx context.Context, orgID string, year, month int) (*PayslipRun, error)
+	// FindRunByPeriod backs the friendly duplicate check. It takes a runType
+	// because only 'regular' is unique per period — see
+	// uq_hrm_pr_org_month_regular and RunType.IsUniquePerPeriod.
+	FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType, legalEntityID *string) (*PayslipRun, error)
 	CreateRun(ctx context.Context, r *PayslipRun) error
 	UpdateRun(ctx context.Context, r *PayslipRun) error
 	// Payslips
-	FindPayslips(ctx context.Context, orgID, runID, employeeID string) ([]*Payslip, error)
+	FindPayslips(ctx context.Context, orgID string, filter SlipListFilter) ([]*Payslip, error)
+	CountPayslips(ctx context.Context, orgID string, filter SlipListFilter) (int, error)
 	FindPayslipByRef(ctx context.Context, orgID, ref string) (*Payslip, error)
 	CreatePayslip(ctx context.Context, p *Payslip) error
 	CreatePayslipLines(ctx context.Context, lines []*PayslipLine) error
 	LoadPayslipLines(ctx context.Context, payslipID string) ([]*PayslipLine, error)
+	// CountNegativeNetPayslips backs the negative-net guard in ApproveRun.
+	// It lives on the Repository rather than being another raw s.db call
+	// because everything reached through *pgxpool.Pool directly is invisible to
+	// the stub-repo unit tests — which is precisely how the three compute
+	// defects and the dropped-status-column bug all survived.
+	CountNegativeNetPayslips(ctx context.Context, runID string) (int, error)
+	// DeletePayslipsByRun clears a run's payslips so a failed computation can
+	// be retried. Without it an aborted run leaves the payslips it managed to
+	// write behind, and the retry — permitted, because an aborted run returns
+	// to 'draft' — inserts a second set alongside them. Lines go with the
+	// payslips via ON DELETE CASCADE.
+	DeletePayslipsByRun(ctx context.Context, runID string) error
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
-const runSel = `id, public_id, org_id, period_year, period_month,
-	description, currency, attendance_period_id,
+const runSel = `id, public_id, org_id, period_year, period_month, run_type,
+	description, currency, legal_entity_id, attendance_period_id,
 	total_employees, total_gross_pay, total_deductions, total_net_pay,
 	status, computed_at, computed_by, approved_at, approved_by, paid_at, paid_by,
 	created_by, created_at, updated_at`
@@ -37,23 +58,35 @@ const runSel = `id, public_id, org_id, period_year, period_month,
 func scanRun(row pgx.Row) (*PayslipRun, error) {
 	r := &PayslipRun{}
 	err := row.Scan(
-		&r.ID, &r.PublicID, &r.OrgID, &r.PeriodYear, &r.PeriodMonth,
-		&r.Description, &r.Currency, &r.AttendancePeriodID,
+		&r.ID, &r.PublicID, &r.OrgID, &r.PeriodYear, &r.PeriodMonth, &r.RunType,
+		&r.Description, &r.Currency, &r.LegalEntityID, &r.AttendancePeriodID,
 		&r.TotalEmployees, &r.TotalGrossPay, &r.TotalDeductions, &r.TotalNetPay,
 		&r.Status, &r.ComputedAt, &r.ComputedBy, &r.ApprovedAt, &r.ApprovedBy, &r.PaidAt, &r.PaidBy,
 		&r.CreatedBy, &r.CreatedAt, &r.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
 func (r *repoImpl) FindRuns(ctx context.Context, orgID string) ([]*PayslipRun, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+runSel+` FROM hrm_payslip_runs WHERE org_id=$1 ORDER BY period_year DESC, period_month DESC`, orgID)
-	if err != nil { return nil, fmt.Errorf("payslips: FindRuns: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: FindRuns: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*PayslipRun, 0)
-	for rows.Next() { run, err := scanRun(rows); if err != nil { return nil, err }; list = append(list, run) }
+	for rows.Next() {
+		run, err := scanRun(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, run)
+	}
 	return list, rows.Err()
 }
 
@@ -63,18 +96,21 @@ func (r *repoImpl) FindRunByRef(ctx context.Context, orgID, ref string) (*Paysli
 		orgID, ref))
 }
 
-func (r *repoImpl) FindRunByPeriod(ctx context.Context, orgID string, year, month int) (*PayslipRun, error) {
+func (r *repoImpl) FindRunByPeriod(ctx context.Context, orgID string, year, month int, runType RunType, legalEntityID *string) (*PayslipRun, error) {
 	return scanRun(r.db.QueryRow(ctx,
-		`SELECT `+runSel+` FROM hrm_payslip_runs WHERE org_id=$1 AND period_year=$2 AND period_month=$3`,
-		orgID, year, month))
+		`SELECT `+runSel+` FROM hrm_payslip_runs
+		 WHERE org_id=$1 AND period_year=$2 AND period_month=$3 AND run_type=$4
+		   AND COALESCE(legal_entity_id, '00000000-0000-0000-0000-000000000000'::uuid)
+		       = COALESCE($5::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
+		orgID, year, month, runType, legalEntityID))
 }
 
 func (r *repoImpl) CreateRun(ctx context.Context, run *PayslipRun) error {
 	return r.db.QueryRow(ctx,
-		`INSERT INTO hrm_payslip_runs (org_id, period_year, period_month, description, currency, attendance_period_id, status, created_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		`INSERT INTO hrm_payslip_runs (org_id, period_year, period_month, run_type, description, currency, legal_entity_id, attendance_period_id, status, created_by)
+		VALUES ($1,$2,$3,$4,$5,$6,$7::uuid,$8,$9,$10)
 		RETURNING id, public_id, created_at, updated_at`,
-		run.OrgID, run.PeriodYear, run.PeriodMonth, run.Description, run.Currency, run.AttendancePeriodID, run.Status, run.CreatedBy,
+		run.OrgID, run.PeriodYear, run.PeriodMonth, run.RunType, run.Description, run.Currency, run.LegalEntityID, run.AttendancePeriodID, run.Status, run.CreatedBy,
 	).Scan(&run.ID, &run.PublicID, &run.CreatedAt, &run.UpdatedAt)
 }
 
@@ -108,23 +144,62 @@ func scanSlip(row pgx.Row) (*Payslip, error) {
 		&p.Currency, &p.Status, &p.PaymentReference, &p.PaymentDate, &p.PaidAt,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 
-func (r *repoImpl) FindPayslips(ctx context.Context, orgID, runID, employeeID string) ([]*Payslip, error) {
-	q := `SELECT ` + slipSel + ` FROM hrm_payslips WHERE org_id=$1`
+func buildPayslipsWhere(orgID string, filter SlipListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if runID != "" { args = append(args, runID); q += fmt.Sprintf(` AND payslip_run_id=$%d`, len(args)) }
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.RunID != "" {
+		args = append(args, filter.RunID)
+		clauses = append(clauses, fmt.Sprintf("payslip_run_id = $%d", len(args)))
+	}
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindPayslips(ctx context.Context, orgID string, filter SlipListFilter) ([]*Payslip, error) {
+	where, args := buildPayslipsWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_payslips WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		slipSel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("payslips: FindPayslips: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("payslips: FindPayslips: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Payslip, 0)
-	for rows.Next() { s, err := scanSlip(rows); if err != nil { return nil, err }; list = append(list, s) }
+	for rows.Next() {
+		s, err := scanSlip(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) CountPayslips(ctx context.Context, orgID string, filter SlipListFilter) (int, error) {
+	where, args := buildPayslipsWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_payslips WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("payslips: CountPayslips: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindPayslipByRef(ctx context.Context, orgID, ref string) (*Payslip, error) {
@@ -154,13 +229,35 @@ func (r *repoImpl) CreatePayslipLines(ctx context.Context, lines []*PayslipLine)
 		err := r.db.QueryRow(ctx,
 			`INSERT INTO hrm_payslip_lines
 			(payslip_id, org_id, component_id, component_name, component_type,
-			 calc_method, formula_used, computed_amount, display_order)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			 calc_method, formula_used, computed_amount, display_order,
+			 line_type, is_employer_contribution, source_period_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 			RETURNING id, created_at`,
 			l.PayslipID, l.OrgID, l.ComponentID, l.ComponentName, l.ComponentType,
 			l.CalcMethod, l.FormulaUsed, l.ComputedAmount, l.DisplayOrder,
+			l.LineType, l.IsEmployerContribution, l.SourcePeriodID,
 		).Scan(&l.ID, &l.CreatedAt)
-		if err != nil { return fmt.Errorf("payslips: CreatePayslipLines: %w", err) }
+		if err != nil {
+			return fmt.Errorf("payslips: CreatePayslipLines: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *repoImpl) CountNegativeNetPayslips(ctx context.Context, runID string) (int, error) {
+	var n int
+	if err := r.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM hrm_payslips WHERE payslip_run_id = $1::uuid AND net_pay < 0`,
+		runID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("payslips: CountNegativeNetPayslips: %w", err)
+	}
+	return n, nil
+}
+
+func (r *repoImpl) DeletePayslipsByRun(ctx context.Context, runID string) error {
+	if _, err := r.db.Exec(ctx,
+		`DELETE FROM hrm_payslips WHERE payslip_run_id = $1::uuid`, runID); err != nil {
+		return fmt.Errorf("payslips: DeletePayslipsByRun: %w", err)
 	}
 	return nil
 }
@@ -168,16 +265,20 @@ func (r *repoImpl) CreatePayslipLines(ctx context.Context, lines []*PayslipLine)
 func (r *repoImpl) LoadPayslipLines(ctx context.Context, payslipID string) ([]*PayslipLine, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT id, payslip_id, org_id, component_id, component_name, component_type,
-		calc_method, formula_used, computed_amount, display_order, created_at
+		calc_method, formula_used, computed_amount, display_order, created_at,
+		line_type, is_employer_contribution, source_period_id
 		FROM hrm_payslip_lines WHERE payslip_id=$1 ORDER BY display_order`,
 		payslipID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	list := make([]*PayslipLine, 0)
 	for rows.Next() {
 		l := &PayslipLine{}
 		if err := rows.Scan(&l.ID, &l.PayslipID, &l.OrgID, &l.ComponentID, &l.ComponentName,
-			&l.ComponentType, &l.CalcMethod, &l.FormulaUsed, &l.ComputedAmount, &l.DisplayOrder, &l.CreatedAt); err != nil {
+			&l.ComponentType, &l.CalcMethod, &l.FormulaUsed, &l.ComputedAmount, &l.DisplayOrder, &l.CreatedAt,
+			&l.LineType, &l.IsEmployerContribution, &l.SourcePeriodID); err != nil {
 			return nil, err
 		}
 		list = append(list, l)

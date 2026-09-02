@@ -48,9 +48,9 @@ type DepartmentListResponse struct {
 
 // Sentinel errors
 var (
-	ErrDepartmentNotFound  = errors.New("department not found")
-	ErrNameRequired        = errors.New("name is required")
-	ErrNameTooLong         = errors.New("name must not exceed 150 characters")
-	ErrNameConflict        = errors.New("a department with this name already exists in the organization")
-	ErrCircularParent      = errors.New("a department cannot be its own parent")
+	ErrDepartmentNotFound = errors.New("department not found")
+	ErrNameRequired       = errors.New("name is required")
+	ErrNameTooLong        = errors.New("name must not exceed 150 characters")
+	ErrNameConflict       = errors.New("a department with this name already exists in the organization")
+	ErrCircularParent     = errors.New("a department cannot be its own parent")
 )

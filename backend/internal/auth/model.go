@@ -176,3 +176,16 @@ type LoginEvent struct {
 	IPAddress     string
 	UserAgent     string
 }
+
+type VerificationToken struct {
+	ID        string     `db:"id"`
+	PublicID  string     `db:"public_id"`
+	UserID    *string    `db:"user_id"`
+	Email     *string    `db:"email"`
+	TokenHash string     `db:"token_hash"`
+	Type      string     `db:"type"`
+	VerifiedAt *time.Time `db:"verified_at"`
+	UsedAt    *time.Time `db:"used_at"`
+	ExpiresAt time.Time  `db:"expires_at"`
+	CreatedAt time.Time  `db:"created_at"`
+}

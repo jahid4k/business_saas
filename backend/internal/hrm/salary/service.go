@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/expr-lang/expr"
 )
 
@@ -97,7 +99,7 @@ func (s *serviceImpl) CreateComponent(ctx context.Context, orgID, createdBy stri
 		Description:       req.Description,
 		ComponentType:     req.ComponentType,
 		CalcMethod:        req.CalcMethod,
-		FixedValue:        0,
+		FixedValue:        decimal.Zero,
 		FormulaExpression: req.FormulaExpression,
 		FormulaVariables:  req.FormulaVariables,
 		SlabConfig:        req.SlabConfig,
@@ -356,7 +358,7 @@ func (s *serviceImpl) GetActiveSalary(ctx context.Context, orgID, employeeID str
 }
 
 func (s *serviceImpl) AssignSalary(ctx context.Context, orgID, employeeID, createdBy string, req AssignSalaryRequest) (*EmployeeSalaryRecord, error) {
-	if req.BasicPay < 0 {
+	if req.BasicPay.IsNegative() {
 		return nil, ErrBasicPayRequired
 	}
 	if req.EffectiveDate == "" {

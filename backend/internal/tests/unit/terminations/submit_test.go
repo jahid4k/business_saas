@@ -28,7 +28,7 @@ func (r *stubTermRepo) nextID() string {
 	return fmt.Sprintf("term-%d", r.seq)
 }
 
-func (r *stubTermRepo) FindAll(_ context.Context, orgID, employeeID, status string) ([]*terminations.Termination, error) {
+func (r *stubTermRepo) FindAll(_ context.Context, orgID string, filter terminations.TerminationListFilter) ([]*terminations.Termination, error) {
 	var out []*terminations.Termination
 	for _, t := range r.byID {
 		if t.OrgID == orgID {
@@ -36,6 +36,11 @@ func (r *stubTermRepo) FindAll(_ context.Context, orgID, employeeID, status stri
 		}
 	}
 	return out, nil
+}
+
+func (r *stubTermRepo) Count(ctx context.Context, orgID string, filter terminations.TerminationListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubTermRepo) FindByRef(_ context.Context, orgID, employeeID, ref string) (*terminations.Termination, error) {
@@ -149,6 +154,9 @@ func (s *stubApprovalsSvc) CancelInstance(context.Context, string, string, strin
 	return nil, nil
 }
 func (s *stubApprovalsSvc) RegisterCallback(string, approvals.EntityCallback) {}
+func (s *stubApprovalsSvc) ListInstances(context.Context, string, int, int, string, string) (*approvals.InstanceListResponse, error) {
+	return nil, nil
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

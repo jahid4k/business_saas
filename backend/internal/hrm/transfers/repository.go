@@ -5,13 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/mridha/businesssaas/internal/authz"
+	"github.com/mridha/businesssaas/internal/hrm/scope"
 )
 
 type Repository interface {
-	FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Transfer, error)
+	FindAll(ctx context.Context, orgID string, filter TransferListFilter) ([]*Transfer, error)
+	Count(ctx context.Context, orgID string, filter TransferListFilter) (int, error)
 	FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error)
 	Create(ctx context.Context, t *Transfer) error
 	Update(ctx context.Context, t *Transfer) error
@@ -20,6 +25,7 @@ type Repository interface {
 }
 
 type repoImpl struct{ db *pgxpool.Pool }
+
 func NewRepository(db *pgxpool.Pool) Repository { return &repoImpl{db: db} }
 
 const sel = `id, public_id, org_id, employee_id, transfer_type,
@@ -39,29 +45,71 @@ func scanTrf(row pgx.Row) (*Transfer, error) {
 		&t.ApprovalInstanceID, &t.DocumentID, &t.Status,
 		&t.AppliedAt, &t.AppliedBy, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt,
 	)
-	if errors.Is(err, pgx.ErrNoRows) { return nil, nil }
-	if err != nil { return nil, err }
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	return t, nil
 }
 
-func (r *repoImpl) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*Transfer, error) {
-	q := `SELECT ` + sel + ` FROM hrm_transfers WHERE org_id=$1`
+func buildTransfersWhere(orgID string, filter TransferListFilter) (string, []any) {
+	clauses := []string{"org_id = $1"}
 	args := []any{orgID}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
-	if status != "" { args = append(args, status); q += fmt.Sprintf(` AND status=$%d`, len(args)) }
-	q += ` ORDER BY created_at DESC`
+	if filter.EmployeeID != "" {
+		args = append(args, filter.EmployeeID)
+		clauses = append(clauses, fmt.Sprintf("employee_id = $%d", len(args)))
+	}
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		clauses = append(clauses, fmt.Sprintf("status = $%d", len(args)))
+	}
+	if filter.Scope != authz.ScopeAll {
+		frag, scopeArgs := scope.Predicate(filter.Scope, "employee_id", len(args), orgID, filter.CallerUserID, scope.DefaultMaxDepth)
+		clauses = append(clauses, frag)
+		args = append(args, scopeArgs...)
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+func (r *repoImpl) FindAll(ctx context.Context, orgID string, filter TransferListFilter) ([]*Transfer, error) {
+	where, args := buildTransfersWhere(orgID, filter)
+	args = append(args, filter.Limit, filter.Offset)
+	q := fmt.Sprintf(`SELECT %s FROM hrm_transfers WHERE %s ORDER BY created_at DESC LIMIT $%d OFFSET $%d`,
+		sel, where, len(args)-1, len(args))
 	rows, err := r.db.Query(ctx, q, args...)
-	if err != nil { return nil, fmt.Errorf("transfers: FindAll: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("transfers: FindAll: %w", err)
+	}
 	defer rows.Close()
 	list := make([]*Transfer, 0)
-	for rows.Next() { t, err := scanTrf(rows); if err != nil { return nil, err }; list = append(list, t) }
+	for rows.Next() {
+		t, err := scanTrf(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, t)
+	}
 	return list, rows.Err()
+}
+
+func (r *repoImpl) Count(ctx context.Context, orgID string, filter TransferListFilter) (int, error) {
+	where, args := buildTransfersWhere(orgID, filter)
+	var count int
+	if err := r.db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM hrm_transfers WHERE %s`, where), args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("transfers: Count: %w", err)
+	}
+	return count, nil
 }
 
 func (r *repoImpl) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*Transfer, error) {
 	q := `SELECT ` + sel + ` FROM hrm_transfers WHERE org_id=$1 AND (id::text=$2 OR public_id=$2)`
 	args := []any{orgID, ref}
-	if employeeID != "" { args = append(args, employeeID); q += fmt.Sprintf(` AND employee_id=$%d`, len(args)) }
+	if employeeID != "" {
+		args = append(args, employeeID)
+		q += fmt.Sprintf(` AND employee_id=$%d`, len(args))
+	}
 	return scanTrf(r.db.QueryRow(ctx, q, args...))
 }
 

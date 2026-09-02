@@ -43,23 +43,28 @@ type Lead struct {
 	ConvertedContactID *string    `db:"converted_contact_id" json:"converted_contact_id,omitempty"`
 	ConvertedDealID    *string    `db:"converted_deal_id"    json:"converted_deal_id,omitempty"`
 	OwnerID            *string    `db:"owner_id"             json:"owner_id,omitempty"`
-	CreatedBy          string     `db:"created_by"           json:"created_by"`
-	CreatedAt          time.Time  `db:"created_at"           json:"created_at"`
-	UpdatedAt          time.Time  `db:"updated_at"           json:"updated_at"`
-	CustomFields       map[string]any `db:"custom_fields"    json:"custom_fields,omitempty"`
-	CaptureSource      *string        `db:"capture_source"   json:"capture_source,omitempty"`
-	CaptureMetadata    map[string]any `db:"capture_metadata" json:"capture_metadata,omitempty"`
+	// Nullable because a SYSTEM-captured lead has no human creator.
+	// internal/capture/{email,social,visitors} all create leads with no
+	// acting user; created_by was NOT NULL, so every one of those inserts
+	// failed with 22P02 and the error was swallowed into a log row. See
+	// migration 00112. capture_source records the origin instead.
+	CreatedBy       *string        `db:"created_by"           json:"created_by,omitempty"`
+	CreatedAt       time.Time      `db:"created_at"           json:"created_at"`
+	UpdatedAt       time.Time      `db:"updated_at"           json:"updated_at"`
+	CustomFields    map[string]any `db:"custom_fields"    json:"custom_fields,omitempty"`
+	CaptureSource   *string        `db:"capture_source"   json:"capture_source,omitempty"`
+	CaptureMetadata map[string]any `db:"capture_metadata" json:"capture_metadata,omitempty"`
 }
 
 type CreateLeadRequest struct {
-	FirstName   string  `json:"first_name"`
-	LastName    *string `json:"last_name"`
-	Email       *string `json:"email"`
-	Phone       *string `json:"phone"`
-	CompanyName *string `json:"company_name"`
-	Title       *string `json:"title"`
-	Source          *string `json:"source"`
-	OwnerID         *string `json:"owner_id"`
+	FirstName       string         `json:"first_name"`
+	LastName        *string        `json:"last_name"`
+	Email           *string        `json:"email"`
+	Phone           *string        `json:"phone"`
+	CompanyName     *string        `json:"company_name"`
+	Title           *string        `json:"title"`
+	Source          *string        `json:"source"`
+	OwnerID         *string        `json:"owner_id"`
 	CustomFields    map[string]any `json:"custom_fields,omitempty"`
 	CaptureSource   *string        `json:"capture_source,omitempty"`
 	CaptureMetadata map[string]any `json:"capture_metadata,omitempty"`

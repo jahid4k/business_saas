@@ -19,6 +19,9 @@ require (
 
 require (
 	github.com/expr-lang/expr v1.17.8
+	github.com/resend/resend-go/v2 v2.28.0
+	github.com/robfig/cron/v3 v3.0.1
+	github.com/shopspring/decimal v1.4.0
 	golang.org/x/image v0.43.0
 )
 
@@ -40,7 +43,7 @@ require (
 	github.com/valyala/fasthttp v1.70.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/net v0.54.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 )

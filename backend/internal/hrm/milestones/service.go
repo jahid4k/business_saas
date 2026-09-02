@@ -26,28 +26,47 @@ type serviceImpl struct {
 	repo Repository
 	db   *pgxpool.Pool
 }
+
 func NewService(repo Repository, db *pgxpool.Pool) Service { return &serviceImpl{repo: repo, db: db} }
 
 func (s *serviceImpl) List(ctx context.Context, orgID, employeeID, milestoneType string, upcoming bool) (*MilestoneListResponse, error) {
 	list, err := s.repo.FindAll(ctx, orgID, employeeID, milestoneType, upcoming)
-	if err != nil { return nil, fmt.Errorf("milestones: List: %w", err) }
-	if list == nil { list = []*Milestone{} }
+	if err != nil {
+		return nil, fmt.Errorf("milestones: List: %w", err)
+	}
+	if list == nil {
+		list = []*Milestone{}
+	}
 	return &MilestoneListResponse{Milestones: list, Total: len(list)}, nil
 }
 
 func (s *serviceImpl) Get(ctx context.Context, orgID, ref string) (*Milestone, error) {
 	m, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("milestones: Get: %w", err) }
-	if m == nil { return nil, ErrNotFound }
+	if err != nil {
+		return nil, fmt.Errorf("milestones: Get: %w", err)
+	}
+	if m == nil {
+		return nil, ErrNotFound
+	}
 	return m, nil
 }
 
 func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req CreateMilestoneRequest) (*Milestone, error) {
-	if strings.TrimSpace(req.EmployeeID) == "" { return nil, ErrEmployeeIDRequired }
-	if strings.TrimSpace(req.Title) == "" { return nil, ErrTitleRequired }
-	if !req.MilestoneType.IsValid() { return nil, ErrInvalidMilestoneType }
-	if strings.TrimSpace(req.MilestoneDate) == "" { return nil, ErrDateRequired }
-	if _, err := time.Parse(dateLayout, req.MilestoneDate); err != nil { return nil, ErrInvalidDate }
+	if strings.TrimSpace(req.EmployeeID) == "" {
+		return nil, ErrEmployeeIDRequired
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		return nil, ErrTitleRequired
+	}
+	if !req.MilestoneType.IsValid() {
+		return nil, ErrInvalidMilestoneType
+	}
+	if strings.TrimSpace(req.MilestoneDate) == "" {
+		return nil, ErrDateRequired
+	}
+	if _, err := time.Parse(dateLayout, req.MilestoneDate); err != nil {
+		return nil, ErrInvalidDate
+	}
 
 	m := &Milestone{
 		OrgID: orgID, EmployeeID: req.EmployeeID,
@@ -71,7 +90,9 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 			VALUES ($1,$2,'tenure',$3,'Congratulations on your milestone!',CURRENT_DATE,$4,'issued',$4)
 			RETURNING id::text`,
 			orgID, req.EmployeeID, req.Title, createdBy).Scan(&id)
-		if id != "" { awardID = &id }
+		if id != "" {
+			awardID = &id
+		}
 	}
 	if req.CreateAnnouncement {
 		var id string
@@ -80,7 +101,9 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 			VALUES ($1,$2,$3,'general','organization',$4,'published',$4)
 			RETURNING id::text`,
 			orgID, req.Title, fmt.Sprintf("Congratulations to our team member on their **%s**!", req.Title), createdBy).Scan(&id)
-		if id != "" { annID = &id }
+		if id != "" {
+			annID = &id
+		}
 	}
 	if req.CreateCalendarEvent {
 		var id string
@@ -89,21 +112,33 @@ func (s *serviceImpl) Create(ctx context.Context, orgID, createdBy string, req C
 			VALUES ($1,$2,'company_event',$3::date,$3::date,'organization','upcoming',TRUE,'milestone',$4::uuid,$5)
 			RETURNING id::text`,
 			orgID, req.Title, req.MilestoneDate, m.ID, createdBy).Scan(&id)
-		if id != "" { calID = &id }
+		if id != "" {
+			calID = &id
+		}
 	}
 	if awardID != nil || annID != nil || calID != nil {
 		_ = s.repo.SetCascadeLinks(ctx, m.ID, awardID, annID, calID)
-		m.AutoAwardID = awardID; m.AutoAnnouncementID = annID; m.AutoCalendarEventID = calID
+		m.AutoAwardID = awardID
+		m.AutoAnnouncementID = annID
+		m.AutoCalendarEventID = calID
 	}
 	return m, nil
 }
 
 func (s *serviceImpl) Acknowledge(ctx context.Context, orgID, ref string) (*Milestone, error) {
 	m, err := s.repo.FindByRef(ctx, orgID, ref)
-	if err != nil { return nil, fmt.Errorf("milestones: Acknowledge: %w", err) }
-	if m == nil { return nil, ErrNotFound }
-	if m.IsAcknowledged { return nil, ErrAlreadyAcknowledged }
-	if err := s.repo.Acknowledge(ctx, m.ID); err != nil { return nil, fmt.Errorf("milestones: Acknowledge: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("milestones: Acknowledge: %w", err)
+	}
+	if m == nil {
+		return nil, ErrNotFound
+	}
+	if m.IsAcknowledged {
+		return nil, ErrAlreadyAcknowledged
+	}
+	if err := s.repo.Acknowledge(ctx, m.ID); err != nil {
+		return nil, fmt.Errorf("milestones: Acknowledge: %w", err)
+	}
 	now := time.Now()
 	m.IsAcknowledged = true
 	m.AcknowledgedAt = &now
@@ -113,26 +148,34 @@ func (s *serviceImpl) Acknowledge(ctx context.Context, orgID, ref string) (*Mile
 // GenerateUpcoming scans active employees and creates milestones for the given month.
 // Idempotent — duplicate inserts are skipped via unique constraint.
 func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy string, req GenerateRequest) (*GenerateResult, error) {
-	if req.Year == 0 || req.Month == 0 { return nil, fmt.Errorf("year and month are required") }
+	if req.Year == 0 || req.Month == 0 {
+		return nil, fmt.Errorf("year and month are required")
+	}
 	result := &GenerateResult{}
 
 	if req.IncludeAnniversaries {
 		// Find employees whose hire_date anniversary falls in year+month
 		rows, err := s.db.Query(ctx,
-			`SELECT id::text, hire_date, EXTRACT(YEAR FROM AGE(make_date($2,$3,1), hire_date))::int
-			FROM hrm_employees
-			WHERE org_id=$1 AND status='active' AND hire_date IS NOT NULL
-			AND EXTRACT(MONTH FROM hire_date)=$3
-			AND EXTRACT(DAY FROM hire_date) IS NOT NULL`,
+			`SELECT e.id::text, e.hire_date, EXTRACT(YEAR FROM AGE(make_date($2,$3,1), e.hire_date))::int
+			FROM hrm_employees e
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE e.org_id=$1 AND st.category='active' AND e.hire_date IS NOT NULL
+			AND EXTRACT(MONTH FROM e.hire_date)=$3
+			AND EXTRACT(DAY FROM e.hire_date) IS NOT NULL`,
 			orgID, req.Year, req.Month)
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
-				var empID, hireDate string; var years int
-				if err := rows.Scan(&empID, &hireDate, &years); err != nil || years <= 0 { continue }
+				var empID, hireDate string
+				var years int
+				if err := rows.Scan(&empID, &hireDate, &years); err != nil || years <= 0 {
+					continue
+				}
 				// Compute anniversary date in the target year
 				hd, err := time.Parse(dateLayout, hireDate)
-				if err != nil { continue }
+				if err != nil {
+					continue
+				}
 				annDate := fmt.Sprintf("%d-%02d-%02d", req.Year, hd.Month(), hd.Day())
 				title := fmt.Sprintf("%d-Year Work Anniversary", years)
 				m := &Milestone{
@@ -160,7 +203,8 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			`SELECT c.employee_id::text, to_char(c.probation_end_date,'YYYY-MM-DD')
 			FROM hrm_employee_contracts c
 			JOIN hrm_employees e ON e.id=c.employee_id
-			WHERE c.org_id=$1 AND e.status='active' AND c.is_active=TRUE
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE c.org_id=$1 AND st.category='active' AND c.is_active=TRUE
 			AND c.probation_end_date IS NOT NULL
 			AND EXTRACT(YEAR FROM c.probation_end_date)=$2
 			AND EXTRACT(MONTH FROM c.probation_end_date)=$3`,
@@ -169,15 +213,23 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			defer rows.Close()
 			for rows.Next() {
 				var empID, probDate string
-				if err := rows.Scan(&empID, &probDate); err != nil { continue }
+				if err := rows.Scan(&empID, &probDate); err != nil {
+					continue
+				}
 				m := &Milestone{
 					OrgID: orgID, EmployeeID: empID,
 					MilestoneType: TypeProbationComplete, Title: "Probation Period Completed",
 					MilestoneDate: probDate, IsAutoGenerated: true, CreatedBy: createdBy,
 				}
 				if err := s.repo.Create(ctx, m); err != nil {
-					if strings.Contains(err.Error(), "unique") { result.Skipped++ } else { result.Errors = append(result.Errors, err.Error()) }
-				} else { result.Generated++ }
+					if strings.Contains(err.Error(), "unique") {
+						result.Skipped++
+					} else {
+						result.Errors = append(result.Errors, err.Error())
+					}
+				} else {
+					result.Generated++
+				}
 			}
 		}
 	}
@@ -187,7 +239,8 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			`SELECT c.employee_id::text, to_char(c.end_date,'YYYY-MM-DD')
 			FROM hrm_employee_contracts c
 			JOIN hrm_employees e ON e.id=c.employee_id
-			WHERE c.org_id=$1 AND e.status='active' AND c.is_active=TRUE
+			JOIN hrm_employee_statuses st ON st.id = e.status_id
+			WHERE c.org_id=$1 AND st.category='active' AND c.is_active=TRUE
 			AND c.end_date IS NOT NULL AND c.contract_type='fixed_term'
 			AND EXTRACT(YEAR FROM c.end_date)=$2 AND EXTRACT(MONTH FROM c.end_date)=$3`,
 			orgID, req.Year, req.Month)
@@ -195,15 +248,23 @@ func (s *serviceImpl) GenerateUpcoming(ctx context.Context, orgID, createdBy str
 			defer rows.Close()
 			for rows.Next() {
 				var empID, endDate string
-				if err := rows.Scan(&empID, &endDate); err != nil { continue }
+				if err := rows.Scan(&empID, &endDate); err != nil {
+					continue
+				}
 				m := &Milestone{
 					OrgID: orgID, EmployeeID: empID,
 					MilestoneType: TypeContractRenewal, Title: "Contract Renewal Due",
 					MilestoneDate: endDate, IsAutoGenerated: true, CreatedBy: createdBy,
 				}
 				if err := s.repo.Create(ctx, m); err != nil {
-					if strings.Contains(err.Error(), "unique") { result.Skipped++ } else { result.Errors = append(result.Errors, err.Error()) }
-				} else { result.Generated++ }
+					if strings.Contains(err.Error(), "unique") {
+						result.Skipped++
+					} else {
+						result.Errors = append(result.Errors, err.Error())
+					}
+				} else {
+					result.Generated++
+				}
 			}
 		}
 	}

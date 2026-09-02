@@ -13,10 +13,10 @@ type PermissionFunc func(permission string) fiber.Handler
 func RegisterRoutes(router fiber.Router, handler *Handler, permFn PermissionFunc, requireAuth, requireOrgMatch fiber.Handler) {
 	aw := router.Group("/organizations/:orgId/hrm/awards", requireAuth, requireOrgMatch)
 	aw.Post("/:awardId/submit", permFn("hrm.awards.approve"), handler.Submit)
-	aw.Post("/:awardId/issue",  permFn("hrm.awards.issue"),   handler.Issue)
-	aw.Post("/:awardId/cancel", permFn("hrm.awards.manage"),  handler.Cancel)
-	aw.Get("/",          permFn("hrm.awards.view"),   handler.List)
-	aw.Post("/",         permFn("hrm.awards.manage"), handler.Create)
-	aw.Get("/:awardId",  permFn("hrm.awards.view"),   handler.Get)
-	aw.Patch("/:awardId",permFn("hrm.awards.manage"), handler.Update)
+	aw.Post("/:awardId/issue", permFn("hrm.awards.issue"), handler.Issue)
+	aw.Post("/:awardId/cancel", permFn("hrm.awards.manage"), handler.Cancel)
+	aw.Get("/", permFn("hrm.awards.view"), handler.List)
+	aw.Post("/", permFn("hrm.awards.manage"), handler.Create)
+	aw.Get("/:awardId", permFn("hrm.awards.view"), handler.Get)
+	aw.Patch("/:awardId", permFn("hrm.awards.manage"), handler.Update)
 }

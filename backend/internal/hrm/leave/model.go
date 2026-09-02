@@ -4,6 +4,8 @@ package leave
 import (
 	"errors"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // LeaveRequestStatus defines the allowed status values for a leave request.
@@ -78,27 +80,27 @@ type LeaveTypeListResponse struct {
 // LeaveRequest is the core domain type for an employee leave request.
 // Mirrors hrm_leave_requests columns exactly.
 type LeaveRequest struct {
-	ID           string             `db:"id"              json:"id"`
-	PublicID     string             `db:"public_id"       json:"public_id"`
-	OrgID        string             `db:"org_id"          json:"org_id"`
-	EmployeeID   string             `db:"employee_id"     json:"employee_id"`
-	LeaveTypeID  string             `db:"leave_type_id"   json:"leave_type_id"`
-	StartDate    time.Time          `db:"start_date"      json:"start_date"`
-	EndDate      time.Time          `db:"end_date"        json:"end_date"`
-	TotalDays    float64            `db:"total_days"      json:"total_days"`
-	Reason       *string            `db:"reason"          json:"reason,omitempty"`
-	Status       LeaveRequestStatus `db:"status"          json:"status"`
-	ReviewedBy   *string            `db:"reviewed_by"     json:"reviewed_by,omitempty"`
-	ReviewedAt   *time.Time         `db:"reviewed_at"     json:"reviewed_at,omitempty"`
-	ReviewNote   *string            `db:"review_note"     json:"review_note,omitempty"`
-	CreatedBy    string             `db:"created_by"      json:"created_by"`
-	CreatedAt    time.Time          `db:"created_at"      json:"created_at"`
-	UpdatedAt    time.Time          `db:"updated_at"      json:"updated_at"`
+	ID          string             `db:"id"              json:"id"`
+	PublicID    string             `db:"public_id"       json:"public_id"`
+	OrgID       string             `db:"org_id"          json:"org_id"`
+	EmployeeID  string             `db:"employee_id"     json:"employee_id"`
+	LeaveTypeID string             `db:"leave_type_id"   json:"leave_type_id"`
+	StartDate   time.Time          `db:"start_date"      json:"start_date"`
+	EndDate     time.Time          `db:"end_date"        json:"end_date"`
+	TotalDays   float64            `db:"total_days"      json:"total_days"`
+	Reason      *string            `db:"reason"          json:"reason,omitempty"`
+	Status      LeaveRequestStatus `db:"status"          json:"status"`
+	ReviewedBy  *string            `db:"reviewed_by"     json:"reviewed_by,omitempty"`
+	ReviewedAt  *time.Time         `db:"reviewed_at"     json:"reviewed_at,omitempty"`
+	ReviewNote  *string            `db:"review_note"     json:"review_note,omitempty"`
+	CreatedBy   string             `db:"created_by"      json:"created_by"`
+	CreatedAt   time.Time          `db:"created_at"      json:"created_at"`
+	UpdatedAt   time.Time          `db:"updated_at"      json:"updated_at"`
 }
 
 // CreateLeaveRequestRequest is the body for POST /hrm/leave/requests.
 type CreateLeaveRequestRequest struct {
-	EmployeeID  string  `json:"employee_id"`  // required
+	EmployeeID  string  `json:"employee_id"`   // required
 	LeaveTypeID string  `json:"leave_type_id"` // required
 	StartDate   string  `json:"start_date"`    // YYYY-MM-DD
 	EndDate     string  `json:"end_date"`      // YYYY-MM-DD
@@ -119,6 +121,13 @@ type LeaveRequestFilter struct {
 	Status      LeaveRequestStatus
 	Limit       int
 	Offset      int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.ListRequests. Scope zero value (authz.ScopeNone)
+	// means "no rows" — callers that intend no scoping must explicitly pass
+	// authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
 }
 
 const (
@@ -160,17 +169,17 @@ var (
 	ErrLeaveTypeConflict = errors.New("a leave type with this name already exists")
 
 	// Leave request errors
-	ErrLeaveRequestNotFound    = errors.New("leave request not found")
-	ErrEmployeeIDRequired      = errors.New("employee_id is required")
-	ErrLeaveTypeIDRequired     = errors.New("leave_type_id is required")
-	ErrStartDateRequired       = errors.New("start_date is required")
-	ErrEndDateRequired         = errors.New("end_date is required")
-	ErrInvalidStartDate        = errors.New("start_date must be a valid date in YYYY-MM-DD format")
-	ErrInvalidEndDate          = errors.New("end_date must be a valid date in YYYY-MM-DD format")
-	ErrEndBeforeStart          = errors.New("end_date cannot be before start_date")
-	ErrInvalidTotalDays        = errors.New("total_days must be greater than 0")
-	ErrNotPending              = errors.New("only pending leave requests can be approved or rejected")
-	ErrCannotCancelNotOwn      = errors.New("only the request owner or a manager can cancel a leave request")
-	ErrAlreadyCancelled        = errors.New("leave request is already cancelled")
-	ErrLeaveTypeInactive       = errors.New("the selected leave type is inactive")
+	ErrLeaveRequestNotFound = errors.New("leave request not found")
+	ErrEmployeeIDRequired   = errors.New("employee_id is required")
+	ErrLeaveTypeIDRequired  = errors.New("leave_type_id is required")
+	ErrStartDateRequired    = errors.New("start_date is required")
+	ErrEndDateRequired      = errors.New("end_date is required")
+	ErrInvalidStartDate     = errors.New("start_date must be a valid date in YYYY-MM-DD format")
+	ErrInvalidEndDate       = errors.New("end_date must be a valid date in YYYY-MM-DD format")
+	ErrEndBeforeStart       = errors.New("end_date cannot be before start_date")
+	ErrInvalidTotalDays     = errors.New("total_days must be greater than 0")
+	ErrNotPending           = errors.New("only pending leave requests can be approved or rejected")
+	ErrCannotCancelNotOwn   = errors.New("only the request owner or a manager can cancel a leave request")
+	ErrAlreadyCancelled     = errors.New("leave request is already cancelled")
+	ErrLeaveTypeInactive    = errors.New("the selected leave type is inactive")
 )

@@ -3,7 +3,10 @@ package terminations
 
 import (
 	"errors"
+	"github.com/shopspring/decimal"
 	"time"
+
+	"github.com/mridha/businesssaas/internal/authz"
 )
 
 // TerminationType is always HR-initiated — not employee self-service.
@@ -54,7 +57,7 @@ type Termination struct {
 	InternalNotes          *string           `db:"internal_notes"            json:"internal_notes,omitempty"`
 	ApprovalInstanceID     *string           `db:"approval_instance_id"      json:"approval_instance_id,omitempty"`
 	DocumentID             *string           `db:"document_id"               json:"document_id,omitempty"`
-	SeveranceAmount        *float64          `db:"severance_amount"          json:"severance_amount,omitempty"`
+	SeveranceAmount        *decimal.Decimal  `db:"severance_amount"          json:"severance_amount,omitempty"`
 	SeveranceCurrency      string            `db:"severance_currency"        json:"severance_currency"`
 	IsRehireEligible       bool              `db:"is_rehire_eligible"        json:"is_rehire_eligible"`
 	ExitClearanceCompleted bool              `db:"exit_clearance_completed"  json:"exit_clearance_completed"`
@@ -67,30 +70,67 @@ type Termination struct {
 }
 
 type CreateTerminationRequest struct {
-	TerminationType   TerminationType `json:"termination_type"`
-	TerminationDate   string          `json:"termination_date"`
-	LastWorkingDate   string          `json:"last_working_date"`
-	Reason            *string         `json:"reason"`
-	InternalNotes     *string         `json:"internal_notes"`
-	SeveranceAmount   *float64        `json:"severance_amount"`
-	SeveranceCurrency *string         `json:"severance_currency"`
-	IsRehireEligible  *bool           `json:"is_rehire_eligible"` // defaults true
+	TerminationType   TerminationType  `json:"termination_type"`
+	TerminationDate   string           `json:"termination_date"`
+	LastWorkingDate   string           `json:"last_working_date"`
+	Reason            *string          `json:"reason"`
+	InternalNotes     *string          `json:"internal_notes"`
+	SeveranceAmount   *decimal.Decimal `json:"severance_amount"`
+	SeveranceCurrency *string          `json:"severance_currency"`
+	IsRehireEligible  *bool            `json:"is_rehire_eligible"` // defaults true
 }
 
 type UpdateTerminationRequest struct {
-	TerminationDate        *string  `json:"termination_date"`
-	LastWorkingDate        *string  `json:"last_working_date"`
-	Reason                 *string  `json:"reason"`
-	InternalNotes          *string  `json:"internal_notes"`
-	SeveranceAmount        *float64 `json:"severance_amount"`
-	IsRehireEligible       *bool    `json:"is_rehire_eligible"`
-	ExitClearanceCompleted *bool    `json:"exit_clearance_completed"`
-	DocumentID             *string  `json:"document_id"`
+	TerminationDate        *string          `json:"termination_date"`
+	LastWorkingDate        *string          `json:"last_working_date"`
+	Reason                 *string          `json:"reason"`
+	InternalNotes          *string          `json:"internal_notes"`
+	SeveranceAmount        *decimal.Decimal `json:"severance_amount"`
+	IsRehireEligible       *bool            `json:"is_rehire_eligible"`
+	ExitClearanceCompleted *bool            `json:"exit_clearance_completed"`
+	DocumentID             *string          `json:"document_id"`
 }
 
 type TerminationListResponse struct {
 	Terminations []*Termination `json:"terminations"`
 	Total        int            `json:"total"`
+	Limit        int            `json:"limit"`
+	Offset       int            `json:"offset"`
+}
+
+// TerminationListFilter narrows the termination list query. There is no
+// employee-scoped list route for terminations (see routes.go) — employees
+// cannot see their own termination records by default. view_own exists in
+// the permission catalog for custom-role opt-in only; no system role grants
+// it.
+type TerminationListFilter struct {
+	EmployeeID string
+	Status     string
+	Limit      int
+	Offset     int
+
+	// Scope and CallerUserID are set by the handler (from authzSvc.ResolveScope)
+	// before calling Service.List. Scope zero value (authz.ScopeNone) means "no
+	// rows" — callers that intend no scoping must explicitly pass authz.ScopeAll.
+	Scope        authz.Scope
+	CallerUserID string
+}
+
+const (
+	DefaultLimit = 50
+	MaxLimit     = 200
+)
+
+func (f *TerminationListFilter) Normalise() {
+	if f.Limit <= 0 {
+		f.Limit = DefaultLimit
+	}
+	if f.Limit > MaxLimit {
+		f.Limit = MaxLimit
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
 }
 
 var (
@@ -103,4 +143,10 @@ var (
 	ErrWrongStatus              = errors.New("action not allowed in current termination status")
 	ErrAlreadyApplied           = errors.New("termination has already been applied")
 	ErrNotApproved              = errors.New("termination must be approved before applying")
+	// ErrNoTerminatedStatus means the org has no employee status in the
+	// 'terminated' category, so there is nothing to move the employee to.
+	// Organizations created through the API are seeded no statuses at all —
+	// only migration 00053's backfill and POST /hrm/employee-statuses create
+	// them — so this is reachable, not defensive.
+	ErrNoTerminatedStatus = errors.New("organization has no employee status in the 'terminated' category — create one before applying a termination")
 )

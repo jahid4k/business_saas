@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -32,7 +34,7 @@ type Repository interface {
 	UpdateStructure(ctx context.Context, s *SalaryStructure) error
 	DeleteStructure(ctx context.Context, orgID, ref string) error
 	StructureNameExists(ctx context.Context, orgID, name, excludeID string) (bool, error)
-	AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *float64, displayOrder int) error
+	AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *decimal.Decimal, displayOrder int) error
 	RemoveComponentFromStructure(ctx context.Context, structureID, componentID string) error
 	FindStructureComponents(ctx context.Context, structureID string) ([]*StructureComponent, error)
 
@@ -277,7 +279,7 @@ func (r *repoImpl) StructureNameExists(ctx context.Context, orgID, name, exclude
 	return exists, err
 }
 
-func (r *repoImpl) AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *float64, displayOrder int) error {
+func (r *repoImpl) AddComponentToStructure(ctx context.Context, structureID, componentID string, overrideValue *decimal.Decimal, displayOrder int) error {
 	_, err := r.db.Exec(ctx,
 		`INSERT INTO hrm_salary_structure_components (structure_id, component_id, override_value, display_order)
 		VALUES ($1,$2,$3,$4)`,

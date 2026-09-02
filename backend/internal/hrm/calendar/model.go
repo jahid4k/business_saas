@@ -7,6 +7,7 @@ import (
 )
 
 type EventType string
+
 const (
 	TypeHoliday         EventType = "holiday"
 	TypeTraining        EventType = "training"
@@ -17,12 +18,17 @@ const (
 	TypeWorkAnniversary EventType = "work_anniversary"
 	TypeCustom          EventType = "custom"
 )
+
 func (t EventType) IsValid() bool {
-	switch t { case TypeHoliday, TypeTraining, TypeCompanyEvent, TypeTeamEvent, TypeDeadline, TypeBirthday, TypeWorkAnniversary, TypeCustom: return true }
+	switch t {
+	case TypeHoliday, TypeTraining, TypeCompanyEvent, TypeTeamEvent, TypeDeadline, TypeBirthday, TypeWorkAnniversary, TypeCustom:
+		return true
+	}
 	return false
 }
 
 type EventStatus string
+
 const (
 	StatusUpcoming  EventStatus = "upcoming"
 	StatusOngoing   EventStatus = "ongoing"
@@ -31,6 +37,7 @@ const (
 )
 
 type ScopeType string
+
 const (
 	ScopeOrganization ScopeType = "organization"
 	ScopeDepartment   ScopeType = "department"
@@ -66,30 +73,30 @@ type CalendarEvent struct {
 }
 
 type CreateEventRequest struct {
-	Title        string     `json:"title"`
-	Description  *string    `json:"description"`
-	EventType    EventType  `json:"event_type"`
-	StartDate    string     `json:"start_date"`
-	EndDate      string     `json:"end_date"`
-	IsAllDay     bool       `json:"is_all_day"`
-	StartTime    *string    `json:"start_time"`
-	EndTime      *string    `json:"end_time"`
-	Location     *string    `json:"location"`
-	ScopeType    ScopeType  `json:"scope_type"`
-	ScopeIDs     []string   `json:"scope_ids"`
-	RequiresRSVP bool       `json:"requires_rsvp"`
-	RSVPDeadline *string    `json:"rsvp_deadline"`
-	OrganizerID  *string    `json:"organizer_id"`
+	Title        string    `json:"title"`
+	Description  *string   `json:"description"`
+	EventType    EventType `json:"event_type"`
+	StartDate    string    `json:"start_date"`
+	EndDate      string    `json:"end_date"`
+	IsAllDay     bool      `json:"is_all_day"`
+	StartTime    *string   `json:"start_time"`
+	EndTime      *string   `json:"end_time"`
+	Location     *string   `json:"location"`
+	ScopeType    ScopeType `json:"scope_type"`
+	ScopeIDs     []string  `json:"scope_ids"`
+	RequiresRSVP bool      `json:"requires_rsvp"`
+	RSVPDeadline *string   `json:"rsvp_deadline"`
+	OrganizerID  *string   `json:"organizer_id"`
 }
 
 type UpdateEventRequest struct {
-	Title        *string   `json:"title"`
-	Description  *string   `json:"description"`
-	StartDate    *string   `json:"start_date"`
-	EndDate      *string   `json:"end_date"`
-	Location     *string   `json:"location"`
-	RequiresRSVP *bool     `json:"requires_rsvp"`
-	RSVPDeadline *string   `json:"rsvp_deadline"`
+	Title        *string      `json:"title"`
+	Description  *string      `json:"description"`
+	StartDate    *string      `json:"start_date"`
+	EndDate      *string      `json:"end_date"`
+	Location     *string      `json:"location"`
+	RequiresRSVP *bool        `json:"requires_rsvp"`
+	RSVPDeadline *string      `json:"rsvp_deadline"`
 	Status       *EventStatus `json:"status"`
 }
 

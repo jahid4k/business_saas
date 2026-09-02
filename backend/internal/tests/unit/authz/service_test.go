@@ -6,6 +6,7 @@ package authz
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,9 +18,9 @@ import (
 // ── In-memory stub repository ─────────────────────────────────────────────────
 
 type stubAuthzRepo struct {
-	memberships map[string]*authz.Membership           // key: userID+":"+orgID
-	members     map[string]*authz.Membership           // key: orgID+":"+memberRef
-	roles       map[string]*authz.Role                 // key: roleID or name
+	memberships map[string]*authz.Membership // key: userID+":"+orgID
+	members     map[string]*authz.Membership // key: orgID+":"+memberRef
+	roles       map[string]*authz.Role       // key: roleID or name
 	permissions []*authz.Permission
 	invitations map[string]*authz.OrganizationInvitation // key: tokenHash
 	seq         int
@@ -35,6 +36,9 @@ func newStubAuthzRepo() *stubAuthzRepo {
 			{ID: "perm_1", PublicID: "pub_1", KeyName: "crm.contacts.view", Resource: "crm.contacts", Action: "view", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 			{ID: "perm_2", PublicID: "pub_2", KeyName: "crm.contacts.create", Resource: "crm.contacts", Action: "create", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 			{ID: "perm_3", PublicID: "pub_3", KeyName: "tasks.view", Resource: "tasks", Action: "view", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			{ID: "perm_4", PublicID: "pub_4", KeyName: "hrm.employees.view_own", Resource: "hrm.employees", Action: "view_own", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			{ID: "perm_5", PublicID: "pub_5", KeyName: "hrm.employees.view_team", Resource: "hrm.employees", Action: "view_team", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
+			{ID: "perm_6", PublicID: "pub_6", KeyName: "hrm.employees.view_all", Resource: "hrm.employees", Action: "view_all", IsSystem: true, CreatedAt: time.Now(), UpdatedAt: time.Now()},
 		},
 	}
 	// Seed system roles
@@ -175,6 +179,23 @@ func (r *stubAuthzRepo) GetRoleByRef(_ context.Context, _, ref string) (*authz.R
 	return r.roles[ref], nil
 }
 
+func (r *stubAuthzRepo) RoleExists(_ context.Context, _, roleName string) (bool, error) {
+	for _, role := range r.roles {
+		if strings.EqualFold(role.Name, roleName) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *stubAuthzRepo) UserRoleName(_ context.Context, orgID, userID string) (string, error) {
+	m := r.memberships[userID+":"+orgID]
+	if m == nil {
+		return "", nil
+	}
+	return m.RoleKey, nil
+}
+
 func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, userID, orgID, roleID string) error {
 	m := r.memberships[userID+":"+orgID]
 	if m == nil {
@@ -186,6 +207,19 @@ func (r *stubAuthzRepo) UpdateMembershipRole(_ context.Context, userID, orgID, r
 	}
 	m.RoleID = &roleID
 	m.RoleKey = role.Name
+	return nil
+}
+
+// SetMembershipStatus mirrors the real query's idempotence: a missing
+// membership is not an error, because the offboarding sweep re-reads the same
+// set nightly and anything that errored on a repeat would become a permanent
+// false alarm.
+func (r *stubAuthzRepo) SetMembershipStatus(_ context.Context, orgID, userID, status string) error {
+	m := r.memberships[userID+":"+orgID]
+	if m == nil {
+		return nil
+	}
+	m.Status = status
 	return nil
 }
 
@@ -703,5 +737,85 @@ func TestListMembers_DoesNotCrossOrgs(t *testing.T) {
 		if m.UserID == "user-2" {
 			t.Error("SECURITY: org-B member user-2 appeared in org-A list")
 		}
+	}
+}
+
+// ── ResolveScope ─────────────────────────────────────────────────────────────
+
+func TestResolveScope_ViewAllTakesPriority(t *testing.T) {
+	repo := newStubAuthzRepo()
+	repo.seedRole(&authz.Role{ID: "role_scope_all", Name: "scope_all_role", IsSystem: false,
+		Permissions: []string{"hrm.employees.view_own", "hrm.employees.view_team", "hrm.employees.view_all"}})
+	repo.seedMembership("user-1", "org-1", "scope_all_role")
+	svc := newSvc(repo)
+
+	scope, err := svc.ResolveScope(context.Background(), "user-1", "org-1", "hrm.employees")
+	if err != nil {
+		t.Fatalf("ResolveScope() error: %v", err)
+	}
+	if scope != authz.ScopeAll {
+		t.Errorf("expected ScopeAll when all three tiers are granted, got %s", scope)
+	}
+}
+
+func TestResolveScope_ViewTeamOnly(t *testing.T) {
+	repo := newStubAuthzRepo()
+	repo.seedRole(&authz.Role{ID: "role_scope_team", Name: "scope_team_role", IsSystem: false,
+		Permissions: []string{"hrm.employees.view_own", "hrm.employees.view_team"}})
+	repo.seedMembership("user-1", "org-1", "scope_team_role")
+	svc := newSvc(repo)
+
+	scope, err := svc.ResolveScope(context.Background(), "user-1", "org-1", "hrm.employees")
+	if err != nil {
+		t.Fatalf("ResolveScope() error: %v", err)
+	}
+	if scope != authz.ScopeTeam {
+		t.Errorf("expected ScopeTeam when view_team (but not view_all) is granted, got %s", scope)
+	}
+}
+
+func TestResolveScope_ViewOwnOnly(t *testing.T) {
+	repo := newStubAuthzRepo()
+	repo.seedRole(&authz.Role{ID: "role_scope_own", Name: "scope_own_role", IsSystem: false,
+		Permissions: []string{"hrm.employees.view_own"}})
+	repo.seedMembership("user-1", "org-1", "scope_own_role")
+	svc := newSvc(repo)
+
+	scope, err := svc.ResolveScope(context.Background(), "user-1", "org-1", "hrm.employees")
+	if err != nil {
+		t.Fatalf("ResolveScope() error: %v", err)
+	}
+	if scope != authz.ScopeOwn {
+		t.Errorf("expected ScopeOwn when only view_own is granted, got %s", scope)
+	}
+}
+
+func TestResolveScope_NoTierGranted_ReturnsScopeNone(t *testing.T) {
+	repo := newStubAuthzRepo()
+	repo.seedMembership("user-1", "org-1", "viewer") // viewer holds crm.contacts.view only
+	svc := newSvc(repo)
+
+	scope, err := svc.ResolveScope(context.Background(), "user-1", "org-1", "hrm.employees")
+	if err != nil {
+		t.Fatalf("ResolveScope() error: %v", err)
+	}
+	if scope != authz.ScopeNone {
+		t.Errorf("expected ScopeNone when no tier permission is granted, got %s", scope)
+	}
+}
+
+func TestResolveScope_CrossOrgDoesNotGrantAccess(t *testing.T) {
+	repo := newStubAuthzRepo()
+	repo.seedRole(&authz.Role{ID: "role_scope_all_x", Name: "scope_all_role_x", IsSystem: false,
+		Permissions: []string{"hrm.employees.view_all"}})
+	repo.seedMembership("user-1", "org-A", "scope_all_role_x")
+	svc := newSvc(repo)
+
+	scope, err := svc.ResolveScope(context.Background(), "user-1", "org-B", "hrm.employees")
+	if err != nil {
+		t.Fatalf("ResolveScope() error: %v", err)
+	}
+	if scope != authz.ScopeNone {
+		t.Errorf("SECURITY: org-A's view_all grant must not resolve a scope in org-B, got %s", scope)
 	}
 }

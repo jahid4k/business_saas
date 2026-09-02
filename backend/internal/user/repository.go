@@ -23,6 +23,7 @@ type Repository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	Create(ctx context.Context, u *User) error
 	Update(ctx context.Context, u *User) error
+	UpdatePassword(ctx context.Context, id string, passwordHash string) error
 	UpdateSettings(ctx context.Context, userID string, req UpdateProfileRequest) (*User, error)
 	RecordFailedLogin(ctx context.Context, userID string) error
 	RecordSuccessfulLogin(ctx context.Context, userID string) error
@@ -267,4 +268,10 @@ func (r *repoImpl) RecordSuccessfulLogin(ctx context.Context, userID string) err
 		return fmt.Errorf("user: RecordSuccessfulLogin: %w", err)
 	}
 	return nil
+}
+
+func (r *repoImpl) UpdatePassword(ctx context.Context, id string, passwordHash string) error {
+	const q = `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(ctx, q, passwordHash, id)
+	return err
 }

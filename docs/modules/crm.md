@@ -1,5 +1,16 @@
 # Module: CRM
 
+> ⚑ One of the two modules in the mission **CRM + HRM → deploy → business**
+> (`docs/Project_Instruction.md` § Mission). Extended CRM is planned in
+> `docs/CrmExtendedBuildPlan.md`.
+>
+> ⚠ **This document describes what exists TODAY, which is production-shaped but not
+> production-grade.** Known gaps, verified 2026-09-01: `crm_deals.value` is `float64` in Go against
+> `NUMERIC(15,2)`; CRM has **no scope tiers** (every reader sees every deal); `crm_leads.status` is
+> a hardcoded CHECK so stages are not configurable, though deal stages are; there is no
+> `crm_deal_stage_history`, which blocks sales velocity; and `crm.activities`, `crm.emails`,
+> `crm.notes` and `crm.tasks` are seeded permissions with no consumer.
+
 ## What this module does
 
 The CRM module manages the sales pipeline: leads, contacts, companies, deals, and reporting.
@@ -82,23 +93,27 @@ and the `:orgId` URL parameter must match the JWT `bid`. The backend enforces th
 
 ## Frontend pages
 
+⚠ **Corrected 2026-09-01** — the tree below was documented as `app/(app)/[orgSlug]/crm/` with
+`deals/` and `contacts/` subtrees that do not exist. This is what is actually on disk:
+
 ```
-app/(app)/[orgSlug]/crm/
-├── page.tsx               → CRM dashboard (overview stats)
-├── contacts/
-│   ├── page.tsx           → contacts table
-│   └── [contactId]/page.tsx → contact detail
-├── companies/
-│   ├── page.tsx           → companies table
-│   └── [companyId]/page.tsx
-├── leads/
-│   ├── page.tsx           → leads table with filters
-│   └── [leadId]/page.tsx  → lead detail + convert button
-├── deals/
-│   ├── page.tsx           → pipeline kanban board
-│   └── [dealId]/page.tsx
-└── reports/page.tsx       → charts + tables
+app/(dashboard)/[orgId]/
+├── crm/
+│   ├── pipeline/page.tsx      → deal pipeline board (1305 lines)
+│   ├── leads/page.tsx         → leads table with filters
+│   ├── agenda/page.tsx        → activity agenda
+│   ├── reports/page.tsx       → charts + tables
+│   ├── visitors/page.tsx      → capture / visitor tracking
+│   └── setup/
+│       ├── routing/page.tsx   → lead assignment rules
+│       └── templates/page.tsx → message templates
+├── contacts/page.tsx          → contacts (top level, not under crm/)
+└── companies/
+    ├── page.tsx
+    └── [companyId]/page.tsx
 ```
+
+⚠ There is **no `crm/deals/[dealId]` detail page** — the pipeline board is the only deal surface.
 
 ## Lead conversion flow
 

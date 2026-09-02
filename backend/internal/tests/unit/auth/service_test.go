@@ -10,10 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/mridha/businesssaas/internal/audit"
 	"github.com/mridha/businesssaas/internal/auth"
 	"github.com/mridha/businesssaas/internal/config"
 	"github.com/mridha/businesssaas/internal/user"
+	"github.com/mridha/businesssaas/internal/platform/notifications"
 	jwtpkg "github.com/mridha/businesssaas/pkg/jwt"
 	"github.com/mridha/businesssaas/pkg/password"
 	"github.com/mridha/businesssaas/pkg/token"
@@ -155,7 +158,7 @@ func newSvc(userRepo user.Repository, authRepo auth.Repository) auth.Service {
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: 7 * 24 * time.Hour,
 	}
-	return auth.NewService(authRepo, userRepo, mgr, cfg, audit.NewService(audit.NewNoopRepository()))
+	return auth.NewService(authRepo, userRepo, mgr, cfg, audit.NewService(audit.NewNoopRepository()), &stubNotificationsService{})
 }
 
 func mustHash(plain string) string {
@@ -681,5 +684,134 @@ func TestLogin_RefreshTokenStoredAsHash_NotPlaintext(t *testing.T) {
 	}
 	if _, ok := authRepo.sessions[rawHash]; !ok {
 		t.Error("SHA-256 hash of refresh token must be stored in sessions")
+	}
+}
+func (r *stubUserRepo) UpdatePassword(_ context.Context, id string, hash string) error {
+	if u, ok := r.users[id]; ok {
+		u.PasswordHash = hash
+		return nil
+	}
+	return errors.New("not found")
+}
+
+func (r *stubAuthRepo) CreateVerificationToken(_ context.Context, vt *auth.VerificationToken) error {
+	vt.ID = "vt_1"
+	return nil
+}
+
+func (r *stubAuthRepo) GetVerificationTokenByHash(_ context.Context, hash, tokenType string) (*auth.VerificationToken, error) {
+	// For tests, we'll just return a valid token if the hash is not empty, unless we want to simulate failure.
+	if hash == token.Hash("invalid") {
+		return nil, nil
+	}
+	userID := "usr_test@example.com"
+	email := "test@example.com"
+	return &auth.VerificationToken{
+		ID:        "vt_1",
+		UserID:    &userID,
+		Email:     &email,
+		TokenHash: hash,
+		Type:      tokenType,
+		ExpiresAt: time.Now().Add(time.Hour),
+	}, nil
+}
+
+func (r *stubAuthRepo) MarkVerificationTokenUsed(_ context.Context, _ string) error { return nil }
+
+type stubNotificationsService struct {
+	dispatched []notifications.DispatchRequest
+}
+
+func (s *stubNotificationsService) Dispatch(ctx context.Context, req notifications.DispatchRequest) error {
+	s.dispatched = append(s.dispatched, req)
+	return nil
+}
+
+func (s *stubNotificationsService) ListInApp(ctx context.Context, userID uuid.UUID, limit, offset int) (*notifications.NotificationListResponse, error) {
+	return &notifications.NotificationListResponse{}, nil
+}
+func (s *stubNotificationsService) MarkRead(ctx context.Context, userID, notifID uuid.UUID) error {
+	return nil
+}
+func (s *stubNotificationsService) MarkAllRead(ctx context.Context, userID uuid.UUID) error { return nil }
+func (s *stubNotificationsService) ListPreferences(ctx context.Context, userID uuid.UUID) ([]*notifications.NotificationPreference, error) {
+	return nil, nil
+}
+func (s *stubNotificationsService) UpdatePreference(ctx context.Context, userID uuid.UUID, eventType, channel string, enabled bool) error {
+	return nil
+}
+
+func TestRequestPasswordReset(t *testing.T) {
+	authRepo := newStubAuthRepo()
+	userRepo := newStubUserRepo()
+	
+	mgr := jwtpkg.NewManager("test-secret-32-bytes-long-padding!!", 15*time.Minute)
+	cfg := config.JWTConfig{
+		Secret:          "test-secret",
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+	}
+	notifSvc := &stubNotificationsService{}
+	svc := auth.NewService(authRepo, userRepo, mgr, cfg, audit.NewService(audit.NewNoopRepository()), notifSvc)
+
+	ctx := context.Background()
+	existingUser := &user.User{ID: "00000000-0000-0000-0000-000000000000", Email: "test@example.com"}
+	userRepo.seed(existingUser)
+
+	// User exists
+	err := svc.RequestPasswordReset(ctx, "test@example.com")
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+
+	if len(notifSvc.dispatched) != 1 {
+		t.Fatalf("expected 1 notification dispatched, got %d", len(notifSvc.dispatched))
+	}
+	
+	if notifSvc.dispatched[0].EventType != notifications.EventPasswordReset {
+		t.Fatalf("expected password reset event, got %s", notifSvc.dispatched[0].EventType)
+	}
+
+	// User does not exist (should not fail, but shouldn't dispatch)
+	notifSvc.dispatched = nil
+	err = svc.RequestPasswordReset(ctx, "notfound@example.com")
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if len(notifSvc.dispatched) != 0 {
+		t.Fatalf("expected 0 notifications dispatched, got %d", len(notifSvc.dispatched))
+	}
+}
+
+func TestConfirmPasswordReset(t *testing.T) {
+	authRepo := newStubAuthRepo()
+	userRepo := newStubUserRepo()
+	
+	mgr := jwtpkg.NewManager("test-secret-32-bytes-long-padding!!", 15*time.Minute)
+	cfg := config.JWTConfig{
+		Secret:          "test-secret",
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+	}
+	notifSvc := &stubNotificationsService{}
+	svc := auth.NewService(authRepo, userRepo, mgr, cfg, audit.NewService(audit.NewNoopRepository()), notifSvc)
+
+	ctx := context.Background()
+	existingUser := &user.User{ID: "usr_test@example.com", Email: "test@example.com"}
+	userRepo.seed(existingUser)
+
+	err := svc.ConfirmPasswordReset(ctx, "validtoken", "newpassword")
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+
+	if existingUser.PasswordHash == "" {
+		t.Fatalf("expected password hash to be set")
+	}
+
+	// Invalid token
+	err = svc.ConfirmPasswordReset(ctx, "invalid", "newpassword")
+	if !errors.Is(err, auth.ErrInvalidToken) {
+		t.Fatalf("expected ErrInvalidToken, got %v", err)
 	}
 }

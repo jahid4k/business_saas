@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mridha/businesssaas/internal/authz"
 	"github.com/mridha/businesssaas/internal/hrm/complaints"
 )
 
@@ -19,20 +20,25 @@ func newStubRepo() *stubRepo {
 	}
 }
 
-func (r *stubRepo) FindAll(ctx context.Context, orgID, employeeID, status string) ([]*complaints.Complaint, error) {
+func (r *stubRepo) FindAll(ctx context.Context, orgID string, filter complaints.ComplaintListFilter) ([]*complaints.Complaint, error) {
 	var res []*complaints.Complaint
 	for _, c := range r.data {
 		if c.OrgID == orgID {
-			if employeeID != "" && c.EmployeeID != employeeID {
+			if filter.EmployeeID != "" && c.EmployeeID != filter.EmployeeID {
 				continue
 			}
-			if status != "" && string(c.Status) != status {
+			if filter.Status != "" && string(c.Status) != filter.Status {
 				continue
 			}
 			res = append(res, c)
 		}
 	}
 	return res, nil
+}
+
+func (r *stubRepo) Count(ctx context.Context, orgID string, filter complaints.ComplaintListFilter) (int, error) {
+	out, err := r.FindAll(ctx, orgID, filter)
+	return len(out), err
 }
 
 func (r *stubRepo) FindByRef(ctx context.Context, orgID, employeeID, ref string) (*complaints.Complaint, error) {
@@ -200,7 +206,7 @@ func TestComplaintsService(t *testing.T) {
 			t.Errorf("expected dismissed, got %s", dismissed.Status)
 		}
 		
-		list, err := svc.List(ctx, orgID, empID, "")
+		list, err := svc.List(ctx, orgID, complaints.ComplaintListFilter{EmployeeID: empID, Scope: authz.ScopeAll})
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
